@@ -29,7 +29,7 @@ IDs match section 2.3 of the design doc.
 | Service | Status | Owns | Talks to |
 |---|---|---|---|
 | inventory-svc (`cmd/inventory`) | Built | Valkey keys `inv:*` | Valkey |
-| queue-svc (`cmd/queue`) | Phase 2 in progress: provisioning built | Valkey keys `q:*` | Valkey |
+| queue-svc (`cmd/queue`) | Phase 2 in progress: provisioning and joining built | Valkey keys `q:*`, `rl:*` | Valkey |
 | booking final guard (`internal/booking`) | Built as a library | `booking` schema | PostgreSQL |
 | holdfastctl (`cmd/holdfastctl`) | Built | Nothing (operator tool) | PostgreSQL, Valkey |
 | booking, payment, auth | Planned | See design doc | |
@@ -88,6 +88,11 @@ only delay a release, never cause an early one.
   event, with audience `holdfast-inventory` and issuer `holdfast-queue`. Only
   the EdDSA algorithm is accepted, and `kid` selects among trusted public keys
   so rotation needs no downtime.
+- Until auth-svc exists, queue-svc identifies buyers by the `X-Dev-User-Id`
+  header when `DEV_IDENTITY=true`. Anyone can claim any ID with it, so the
+  service refuses to start with it in production.
+- Joining passes per-IP (IPv6 per /64) and per-user token buckets in Valkey
+  (`internal/platform/ratelimit`), shared by every replica.
 - Operator endpoints live on the admin port behind a static bearer token
   compared in constant time; auth-svc replaces it in Phase 4.
 - IDs are canonicalised to lower-case hyphenated UUIDs before they become
