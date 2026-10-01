@@ -29,7 +29,7 @@ IDs match section 2.3 of the design doc.
 | Service | Status | Owns | Talks to |
 |---|---|---|---|
 | inventory-svc (`cmd/inventory`) | Built | Valkey keys `inv:*` | Valkey |
-| queue-svc (`cmd/queue`) | Phase 2 in progress: provisioning, joining, the T0 transition, positions, admission and the status document built | Valkey keys `q:*`, `adm:*`, `rl:*` | Valkey; PostgreSQL for leader election only |
+| queue-svc (`cmd/queue`) | Phase 2 in progress: provisioning, joining, the T0 transition, positions, admission, the status document and admission tokens built | Valkey keys `q:*`, `adm:*`, `rl:*` | Valkey; PostgreSQL for leader election only |
 | booking final guard (`internal/booking`) | Built as a library | `booking` schema | PostgreSQL |
 | holdfastctl (`cmd/holdfastctl`) | Built | Nothing (operator tool) | PostgreSQL, Valkey |
 | booking, payment, auth | Planned | See design doc | |
@@ -95,6 +95,9 @@ connection; every 250 ms it runs `advance.lua`, which refuses a stale epoch
 
 ## 8. Security
 
+- queue-svc issues admission tokens when a buyer's turn comes
+  (`POST /v1/queue/{id}/admit`), capped at their session slot, and publishes
+  its public keys at `/.well-known/jwks.json`.
 - Buyers present admission tokens: EdDSA JWTs bound to one user and one
   event, with audience `holdfast-inventory` and issuer `holdfast-queue`. Only
   the EdDSA algorithm is accepted, and `kid` selects among trusted public keys

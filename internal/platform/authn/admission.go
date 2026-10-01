@@ -46,8 +46,20 @@ func NewIssuer(key ed25519.PrivateKey, ttl time.Duration) *Issuer {
 
 // Issue signs a token for userID on eventID and returns it with its expiry.
 func (i *Issuer) Issue(userID, eventID, sessionID string, rank int64) (string, time.Time, error) {
+	return i.IssueUntil(userID, eventID, sessionID, rank, time.Time{})
+}
+
+// IssueUntil is Issue with the expiry capped at notAfter (if not zero), so a
+// token never outlives the admission session it represents.
+func (i *Issuer) IssueUntil(userID, eventID, sessionID string, rank int64, notAfter time.Time) (string, time.Time, error) {
 	now := i.now()
 	exp := now.Add(i.ttl)
+	if !notAfter.IsZero() && notAfter.Before(exp) {
+		exp = notAfter
+	}
+	if !exp.After(now) {
+		return "", time.Time{}, errors.New("authn: token would already be expired")
+	}
 	claims := AdmissionClaims{
 		EventID:   eventID,
 		SessionID: sessionID,

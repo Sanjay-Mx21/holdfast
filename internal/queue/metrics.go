@@ -11,6 +11,7 @@ import (
 type Metrics struct {
 	joins      *prometheus.CounterVec
 	positions  *prometheus.CounterVec
+	admits     *prometheus.CounterVec
 	opened     *prometheus.CounterVec
 	openerRuns *prometheus.CounterVec
 	openerTime prometheus.Histogram
@@ -43,6 +44,19 @@ const (
 	positionError       = "error"
 )
 
+// Admit outcomes, the values of the result label.
+const (
+	admitIssued      = "issued"
+	admitNotYourTurn = "not_your_turn"
+	admitExpired     = "expired"
+	admitNotInQueue  = "not_in_queue"
+	admitClosed      = "closed"
+	admitNotFound    = "not_found"
+	admitRateLimited = "rate_limited"
+	admitInvalid     = "invalid"
+	admitError       = "error"
+)
+
 // T0 transitions by who performed them, the values of the by label.
 const (
 	openedByJoin   = "join"
@@ -68,6 +82,10 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 	m.positions = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "holdfast_queue_position_lookups_total",
 		Help: "Position lookups (GET /v1/queue/{id}/me) by outcome.",
+	}, []string{"result"})
+	m.admits = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "holdfast_queue_admits_total",
+		Help: "Turn claims (POST /v1/queue/{id}/admit) by outcome; issued means an admission token was signed.",
 	}, []string{"result"})
 	m.opened = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "holdfast_queue_opened_total",
@@ -105,6 +123,9 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 	for _, r := range []string{positionRanked, positionRandomizing, positionNotInQueue, positionNotFound, positionRateLimited, positionInvalid, positionError} {
 		m.positions.WithLabelValues(r)
 	}
+	for _, r := range []string{admitIssued, admitNotYourTurn, admitExpired, admitNotInQueue, admitClosed, admitNotFound, admitRateLimited, admitInvalid, admitError} {
+		m.admits.WithLabelValues(r)
+	}
 	for _, by := range []string{openedByJoin, openedByOpener} {
 		m.opened.WithLabelValues(by)
 	}
@@ -130,3 +151,5 @@ func (m *Metrics) setLeader(eventID string, leading bool) {
 	}
 	m.leader.WithLabelValues(eventID).Set(v)
 }
+
+func (m *Metrics) admit(result string) { m.admits.WithLabelValues(result).Inc() }

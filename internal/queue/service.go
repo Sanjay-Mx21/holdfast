@@ -76,6 +76,30 @@ func (s *Service) Status(ctx context.Context, eventID string) (Status, error) {
 	return s.store.Status(ctx, ev)
 }
 
+// Admit lets userID claim their turn once their rank is within
+// admittedUpTo; the caller then issues an admission token bounded by the
+// session slot.
+func (s *Service) Admit(ctx context.Context, eventID, userID string) (Turn, error) {
+	ev, err := canonicalUUID("eventId", eventID)
+	if err != nil {
+		return Turn{}, err
+	}
+	user, err := canonicalUUID("userId", userID)
+	if err != nil {
+		return Turn{}, err
+	}
+	return s.store.Admit(ctx, ev, user)
+}
+
+// sessionNamespace scopes deterministic admission session IDs (UUIDv5).
+var sessionNamespace = uuid.MustParse("8b0e7c2a-3f5d-4e91-a6c7-1d2e3f4a5b6c")
+
+// SessionID is the admission session of (event, user): the same on every
+// claim, so retries refer to one session; each token still has its own jti.
+func SessionID(eventID, userID string) string {
+	return uuid.NewSHA1(sessionNamespace, []byte(eventID+"\x00"+userID)).String()
+}
+
 // canonicalUUID accepts only the 36-character hyphenated form and returns it
 // lower-cased. Keys are built from IDs, so one UUID must map to one key, and
 // characters such as '{' or '|' must never reach the keyspace.

@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -324,4 +325,64 @@ func TestStatusNotProvisioned(t *testing.T) {
 	f := newFixture(t)
 	_, err := f.svc.Status(ctx, f.eventID)
 	mustErr(t, "status", err, ErrEventNotFound)
+}
+
+// --- admission tokens (claiming a turn) ---
+
+func TestAdmitOnlyWithinAdmittedUpTo(t *testing.T) {
+	f := newFixture(t)
+	f.openQueueWith(t, 0, 10_000)
+	users := make([]string, 6)
+	for i := range users {
+		users[i] = uuid.NewString()
+		if err := f.rdb.ZAdd(ctx, keysFor(f.eventID).members(), redis.Z{Score: float64(2 + i), Member: users[i]}).Err(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	epoch, _ := f.store.NewTerm(ctx, f.eventID)
+	if _, err := f.store.Advance(ctx, f.eventID, epoch, 3); err != nil {
+		t.Fatal(err)
+	}
+	turn, err := f.svc.Admit(ctx, f.eventID, strings.ToUpper(users[2]))
+	mustErr(t, "admit rank 3 of 3 admitted", err, nil)
+	mustEqual(t, "rank", turn.Rank, int64(3))
+	mustEqual(t, "user (canonical)", turn.UserID, users[2])
+	if d := time.Until(turn.SessionExpires); d < validConfig().SessionTTL-5*time.Second || d > validConfig().SessionTTL {
+		t.Fatalf("session expires in %s, want about the session TTL", d)
+	}
+	_, err = f.svc.Admit(ctx, f.eventID, users[4])
+	var nt *NotYourTurnError
+	if !errors.As(err, &nt) || nt.Rank != 5 || nt.AdmittedUpTo != 3 {
+		t.Fatalf("rank 5 with 3 admitted: %v", err)
+	}
+	mustErr(t, "not your turn", err, ErrNotYourTurn)
+}
+
+func TestAdmitAfterTheSessionSlotExpired(t *testing.T) {
+	f := newFixture(t)
+	f.openQueueWith(t, 2, 10_000)
+	epoch, _ := f.store.NewTerm(ctx, f.eventID)
+	if _, err := f.store.Advance(ctx, f.eventID, epoch, 2); err != nil {
+		t.Fatal(err)
+	}
+	first, _ := f.rdb.ZRange(ctx, keysFor(f.eventID).members(), 0, 0).Result()
+	if err := f.rdb.ZRem(ctx, keysFor(f.eventID).sessions(), "1").Err(); err != nil {
+		t.Fatal(err)
+	}
+	_, err := f.svc.Admit(ctx, f.eventID, first[0])
+	mustErr(t, "claim after the slot expired", err, ErrTurnExpired)
+}
+
+func TestAdmitRefusedWhenClosedOrUnknown(t *testing.T) {
+	f := newFixture(t)
+	_, err := f.svc.Admit(ctx, f.eventID, uuid.NewString())
+	mustErr(t, "not provisioned", err, ErrEventNotFound)
+	f.openQueueWith(t, 1, 10_000)
+	_, err = f.svc.Admit(ctx, f.eventID, uuid.NewString())
+	mustErr(t, "never joined", err, ErrNotInQueue)
+	for _, s := range []State{StateSoldOut, StateClosed} {
+		f.setState(t, s)
+		_, err = f.svc.Admit(ctx, f.eventID, uuid.NewString())
+		mustErr(t, "admit when "+string(s), err, ErrQueueClosed)
+	}
 }

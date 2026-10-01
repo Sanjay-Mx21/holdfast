@@ -139,3 +139,25 @@ type statusDoc struct {
 	QueueSize    int64 `json:"queueSize"`
 	UpdatedAtMs  int64 `json:"updatedAtMs"`
 }
+
+// Turn is a user's claim on their turn: they are admitted, and their
+// session slot lasts until SessionExpires.
+type Turn struct {
+	EventID        string
+	UserID         string
+	Rank           int64
+	SessionExpires time.Time
+}
+
+// NotYourTurnError says how far the user still has to wait.
+type NotYourTurnError struct {
+	Rank         int64
+	AdmittedUpTo int64
+}
+
+func (e *NotYourTurnError) Error() string {
+	return fmt.Sprintf("queue: not your turn yet: rank %d, admitted up to %d", e.Rank, e.AdmittedUpTo)
+}
+
+// Unwrap makes errors.Is(err, ErrNotYourTurn) true.
+func (e *NotYourTurnError) Unwrap() error { return ErrNotYourTurn }

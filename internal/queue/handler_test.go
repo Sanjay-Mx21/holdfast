@@ -25,6 +25,7 @@ type fakeService struct {
 	join      func(ctx context.Context, eventID, userID string) (JoinResult, error)
 	position  func(ctx context.Context, eventID, userID string) (Position, error)
 	status    func(ctx context.Context, eventID string) (Status, error)
+	admit     func(ctx context.Context, eventID, userID string) (Turn, error)
 }
 
 func (f *fakeService) Provision(ctx context.Context, e string, c EventConfig) (bool, error) {
@@ -38,6 +39,25 @@ func (f *fakeService) Position(ctx context.Context, e, u string) (Position, erro
 }
 func (f *fakeService) Status(ctx context.Context, e string) (Status, error) {
 	return f.status(ctx, e)
+}
+func (f *fakeService) Admit(ctx context.Context, e, u string) (Turn, error) {
+	return f.admit(ctx, e, u)
+}
+
+// fakeIssuer records what it was asked to sign.
+type fakeIssuer struct {
+	user, event, session string
+	rank                 int64
+	notAfter             time.Time
+	err                  error
+}
+
+func (f *fakeIssuer) IssueUntil(user, event, session string, rank int64, notAfter time.Time) (string, time.Time, error) {
+	f.user, f.event, f.session, f.rank, f.notAfter = user, event, session, rank, notAfter
+	if f.err != nil {
+		return "", time.Time{}, f.err
+	}
+	return "signed-token", notAfter, nil
 }
 
 // fakeLimiter allows everything unless a scope is listed in deny; it records
@@ -63,12 +83,14 @@ var testLimits = Limits{
 	JoinPerIP:       ratelimit.Rule{Capacity: 30, Rate: 10},
 	JoinPerUser:     ratelimit.Rule{Capacity: 5, Rate: 1},
 	PositionPerUser: ratelimit.Rule{Capacity: 10, Rate: 1},
+	AdmitPerUser:    ratelimit.Rule{Capacity: 5, Rate: 1},
 }
 
 type harness struct {
 	public, internal *httpx.Router
 	lim              *fakeLimiter
 	m                *Metrics
+	iss              *fakeIssuer
 }
 
 // newHarness wires the real routes. The identity stub turns the X-Test-User
@@ -87,8 +109,10 @@ func newHarness(svc service) harness {
 	}
 	lim := &fakeLimiter{}
 	m := NewMetrics(prometheus.NewRegistry())
-	NewHandler(svc, lim, testLimits, m).Register(public, internal, identity, func(next http.Handler) http.Handler { return next })
-	return harness{public: public, internal: internal, lim: lim, m: m}
+	iss := &fakeIssuer{}
+	NewHandler(svc, lim, testLimits, m, iss, authn.JWKSet{Keys: []authn.JWK{{Kty: "OKP", Crv: "Ed25519", X: "x", Kid: "kid-1", Alg: "EdDSA", Use: "sig"}}}).
+		Register(public, internal, identity, func(next http.Handler) http.Handler { return next })
+	return harness{public: public, internal: internal, lim: lim, m: m, iss: iss}
 }
 
 func send(h http.Handler, method, path, body, contentType string, headers map[string]string, remote string) *httptest.ResponseRecorder {
@@ -583,5 +607,138 @@ func TestStatusErrors(t *testing.T) {
 		if strings.Contains(rec.Header().Get("Cache-Control"), "public") {
 			t.Fatalf("an error response must not be publicly cacheable: %q", rec.Header().Get("Cache-Control"))
 		}
+	}
+}
+
+// --- admission tokens ---
+
+const admitPath = "/v1/queue/" + eventID + "/admit"
+
+func admits(t *testing.T, m *Metrics, result string) float64 {
+	t.Helper()
+	var out dto.Metric
+	if err := m.admits.WithLabelValues(result).Write(&out); err != nil {
+		t.Fatal(err)
+	}
+	return out.GetCounter().GetValue()
+}
+
+func TestAdmitIssuesAToken(t *testing.T) {
+	expires := time.Date(2026, 10, 5, 12, 10, 0, 0, time.UTC)
+	h := newHarness(&fakeService{admit: func(_ context.Context, e, u string) (Turn, error) {
+		if e != eventID || u != userID {
+			t.Errorf("service got event %q user %q", e, u)
+		}
+		return Turn{EventID: eventID, UserID: userID, Rank: 42, SessionExpires: expires}, nil
+	}})
+	rec := send(h.public, http.MethodPost, admitPath, "", "", map[string]string{"X-Test-User": userID}, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d (body %s)", rec.Code, rec.Body)
+	}
+	want := `{"eventId":"` + eventID + `","token":"signed-token","expiresAt":"2026-10-05T12:10:00Z","rank":42}`
+	if got := strings.TrimSpace(rec.Body.String()); got != want {
+		t.Fatalf("body %s\nwant %s", got, want)
+	}
+	if rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal("a token response must never be cached")
+	}
+	if h.iss.user != userID || h.iss.event != eventID || h.iss.rank != 42 || !h.iss.notAfter.Equal(expires) ||
+		h.iss.session != SessionID(eventID, userID) {
+		t.Fatalf("issuer asked to sign %+v", h.iss)
+	}
+	if h.lim.calls[0] != "admit-user="+userID {
+		t.Fatalf("limiter calls %v", h.lim.calls)
+	}
+	if admits(t, h.m, admitIssued) != 1 {
+		t.Fatal("issued token not counted")
+	}
+}
+
+func TestAdmitRefusals(t *testing.T) {
+	for _, tt := range []struct {
+		err    error
+		status int
+		code   string
+		detail string
+		metric string
+	}{
+		{&NotYourTurnError{Rank: 900, AdmittedUpTo: 512}, http.StatusConflict, "NOT_YOUR_TURN", "your rank is 900, admission has reached 512", admitNotYourTurn},
+		{ErrTurnExpired, http.StatusConflict, "TURN_EXPIRED", "expired", admitExpired},
+		{ErrNotInQueue, http.StatusNotFound, "NOT_IN_QUEUE", "", admitNotInQueue},
+		{ErrQueueClosed, http.StatusConflict, "QUEUE_CLOSED", "", admitClosed},
+		{ErrEventNotFound, http.StatusNotFound, "EVENT_NOT_FOUND", "", admitNotFound},
+		{fmt.Errorf("%w: eventId must be a UUID", ErrInvalidRequest), http.StatusBadRequest, "INVALID_REQUEST", "", admitInvalid},
+		{errors.New("boom"), http.StatusInternalServerError, "INTERNAL", "", admitError},
+	} {
+		t.Run(tt.code, func(t *testing.T) {
+			h := newHarness(&fakeService{admit: func(context.Context, string, string) (Turn, error) { return Turn{}, tt.err }})
+			rec := send(h.public, http.MethodPost, admitPath, "", "", map[string]string{"X-Test-User": userID}, "")
+			if rec.Code != tt.status || problemCode(t, rec) != tt.code {
+				t.Fatalf("status %d body %s, want %d %s", rec.Code, rec.Body, tt.status, tt.code)
+			}
+			if tt.detail != "" && !strings.Contains(rec.Body.String(), tt.detail) {
+				t.Fatalf("detail missing %q: %s", tt.detail, rec.Body)
+			}
+			if h.iss.user != "" {
+				t.Fatal("a token was signed for a refused claim")
+			}
+			if admits(t, h.m, tt.metric) != 1 {
+				t.Fatalf("metric %s not counted", tt.metric)
+			}
+		})
+	}
+}
+
+func TestAdmitSigningFailureIsInternal(t *testing.T) {
+	h := newHarness(&fakeService{admit: func(context.Context, string, string) (Turn, error) {
+		return Turn{EventID: eventID, UserID: userID, Rank: 1, SessionExpires: time.Now().Add(time.Minute)}, nil
+	}})
+	h.iss.err = errors.New("authn: token would already be expired")
+	rec := send(h.public, http.MethodPost, admitPath, "", "", map[string]string{"X-Test-User": userID}, "")
+	if rec.Code != http.StatusInternalServerError || strings.Contains(rec.Body.String(), "signed-token") {
+		t.Fatalf("status %d body %s", rec.Code, rec.Body)
+	}
+	if admits(t, h.m, admitError) != 1 {
+		t.Fatal("signing failure not counted")
+	}
+}
+
+func TestAdmitRequiresIdentityAndIsRateLimited(t *testing.T) {
+	h := newHarness(&fakeService{admit: func(context.Context, string, string) (Turn, error) {
+		t.Fatal("service called")
+		return Turn{}, nil
+	}})
+	if rec := send(h.public, http.MethodPost, admitPath, "", "", nil, ""); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("no identity: %d, want 401", rec.Code)
+	}
+	h.lim.deny = map[string]time.Duration{scopeAdmitUser: time.Second}
+	rec := send(h.public, http.MethodPost, admitPath, "", "", map[string]string{"X-Test-User": userID}, "")
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status %d, want 429", rec.Code)
+	}
+	if admits(t, h.m, admitRateLimited) != 1 {
+		t.Fatal("rate limit not counted")
+	}
+}
+
+func TestJWKSIsPublished(t *testing.T) {
+	h := newHarness(&fakeService{})
+	rec := send(h.public, http.MethodGet, "/.well-known/jwks.json", "", "", nil, "")
+	if rec.Code != http.StatusOK || rec.Header().Get("Cache-Control") != "public, max-age=300" {
+		t.Fatalf("status %d Cache-Control %q", rec.Code, rec.Header().Get("Cache-Control"))
+	}
+	want := `{"keys":[{"kty":"OKP","crv":"Ed25519","x":"x","kid":"kid-1","alg":"EdDSA","use":"sig"}]}`
+	if got := strings.TrimSpace(rec.Body.String()); got != want {
+		t.Fatalf("body %s", got)
+	}
+}
+
+func TestSessionIDIsStablePerEventAndUser(t *testing.T) {
+	a := SessionID(eventID, userID)
+	if a != SessionID(eventID, userID) {
+		t.Fatal("session ID changes between claims")
+	}
+	if a == SessionID(eventID, "0196f0c2-0000-7000-8000-000000000002") || a == SessionID("0196f0c1-7a3e-7c51-9b0e-5d2f8a1c4e78", userID) {
+		t.Fatal("different users or events share a session ID")
 	}
 }

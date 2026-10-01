@@ -80,10 +80,13 @@ services:
       VALKEY_ADDRS: valkey:6379
       DEV_IDENTITY: "true" # buyers identified by X-Dev-User-Id until auth-svc (Phase 4)
       POSTGRES_DSN: postgres://holdfast:holdfast@postgres:5432/holdfast?sslmode=disable # admission leader election
+      ADMISSION_PRIVATE_KEY_FILE: /keys/admission.key # signs admission tokens (dev key from make keys)
       ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-only-admin-token-change-me-0123456789}
     ports:
       - "8082:8080" # public API
       - "9092:9090" # admin: metrics, health, pprof, operator API (never expose in production)
+    volumes:
+      - ./.local/keys:/keys:ro
     depends_on:
       valkey: { condition: service_healthy }
       postgres: { condition: service_healthy }

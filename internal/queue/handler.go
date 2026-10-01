@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"net"
 	"net/http"
@@ -25,6 +26,12 @@ type service interface {
 	Join(ctx context.Context, eventID, userID string) (JoinResult, error)
 	Position(ctx context.Context, eventID, userID string) (Position, error)
 	Status(ctx context.Context, eventID string) (Status, error)
+	Admit(ctx context.Context, eventID, userID string) (Turn, error)
+}
+
+// tokenIssuer signs admission tokens (*authn.Issuer).
+type tokenIssuer interface {
+	IssueUntil(userID, eventID, sessionID string, rank int64, notAfter time.Time) (string, time.Time, error)
 }
 
 // limiter is what the HTTP layer needs from *ratelimit.Limiter.
@@ -40,6 +47,7 @@ type Limits struct {
 	JoinPerIP       ratelimit.Rule
 	JoinPerUser     ratelimit.Rule
 	PositionPerUser ratelimit.Rule
+	AdmitPerUser    ratelimit.Rule
 }
 
 // Rate-limit scopes (the SCOPE part of rl:SCOPE:ID keys).
@@ -47,6 +55,7 @@ const (
 	scopeJoinIP       = "join-ip"
 	scopeJoinUser     = "join-user"
 	scopePositionUser = "position-user"
+	scopeAdmitUser    = "admit-user"
 )
 
 // Handler exposes the queue over HTTP.
@@ -55,11 +64,14 @@ type Handler struct {
 	lim    limiter
 	limits Limits
 	m      *Metrics
+	tokens tokenIssuer
+	jwks   authn.JWKSet
 }
 
-// NewHandler returns a Handler.
-func NewHandler(svc service, lim limiter, limits Limits, m *Metrics) *Handler {
-	return &Handler{svc: svc, lim: lim, limits: limits, m: m}
+// NewHandler returns a Handler. tokens signs admission tokens; jwks is the
+// public key set published for verifiers.
+func NewHandler(svc service, lim limiter, limits Limits, m *Metrics, tokens tokenIssuer, jwks authn.JWKSet) *Handler {
+	return &Handler{svc: svc, lim: lim, limits: limits, m: m, tokens: tokens, jwks: jwks}
 }
 
 // Register mounts buyer-facing routes on public, behind identity (who the
@@ -69,6 +81,8 @@ func (h *Handler) Register(public, internal *httpx.Router, identity, operator ht
 	public.Handle("POST /v1/queue/{eventID}/join", identity(http.HandlerFunc(h.join)))
 	public.Handle("GET /v1/queue/{eventID}/me", identity(http.HandlerFunc(h.position)))
 	public.Handle("GET /v1/events/{eventID}/status", http.HandlerFunc(h.status))
+	public.Handle("POST /v1/queue/{eventID}/admit", identity(http.HandlerFunc(h.admit)))
+	public.Handle("GET /.well-known/jwks.json", http.HandlerFunc(h.publishKeys))
 	internal.Handle("PUT /internal/v1/events/{eventID}/queue", operator(http.HandlerFunc(h.provision)))
 }
 
@@ -173,6 +187,68 @@ func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "public, max-age=1")
 	httpx.WriteJSON(w, http.StatusOK, resp)
+}
+
+type admitResponse struct {
+	EventID   string    `json:"eventId"`
+	Token     string    `json:"token"`
+	ExpiresAt time.Time `json:"expiresAt"`
+	Rank      int64     `json:"rank"`
+}
+
+// admit exchanges the caller's turn for an admission token: a signed,
+// short-lived capability for this user and event that inventory-svc requires
+// for holds. Asking again returns a fresh token for the same session.
+func (h *Handler) admit(w http.ResponseWriter, r *http.Request) {
+	user, ok := authn.UserFrom(r.Context())
+	if !ok {
+		httpx.WriteProblem(w, r, httpx.Unauthorized("UNAUTHENTICATED", "authentication required"))
+		return
+	}
+	if !h.allow(w, r, scopeAdmitUser, user, h.limits.AdmitPerUser, h.m.admit, admitRateLimited) {
+		return
+	}
+	adm, err := h.svc.Admit(r.Context(), r.PathValue("eventID"), user)
+	if err != nil {
+		h.m.admit(admitResultOf(err))
+		writeError(w, r, err)
+		return
+	}
+	token, exp, err := h.tokens.IssueUntil(adm.UserID, adm.EventID, SessionID(adm.EventID, adm.UserID), adm.Rank, adm.SessionExpires)
+	if err != nil {
+		h.m.admit(admitError)
+		writeError(w, r, err)
+		return
+	}
+	h.m.admit(admitIssued)
+	w.Header().Set("Cache-Control", "no-store")
+	httpx.WriteJSON(w, http.StatusOK, admitResponse{EventID: adm.EventID, Token: token, ExpiresAt: exp, Rank: adm.Rank})
+}
+
+// publishKeys serves the public keys admission tokens are signed with, so
+// verifiers can fetch them instead of being configured with key files.
+func (h *Handler) publishKeys(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	httpx.WriteJSON(w, http.StatusOK, h.jwks)
+}
+
+func admitResultOf(err error) string {
+	switch {
+	case errors.Is(err, ErrNotYourTurn):
+		return admitNotYourTurn
+	case errors.Is(err, ErrTurnExpired):
+		return admitExpired
+	case errors.Is(err, ErrNotInQueue):
+		return admitNotInQueue
+	case errors.Is(err, ErrQueueClosed):
+		return admitClosed
+	case errors.Is(err, ErrEventNotFound):
+		return admitNotFound
+	case errors.Is(err, ErrInvalidRequest):
+		return admitInvalid
+	default:
+		return admitError
+	}
 }
 
 // allow takes a token for (scope, id), recording refusals and limiter
@@ -293,6 +369,15 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 		p = httpx.Conflict("QUEUE_CLOSED", "the waiting room for this event is closed")
 	case errors.Is(err, ErrNotInQueue):
 		p = httpx.NotFound("NOT_IN_QUEUE", "you have not joined this event's waiting room")
+	case errors.Is(err, ErrNotYourTurn):
+		var nt *NotYourTurnError
+		detail := "it is not your turn yet; compare your rank with admittedUpTo in the status document"
+		if errors.As(err, &nt) {
+			detail = fmt.Sprintf("not your turn yet: your rank is %d, admission has reached %d", nt.Rank, nt.AdmittedUpTo)
+		}
+		p = httpx.Conflict("NOT_YOUR_TURN", detail)
+	case errors.Is(err, ErrTurnExpired):
+		p = httpx.Conflict("TURN_EXPIRED", "your turn came and its session has expired")
 	case isUnavailable(err):
 		logging.FromContext(r.Context()).Warn("dependency unavailable", "err", err)
 		p = httpx.Unavailable("queue is temporarily unavailable; retry shortly", 1)

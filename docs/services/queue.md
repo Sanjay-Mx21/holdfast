@@ -5,15 +5,15 @@ how fast. Binary: `cmd/queue`. Code: `internal/queue`.
 
 **Status:** Phase 2 in progress. Built: provisioning (task 2.1), joining
 (task 2.2), the T0 transition (task 2.3), positions (task 2.4), the admission
-controller (task 2.5) and the status document (task 2.6). Admission tokens
-follow in tasks 2.7 and 2.8.
+controller (task 2.5), the status document (task 2.6) and admission tokens
+(task 2.7). Task 2.8 closes inventory's token gaps (single use, JWKS fetch).
 
 ## Responsibilities
 
 - Store each event's queue settings and open its waiting room in state PRE (built).
 - Accept joins: a random lottery position before T0, arrival order after (built).
 - Switch from PRE to OPEN at T0 and tell buyers their rank (built).
-- Admit buyers at a controlled rate (built) and issue admission tokens (task 2.7).
+- Admit buyers at a controlled rate and issue admission tokens (built).
 - Publish the status document every client polls (built).
 
 ## API
@@ -122,6 +122,41 @@ Cache-Control: public, max-age=1
   leader is visible. An event without a queue returns 404 `EVENT_NOT_FOUND`;
   errors are never publicly cacheable (`no-store`).
 
+### `POST /v1/queue/{eventID}/admit`
+
+Exchange your turn for an admission token. Same identity as joining. No body.
+
+```http
+HTTP/1.1 200 OK
+Cache-Control: no-store
+
+{"eventId":"0196f0c1-...","token":"<signed admission token (JWT)>","expiresAt":"2026-10-05T12:10:00Z","rank":4200}
+```
+
+- Allowed while your rank is within `admittedUpTo` and the session slot the
+  leader gave your rank is alive (it lasts the session TTL from the moment you
+  were admitted). Otherwise 409 `NOT_YOUR_TURN` (the detail gives your rank and
+  how far admission has got), 409 `TURN_EXPIRED`, 404 `NOT_IN_QUEUE`, 409
+  `QUEUE_CLOSED` (`SOLD_OUT` or `CLOSED`) or 404 `EVENT_NOT_FOUND`. A `FROZEN`
+  sale still honours turns already given.
+- The token is an EdDSA JWT: `iss` `holdfast-queue`, `aud` `holdfast-inventory`,
+  `sub` your user ID, `evt` the event, `rank`, `sid` (the same for every claim
+  by this user on this event), a unique `jti`, and `exp` at the earlier of
+  `ADMISSION_TOKEN_TTL` and your session slot's expiry. inventory-svc accepts
+  holds only with it.
+- Claiming again is safe: it returns a fresh token for the same session. A
+  per-user bucket (`rl:admit-user:<user id>`, default burst 5, 1 per second)
+  refuses hammering with 429 `RATE_LIMITED`.
+
+### `GET /.well-known/jwks.json`
+
+The public keys admission tokens are signed with, as RFC 8037 JWKs (`kty`
+`OKP`, `crv` `Ed25519`), each with the `kid` tokens carry. Public,
+`Cache-Control: public, max-age=300`. During a key rotation it lists the new
+signing key and the old one (`ADMISSION_EXTRA_PUBLIC_KEY_FILES`), so tokens
+signed by either stay verifiable. inventory-svc still reads trusted keys from
+files; fetching this set is part of task 2.8.
+
 ### `PUT /internal/v1/events/{eventID}/queue` (admin port)
 
 Operator token required. Stores the event's queue settings and puts the
@@ -218,10 +253,12 @@ issue P17); adaptive admission (AIMD) is Phase 5.
 | `INVALID_BODY`, `MALFORMED_JSON`, `EMPTY_BODY`, `TRAILING_DATA`, `INVALID_FIELD_TYPE` | 400 | Provisioning body problems, including unknown fields |
 | `UNSUPPORTED_MEDIA_TYPE` | 415 | Provisioning body is not JSON |
 | `EVENT_NOT_FOUND` | 404 | Join, position or status: the event has no waiting room (not provisioned) |
-| `NOT_IN_QUEUE` | 404 | Position: the caller has not joined this event's queue |
-| `QUEUE_CLOSED` | 409 | Join: the queue is `SOLD_OUT` or `CLOSED` |
+| `NOT_IN_QUEUE` | 404 | Position or admit: the caller has not joined this event's queue |
+| `QUEUE_CLOSED` | 409 | Join or admit: the queue is `SOLD_OUT` or `CLOSED` |
+| `NOT_YOUR_TURN` | 409 | Admit: your rank is above `admittedUpTo` |
+| `TURN_EXPIRED` | 409 | Admit: you were admitted, but your session slot has run out |
 | `PROVISION_CONFLICT` | 409 | Queue already provisioned with different settings |
-| `RATE_LIMITED` | 429 | Join or position: a rate-limit bucket is empty; retry after `Retry-After` seconds |
+| `RATE_LIMITED` | 429 | Join, position or admit: a rate-limit bucket is empty; retry after `Retry-After` seconds |
 | `ROUTE_NOT_FOUND`, `METHOD_NOT_ALLOWED` | 404, 405 | No such endpoint or method |
 | `UNAVAILABLE` | 503 | Valkey unreachable or timed out; retry after `Retry-After` |
 | `INTERNAL` | 500 | Unexpected error, logged with the request ID |
@@ -265,6 +302,7 @@ The remaining key in the design doc (section 8.2), `jti:*`, arrives with task 2.
 | `position.lua` | {1 ranked, 0 before T0, -1 not in queue, -2 not provisioned; rank or opens_at_ms; state} |
 | `advance.lua` | {1 admitted some, 0 nothing to admit, -1 fenced, -2 not provisioned; admittedUpTo, admitted now, active sessions}; also rewrites `q:{E}:status` unless fenced |
 | `status.lua` | {1 the leader's document, 0 fallback without `updatedAtMs`, -2 not provisioned; the document as JSON} |
+| `admit.lua` | {1 admitted, 0 not your turn, -1 not in queue, -2 not provisioned, -3 turn expired, -4 closed; rank; slot expiry ms or admittedUpTo} |
 | `token_bucket.lua` (`internal/platform/ratelimit`) | {allowed 1 or 0, remaining tokens × 1000, retry after ms} |
 
 ## Configuration
@@ -284,6 +322,11 @@ required (admission leader election). Service settings:
 | `OPEN_CHECK_INTERVAL` | `250ms` | How often the opener looks for queues due to open (10ms to 10s) |
 | `POSITION_USER_BURST` | `10` | Per-user bucket size for position lookups |
 | `POSITION_USER_PER_SECOND` | `1` | Per-user refill rate for position lookups |
+| `ADMISSION_PRIVATE_KEY_FILE` | required | Ed25519 private key (PEM) that signs admission tokens; Compose mounts the dev key from `make keys` |
+| `ADMISSION_EXTRA_PUBLIC_KEY_FILES` | none | Comma-separated PEM public keys also published in the JWKS (the old key during a rotation) |
+| `ADMISSION_TOKEN_TTL` | `10m` | Longest token lifetime (1m to 1h); never beyond the session slot |
+| `ADMIT_USER_BURST` | `5` | Per-user bucket size for claims |
+| `ADMIT_USER_PER_SECOND` | `1` | Per-user refill rate for claims |
 | `ADMISSION_TICK` | `250ms` | How often a leader admits (10ms to 10s) |
 | `LEADER_RETRY_INTERVAL` | `2s` | How often a standby tries to become leader (100ms to 1m) |
 | `ADMISSION_RESCAN_INTERVAL` | `2s` | How often new events get a controller (100ms to 1m) |
@@ -298,6 +341,7 @@ and sets `DEV_IDENTITY=true`.
 | `holdfast_queue_joins_total` | `result` | Join outcomes: joined, already_joined, rate_limited_ip, rate_limited_user, closed, not_found, invalid, error |
 | `holdfast_queue_position_lookups_total` | `result` | Position lookups: ranked, randomizing, not_in_queue, not_found, rate_limited, invalid, error |
 | `holdfast_queue_admitted_total` | | People admitted into the purchase path |
+| `holdfast_queue_admits_total` | `result` | Turn claims: issued, not_your_turn, expired, not_in_queue, closed, not_found, rate_limited, invalid, error |
 | `holdfast_queue_admission_ticks_total` | `result` | Leader ticks: advanced, idle, fenced, error |
 | `holdfast_queue_leader_terms_total` | | Admission leadership terms won by this process |
 | `holdfast_queue_admission_leader` | `event` | 1 while this process leads the event (bounded by the number of events) |
