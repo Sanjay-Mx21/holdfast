@@ -32,13 +32,13 @@ All times are IST (UTC+05:30).
 | **Project** | A flash-sale booking engine that sells exactly the available units under extreme demand, never more |
 | **Plan version** | 2.0 (1 October 2026) |
 | **Milestones complete** | M0 Foundation, M1 Correctness core and M1.5 Bring-up and baseline |
-| **Current milestone** | M2 Fair waiting room: 7 of 14 tasks done (section 8); next task 2.8, [issue #12](https://github.com/Sanjay-Mx21/holdfast/issues/12) |
+| **Current milestone** | M2 Fair waiting room: 8 of 14 tasks done (section 8); next task 2.9, [issue #13](https://github.com/Sanjay-Mx21/holdfast/issues/13) |
 | **Progress to v1.0** | About 22% (11 of about 51 focused-work days, excluding Phase 7 stretch goals) |
 | **Repository** | [github.com/Sanjay-Mx21/holdfast](https://github.com/Sanjay-Mx21/holdfast), branch `main` |
 | **First commit** | `2173e50` "first commit", 2026-10-01 20:20, 82 files, 12,973 lines |
 | **Latest release** | [v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0), 2026-10-01 23:47, on `9dcd2f8` |
 | **CI** | Green since 2026-10-01 22:00; `main` is protected and every change needs a pull request with all 6 jobs passing |
-| **Issues so far** | 37 recorded: 31 resolved, 6 open (section 6) |
+| **Issues so far** | 39 recorded: 33 resolved, 6 open (section 6) |
 
 <Callout type="tip" title="v0.1.0 released, M1.5 complete (2026-10-01)">
 
@@ -102,7 +102,8 @@ Sources: the dates recorded in the ADRs and the plan, file modification times, a
 | 2026-10-02 01:56 | **Task 2.4 (positions) built and verified:** `GET /v1/queue/{id}/me` returns `randomizingAt` before T0 and the 1-based rank from T0 on, judged by Valkey's clock in one read-only script, behind a per-user rate limit. 4 unit and 5 integration tests; the queue integration suite passed 20 runs; E1 still passes. End to end: 5 lottery joiners got ranks 1 to 5 in random order and a late joiner rank 6; 404 for a non-member; `private, no-store`; 10 lookups then 429 | PR #60 (merged by the assistant at 02:01 after all 7 checks passed), `2b099c4`; issue #8 closed |
 | 2026-10-02 02:12 | **Task 2.5 (admission controller) built and verified:** one leader per event (PostgreSQL advisory lock on a dedicated connection), fenced by `adm:{E}:epoch`; every 250 ms `advance.lua` admits at the event's rate within the session budget (Little's Law). 3 unit and 5 integration tests, including two real controllers with failover; the queue integration suite passed 20 runs with the stack's queue-svc running; E1 still passes. End to end: 84.5 admitted per second against 83 configured; admission stopped at exactly 50 with 50 sessions allowed; nothing admitted while FROZEN; restarting queue-svc moved leadership to a new process with epoch 2 | PR #61 (merged by the assistant at 02:18 after all 7 checks passed), `5dea566`; issue #9 closed |
 | 2026-10-02 02:47 | **Task 2.6 (status document) built and verified:** the leader rewrites `q:{E}:status` every tick inside the fenced `advance.lua`; `GET /v1/events/{id}/status` serves it with `public, max-age=1`, or a fallback with `updatedAt: null` before any leader. 3 unit and 5 integration tests. Two timing tests made robust to WSL2 clock steps (E7, D11); the queue integration suite then passed 120 runs. End to end: 404 for an unknown event, the fallback right after provisioning, `queueSize` 300 and fresh `updatedAt` once the leader ticked, `admittedUpTo` climbing at 20 per second after T0 | PR #62 (merged by the assistant at 02:53 after all 7 checks passed), `a269549`; issue #10 closed |
-| 2026-10-02 03:04 | **Task 2.7 (admission tokens) built and verified:** `POST /v1/queue/{id}/admit` signs an Ed25519 token once the buyer's rank is within `admittedUpTo` and their session slot is alive, capped at the slot's expiry; `GET /.well-known/jwks.json` publishes the keys. 6 handler, 2 authn and 3 integration tests; the queue suite passed 20 runs; E1 still passes. **First full buyer journey:** an event made with holdfastctl, 6 joins before T0, a claim before T0 refused (rank 1, admission at 0), all 6 admitted after T0, the rank-1 buyer's token capped at their 2-minute session, its `kid` matching the JWKS, and inventory-svc accepting it for a 2-unit hold (201); a tampered token got 401 | Branch `feat/p2-admission-tokens`, issue #11 |
+| 2026-10-02 03:04 | **Task 2.7 (admission tokens) built and verified:** `POST /v1/queue/{id}/admit` signs an Ed25519 token once the buyer's rank is within `admittedUpTo` and their session slot is alive, capped at the slot's expiry; `GET /.well-known/jwks.json` publishes the keys. 6 handler, 2 authn and 3 integration tests; the queue suite passed 20 runs; E1 still passes. **First full buyer journey:** an event made with holdfastctl, 6 joins before T0, a claim before T0 refused (rank 1, admission at 0), all 6 admitted after T0, the rank-1 buyer's token capped at their 2-minute session, its `kid` matching the JWKS, and inventory-svc accepting it for a 2-unit hold (201); a tampered token got 401 | PR #63 (merged by the assistant at 03:16 after a gitleaks failure was fixed, D13), `17e3b1a`; issue #11 closed |
+| 2026-10-02 03:27 | **Task 2.8 (inventory token gaps) decided, built and verified.** Decisions: admission tokens stay reusable within their session-capped life (single use would break retries); inventory-svc follows queue-svc's JWKS. Built `authn.JWKSClient` (periodic and unknown-kid refresh, at most every 30 s; known keys never wait on a fetch; last good keys kept; posing keys refused; readiness) and wired it into inventory-svc; Compose now uses the JWKS and no key files. 7 JWKS-client tests, each run 3 times. End to end: queue-issued tokens accepted with no key files; after queue-svc switched signing keys, the same inventory process accepted the new key's tokens (one fetch on the unknown kid), still accepted the old key during the overlap, and refused 20 stranger-key tokens with one extra fetch | Branch `feat/p2-inventory-token-gaps`, issue #12 |
 
 ## 3. What is complete, and what each piece contributes
 
@@ -179,10 +180,10 @@ Every problem met while bringing Drop 1 up and running the soak on 2026-10-01, i
 
 | Group | Recorded | Resolved | Open |
 |---|---|---|---|
-| P: defects in the repository | 17 | 11 | 6 |
+| P: defects in the repository | 18 | 12 | 6 |
 | E: machine and network | 7 | 7 | 0 |
-| D: diagnosis and process | 13 | 13 | 0 |
-| **Total** | **37** | **31** | **6** |
+| D: diagnosis and process | 14 | 14 | 0 |
+| **Total** | **39** | **33** | **6** |
 
 CI took **three runs** to go green:
 
@@ -213,6 +214,7 @@ CI took **three runs** to go green:
 | P15 | The plan (task 2.3 and design doc 9.1) had the admission leader flip the queue from PRE to OPEN at T0 | The leader ticks every 250 ms and re-election waits 2 s, so joins arriving after T0 but before the flip would still get lottery positions: at the design's T0 rush of 17,000+ joins per second, hundreds to thousands of late arrivals jumping ahead. It also made T0 depend on task 2.5, which comes later | The flip time, not the clock, decided who counted as early | T0 is judged by Valkey's clock inside `join.lua`, which flips the state itself; an idempotent opener in every replica handles the no-join case; plan 9.1 and task 2.3 updated | ✅ PR #59 |
 | P16 | The join integration tests merged in PR #58 provisioned queues with a fixed opening date, 2026-10-05 | Harmless while joins ignored the clock; once task 2.3 made joins read it, every "before T0" test would have started failing on 5 October 2026 | A literal date in a test fixture | Caught while building task 2.3, before it fired: join fixtures now open queues relative to the current time | ✅ PR #59 |
 | P17 | The plan's admission controller (design doc 9.2) also limits admissions to the units left times an oversubscription factor, and marks the queue SOLD_OUT when inventory is gone. Task 2.5 builds neither | Until built, the queue keeps admitting people (within the session budget) after the last unit is held, and never reaches SOLD_OUT on its own; inventory still refuses every hold beyond capacity, so nothing oversells | Both need inventory's state, which queue-svc may not read from inventory's Valkey keys (one owner per keyspace, AGENTS.md rule 4); it must call inventory-svc's API, and the units in active holds are not exposed by that API yet | To decide before the end of Phase 2: poll `GET /v1/events/{id}/availability` from the leader, or defer to Phase 3 when booking adds the cross-service calls | ⏳ Open |
+| P18 | With inventory-svc following the JWKS, an abrupt switch of queue-svc's signing key gets new tokens refused (401) until inventory-svc refetches, which an unknown key ID may trigger only 30 seconds after its last fetch. Found in the rotation test: a token signed with the new key 25 seconds after inventory's last fetch was refused | Up to 30 seconds of refused holds for buyers admitted right after a careless rotation | The fetch throttle that stops made-up key IDs from hammering queue-svc | Kept the throttle; RB-Q-7 now publishes the new key before signing with it and waits one refresh interval, so no token is ever refused; RB-INV-5 points to it | ✅ Runbook |
 
 ### 6.3 Machine and network
 
@@ -243,6 +245,7 @@ CI took **three runs** to go green:
 | D11 | `TestOpenerOpensAtT0WithoutJoins` failed about once in 60 to 100 runs ("queue opened before T0", later "opened 526 ms after T0"). The first fix, reading the state before checking the clock, assumed a slow read and was not enough | Two rounds of flaky failures | Instrumenting the failure showed the stored opening time already 541 ms in the past by the wall clock while the test's monotonic clock said 192 ms to go: the wall clock had stepped (E7). The test now uses the wall clock throughout and detects steps; 100 runs passed, 3 of them logging a step | ✅ |
 | D12 | The buyer-journey script expected the rank-6 buyer's claim to be refused, but at 2 admissions per second (plus the one second of allowance carried into T0) all 6 had been admitted by then, so the claim correctly returned a token and the script printed "None - None" | A wrong expectation, not a defect | The refusal path was shown by the claim before T0 (rank 1, admission at 0) and by the unit and integration tests; the metrics agreed (2 issued, 1 refused) | ✅ |
 | D13 | The first version of task 2.7's service doc showed an example token starting with a real-looking JWT header (the base64url prefix every EdDSA JWT header starts with). The CI secret scanner (gitleaks, rule generic-api-key) flagged it and the security job failed on PR #63, so the merge script refused to merge | One failed CI run; nothing merged | It was not a secret (only the base64 of the token header), but anything that looks like one must stay out of the repository. The docs commit was amended on the feature branch to show a placeholder (`<signed admission token (JWT)>`) and the branch force-pushed; `main` was never affected | ✅ |
+| D14 | The second rotation check sent holds with idempotency keys of 7 characters (`r2-0001`), one below the 8-character minimum, and got 400s that looked like a rotation failure | A misleading result for a few minutes | A 400 rather than 401 meant the token had already passed authentication (a bad token gets 401 even with a short key, checked); rerun with valid keys: the new key's token was accepted on the first attempt | ✅ |
 
 ### 6.5 Owner setup actions
 
@@ -285,8 +288,8 @@ Goal: everyone waits fairly, and buyers enter the purchase path at a controlled 
 | 2.4 Your position | [#8](https://github.com/Sanjay-Mx21/holdfast/issues/8) | ✅ 2026-10-02 (PR #60): `GET /v1/queue/{id}/me`, `position.lua`, per-user limit, metric |
 | 2.5 Admission controller | [#9](https://github.com/Sanjay-Mx21/holdfast/issues/9) | ✅ 2026-10-02 (PR #61): advisory-lock leader per event, fencing epoch, `advance.lua` with the session budget, rate allowance, metrics. Deferred: oversubscription and sold-out (P17) |
 | 2.6 Status document | [#10](https://github.com/Sanjay-Mx21/holdfast/issues/10) | ✅ 2026-10-02 (PR #62): written by the leader every tick in `advance.lua`, `GET /v1/events/{id}/status` (`public, max-age=1`), fallback before any leader |
-| 2.7 Admission tokens | [#11](https://github.com/Sanjay-Mx21/holdfast/issues/11) | ✅ 2026-10-02: `POST /v1/queue/{id}/admit`, `admit.lua`, tokens capped at the session slot, `/.well-known/jwks.json`; accepted by inventory-svc |
-| 2.8 Close the inventory token gaps | [#12](https://github.com/Sanjay-Mx21/holdfast/issues/12) | ⏳ |
+| 2.7 Admission tokens | [#11](https://github.com/Sanjay-Mx21/holdfast/issues/11) | ✅ 2026-10-02 (PR #63): `POST /v1/queue/{id}/admit`, `admit.lua`, tokens capped at the session slot, `/.well-known/jwks.json`; accepted by inventory-svc |
+| 2.8 Close the inventory token gaps | [#12](https://github.com/Sanjay-Mx21/holdfast/issues/12) | ✅ 2026-10-02: tokens reusable within their session (decision), inventory follows the JWKS (`authn.JWKSClient`), rotation without restarts, runbooks updated |
 | 2.9 NGINX | [#13](https://github.com/Sanjay-Mx21/holdfast/issues/13) | ⏳ |
 | 2.10 Metrics and dashboard | [#14](https://github.com/Sanjay-Mx21/holdfast/issues/14) | ⏳ |
 | 2.11 Tests | [#15](https://github.com/Sanjay-Mx21/holdfast/issues/15) | ⏳ |

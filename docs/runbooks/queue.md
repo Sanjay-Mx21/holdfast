@@ -97,13 +97,23 @@ anything the old one still tries is refused.
 ## RB-Q-7 Rotating the admission-token signing key
 
 Tokens live at most `ADMISSION_TOKEN_TTL` (10 minutes by default), so a
-rotation only has to overlap for that long.
+rotation only has to overlap for that long. inventory-svc follows
+`/.well-known/jwks.json` and needs no restart; it refreshes every
+`JWKS_REFRESH_INTERVAL` (5 minutes) and on an unknown key ID at most every
+`JWKS_MIN_REFRESH_INTERVAL` (30 seconds).
 
 1. Generate a new key pair (`holdfastctl keys generate --out-dir <dir>`).
-2. Give inventory-svc the new public key **in addition to** the old one
-   (`ADMISSION_PUBLIC_KEY_FILES=old.pub,new.pub`, see RB-INV-5) and restart it.
-3. Switch queue-svc to the new private key (`ADMISSION_PRIVATE_KEY_FILE`) and
-   list the old public key in `ADMISSION_EXTRA_PUBLIC_KEY_FILES`, so
-   `/.well-known/jwks.json` publishes both. Restart queue-svc.
-4. After `ADMISSION_TOKEN_TTL` has passed, remove the old public key from both
-   services and restart them.
+2. **Publish before signing.** Add the new public key to
+   `ADMISSION_EXTRA_PUBLIC_KEY_FILES` while queue-svc still signs with the old
+   private key, and restart queue-svc. Check that `/.well-known/jwks.json`
+   lists both key IDs.
+3. Wait one `JWKS_REFRESH_INTERVAL`, so every inventory-svc has fetched the new
+   key (`holdfast_authn_jwks_fetches_total{result="ok"}` rises on each).
+4. Switch `ADMISSION_PRIVATE_KEY_FILE` to the new key, put the **old** public
+   key in `ADMISSION_EXTRA_PUBLIC_KEY_FILES`, and restart queue-svc.
+5. After `ADMISSION_TOKEN_TTL` has passed, remove the old public key from
+   `ADMISSION_EXTRA_PUBLIC_KEY_FILES` and restart queue-svc.
+
+Skipping steps 2 and 3 still works without restarts, but tokens signed with
+the new key can be refused (401) for up to 30 seconds after inventory-svc's
+last fetch.

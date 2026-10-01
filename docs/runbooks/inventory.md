@@ -51,11 +51,17 @@ Once booking-svc exists (Phase 3), units in pending checkouts are subtracted too
 
 ## RB-INV-5 Rotate the admission-token signing key
 
+With `ADMISSION_JWKS_URL` set (the default in Compose), inventory-svc follows
+queue-svc's key set and needs no change: follow RB-Q-7.
+
+With key files only (`ADMISSION_PUBLIC_KEY_FILES`):
+
 1. `holdfastctl keys generate --out-dir <dir> --name admission-<date>`.
 2. Deploy inventory-svc with both public keys:
    `ADMISSION_PUBLIC_KEY_FILES=old.pub,new.pub`.
 3. Switch the issuer (queue-svc, or tooling) to the new private key.
-4. Wait at least the maximum token lifetime (15 minutes by default).
+4. Wait at least the maximum token lifetime (`ADMISSION_TOKEN_TTL`, 10 minutes
+   by default).
 5. Remove the old public key and redeploy.
 
 ## RB-INV-6 Negative availability or suspected oversell
