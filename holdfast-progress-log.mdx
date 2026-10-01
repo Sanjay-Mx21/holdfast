@@ -32,13 +32,13 @@ All times are IST (UTC+05:30).
 | **Project** | A flash-sale booking engine that sells exactly the available units under extreme demand, never more |
 | **Plan version** | 2.0 (1 October 2026) |
 | **Milestones complete** | M0 Foundation, M1 Correctness core and M1.5 Bring-up and baseline |
-| **Current milestone** | M2 Fair waiting room: 6 of 14 tasks done (section 8); next task 2.7, [issue #11](https://github.com/Sanjay-Mx21/holdfast/issues/11) |
+| **Current milestone** | M2 Fair waiting room: 7 of 14 tasks done (section 8); next task 2.8, [issue #12](https://github.com/Sanjay-Mx21/holdfast/issues/12) |
 | **Progress to v1.0** | About 22% (11 of about 51 focused-work days, excluding Phase 7 stretch goals) |
 | **Repository** | [github.com/Sanjay-Mx21/holdfast](https://github.com/Sanjay-Mx21/holdfast), branch `main` |
 | **First commit** | `2173e50` "first commit", 2026-10-01 20:20, 82 files, 12,973 lines |
 | **Latest release** | [v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0), 2026-10-01 23:47, on `9dcd2f8` |
 | **CI** | Green since 2026-10-01 22:00; `main` is protected and every change needs a pull request with all 6 jobs passing |
-| **Issues so far** | 35 recorded: 29 resolved, 6 open (section 6) |
+| **Issues so far** | 37 recorded: 31 resolved, 6 open (section 6) |
 
 <Callout type="tip" title="v0.1.0 released, M1.5 complete (2026-10-01)">
 
@@ -101,7 +101,8 @@ Sources: the dates recorded in the ADRs and the plan, file modification times, a
 | 2026-10-02 ~01:50 | The owner asked for Phase 2 to be completed task by task, with the assistant merging, fixing issues itself unless critical, updating this log for every task, and stopping at the end of the phase | Conversation; saved as a standing instruction |
 | 2026-10-02 01:56 | **Task 2.4 (positions) built and verified:** `GET /v1/queue/{id}/me` returns `randomizingAt` before T0 and the 1-based rank from T0 on, judged by Valkey's clock in one read-only script, behind a per-user rate limit. 4 unit and 5 integration tests; the queue integration suite passed 20 runs; E1 still passes. End to end: 5 lottery joiners got ranks 1 to 5 in random order and a late joiner rank 6; 404 for a non-member; `private, no-store`; 10 lookups then 429 | PR #60 (merged by the assistant at 02:01 after all 7 checks passed), `2b099c4`; issue #8 closed |
 | 2026-10-02 02:12 | **Task 2.5 (admission controller) built and verified:** one leader per event (PostgreSQL advisory lock on a dedicated connection), fenced by `adm:{E}:epoch`; every 250 ms `advance.lua` admits at the event's rate within the session budget (Little's Law). 3 unit and 5 integration tests, including two real controllers with failover; the queue integration suite passed 20 runs with the stack's queue-svc running; E1 still passes. End to end: 84.5 admitted per second against 83 configured; admission stopped at exactly 50 with 50 sessions allowed; nothing admitted while FROZEN; restarting queue-svc moved leadership to a new process with epoch 2 | PR #61 (merged by the assistant at 02:18 after all 7 checks passed), `5dea566`; issue #9 closed |
-| 2026-10-02 02:47 | **Task 2.6 (status document) built and verified:** the leader rewrites `q:{E}:status` every tick inside the fenced `advance.lua`; `GET /v1/events/{id}/status` serves it with `public, max-age=1`, or a fallback with `updatedAt: null` before any leader. 3 unit and 5 integration tests. Two timing tests made robust to WSL2 clock steps (E7, D11); the queue integration suite then passed 120 runs. End to end: 404 for an unknown event, the fallback right after provisioning, `queueSize` 300 and fresh `updatedAt` once the leader ticked, `admittedUpTo` climbing at 20 per second after T0 | Branch `feat/p2-status-document`, issue #10 |
+| 2026-10-02 02:47 | **Task 2.6 (status document) built and verified:** the leader rewrites `q:{E}:status` every tick inside the fenced `advance.lua`; `GET /v1/events/{id}/status` serves it with `public, max-age=1`, or a fallback with `updatedAt: null` before any leader. 3 unit and 5 integration tests. Two timing tests made robust to WSL2 clock steps (E7, D11); the queue integration suite then passed 120 runs. End to end: 404 for an unknown event, the fallback right after provisioning, `queueSize` 300 and fresh `updatedAt` once the leader ticked, `admittedUpTo` climbing at 20 per second after T0 | PR #62 (merged by the assistant at 02:53 after all 7 checks passed), `a269549`; issue #10 closed |
+| 2026-10-02 03:04 | **Task 2.7 (admission tokens) built and verified:** `POST /v1/queue/{id}/admit` signs an Ed25519 token once the buyer's rank is within `admittedUpTo` and their session slot is alive, capped at the slot's expiry; `GET /.well-known/jwks.json` publishes the keys. 6 handler, 2 authn and 3 integration tests; the queue suite passed 20 runs; E1 still passes. **First full buyer journey:** an event made with holdfastctl, 6 joins before T0, a claim before T0 refused (rank 1, admission at 0), all 6 admitted after T0, the rank-1 buyer's token capped at their 2-minute session, its `kid` matching the JWKS, and inventory-svc accepting it for a 2-unit hold (201); a tampered token got 401 | Branch `feat/p2-admission-tokens`, issue #11 |
 
 ## 3. What is complete, and what each piece contributes
 
@@ -180,8 +181,8 @@ Every problem met while bringing Drop 1 up and running the soak on 2026-10-01, i
 |---|---|---|---|
 | P: defects in the repository | 17 | 11 | 6 |
 | E: machine and network | 7 | 7 | 0 |
-| D: diagnosis and process | 11 | 11 | 0 |
-| **Total** | **35** | **29** | **6** |
+| D: diagnosis and process | 13 | 13 | 0 |
+| **Total** | **37** | **31** | **6** |
 
 CI took **three runs** to go green:
 
@@ -240,6 +241,8 @@ CI took **three runs** to go green:
 | D9 | Multi-line edit scripts run inline through the shell aborted three times with an unmatched-quote error, so nothing ran; once, an edit script stopped partway because gofmt had re-aligned a line it expected, leaving one file edited and the rest not | Wasted attempts and a half-applied change, all caught before any commit | Each run was checked with git status before retrying; edit scripts now live in files and write a file only if all its edits match | ✅ |
 | D10 | The first end-to-end admission check joined 200 buyers from one machine; the per-IP join limit let 35 in, so the session cap of 50 was never reached and that part of the check proved nothing | Misleading partial result | Rerun with members written straight into the queue (testing admission, not joining): 50 of 500 admitted at a cap of 50 | ✅ |
 | D11 | `TestOpenerOpensAtT0WithoutJoins` failed about once in 60 to 100 runs ("queue opened before T0", later "opened 526 ms after T0"). The first fix, reading the state before checking the clock, assumed a slow read and was not enough | Two rounds of flaky failures | Instrumenting the failure showed the stored opening time already 541 ms in the past by the wall clock while the test's monotonic clock said 192 ms to go: the wall clock had stepped (E7). The test now uses the wall clock throughout and detects steps; 100 runs passed, 3 of them logging a step | ✅ |
+| D12 | The buyer-journey script expected the rank-6 buyer's claim to be refused, but at 2 admissions per second (plus the one second of allowance carried into T0) all 6 had been admitted by then, so the claim correctly returned a token and the script printed "None - None" | A wrong expectation, not a defect | The refusal path was shown by the claim before T0 (rank 1, admission at 0) and by the unit and integration tests; the metrics agreed (2 issued, 1 refused) | ✅ |
+| D13 | The first version of task 2.7's service doc showed an example token starting with a real-looking JWT header (the base64url prefix every EdDSA JWT header starts with). The CI secret scanner (gitleaks, rule generic-api-key) flagged it and the security job failed on PR #63, so the merge script refused to merge | One failed CI run; nothing merged | It was not a secret (only the base64 of the token header), but anything that looks like one must stay out of the repository. The docs commit was amended on the feature branch to show a placeholder (`<signed admission token (JWT)>`) and the branch force-pushed; `main` was never affected | ✅ |
 
 ### 6.5 Owner setup actions
 
@@ -281,8 +284,8 @@ Goal: everyone waits fairly, and buyers enter the purchase path at a controlled 
 | 2.3 The T0 transition | [#7](https://github.com/Sanjay-Mx21/holdfast/issues/7) | ✅ 2026-10-02 (PR #59): T0 by Valkey's clock inside `join.lua`, `open.lua` and an opener in every replica, `q:events` work list, metrics |
 | 2.4 Your position | [#8](https://github.com/Sanjay-Mx21/holdfast/issues/8) | ✅ 2026-10-02 (PR #60): `GET /v1/queue/{id}/me`, `position.lua`, per-user limit, metric |
 | 2.5 Admission controller | [#9](https://github.com/Sanjay-Mx21/holdfast/issues/9) | ✅ 2026-10-02 (PR #61): advisory-lock leader per event, fencing epoch, `advance.lua` with the session budget, rate allowance, metrics. Deferred: oversubscription and sold-out (P17) |
-| 2.6 Status document | [#10](https://github.com/Sanjay-Mx21/holdfast/issues/10) | ✅ 2026-10-02: written by the leader every tick in `advance.lua`, `GET /v1/events/{id}/status` (`public, max-age=1`), fallback before any leader |
-| 2.7 Admission tokens | [#11](https://github.com/Sanjay-Mx21/holdfast/issues/11) | ⏳ |
+| 2.6 Status document | [#10](https://github.com/Sanjay-Mx21/holdfast/issues/10) | ✅ 2026-10-02 (PR #62): written by the leader every tick in `advance.lua`, `GET /v1/events/{id}/status` (`public, max-age=1`), fallback before any leader |
+| 2.7 Admission tokens | [#11](https://github.com/Sanjay-Mx21/holdfast/issues/11) | ✅ 2026-10-02: `POST /v1/queue/{id}/admit`, `admit.lua`, tokens capped at the session slot, `/.well-known/jwks.json`; accepted by inventory-svc |
 | 2.8 Close the inventory token gaps | [#12](https://github.com/Sanjay-Mx21/holdfast/issues/12) | ⏳ |
 | 2.9 NGINX | [#13](https://github.com/Sanjay-Mx21/holdfast/issues/13) | ⏳ |
 | 2.10 Metrics and dashboard | [#14](https://github.com/Sanjay-Mx21/holdfast/issues/14) | ⏳ |

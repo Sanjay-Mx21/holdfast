@@ -93,3 +93,17 @@ Restart the leading replica (`docker compose restart queue` locally). Its
 connection closes, PostgreSQL releases the advisory lock, and a standby takes
 over within `LEADER_RETRY_INTERVAL`. The new leader's epoch is higher, so
 anything the old one still tries is refused.
+
+## RB-Q-7 Rotating the admission-token signing key
+
+Tokens live at most `ADMISSION_TOKEN_TTL` (10 minutes by default), so a
+rotation only has to overlap for that long.
+
+1. Generate a new key pair (`holdfastctl keys generate --out-dir <dir>`).
+2. Give inventory-svc the new public key **in addition to** the old one
+   (`ADMISSION_PUBLIC_KEY_FILES=old.pub,new.pub`, see RB-INV-5) and restart it.
+3. Switch queue-svc to the new private key (`ADMISSION_PRIVATE_KEY_FILE`) and
+   list the old public key in `ADMISSION_EXTRA_PUBLIC_KEY_FILES`, so
+   `/.well-known/jwks.json` publishes both. Restart queue-svc.
+4. After `ADMISSION_TOKEN_TTL` has passed, remove the old public key from both
+   services and restart them.

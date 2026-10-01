@@ -45,6 +45,11 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
   state, opening time, `admittedUpTo`, queue size and update time, rewritten by
   the admission leader every tick and served with `public, max-age=1`; a
   fallback with `updatedAt: null` until a leader has written it.
+- **Admission tokens** (task 2.7): `POST /v1/queue/{id}/admit` issues an
+  Ed25519 token once your rank is within `admittedUpTo`, expiring at the earlier
+  of 10 minutes and your session slot; `GET /.well-known/jwks.json` publishes
+  the public keys. `authn.IssueUntil` and `authn.NewJWKSet` added. queue-svc
+  requires `ADMISSION_PRIVATE_KEY_FILE`. Inventory accepts these tokens.
 
 ### Fixed
 
