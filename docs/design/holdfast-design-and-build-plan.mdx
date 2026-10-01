@@ -1,10 +1,10 @@
 ---
 title: "HoldFast: Surge-Proof Booking Engine"
-description: "Project 1 design doc: purpose, tech stack, architecture, runtime flows, and the phase-by-phase build plan"
+description: "Project 1 design doc and build blueprint: purpose, tech stack, architecture, runtime flows, and the milestone-by-milestone build plan"
 author: "Sanjay M"
-version: "1.0"
-status: "Ready to build"
-last_updated: "2026-09-25"
+version: "2.0"
+status: "Drop 1 built (Phases 0 and 1); Phases 2 to 6 planned"
+last_updated: "2026-10-01"
 tags: [distributed-systems, go, postgresql, valkey, kafka, system-design, payments]
 ---
 
@@ -27,8 +27,9 @@ export const Callout = ({ type = 'note', title, children }) => {
 
 1. Read sections 0 to 5 once, end to end, before writing any code. They explain what we build and why.
 2. Sections 6 to 16 are the engineering reference to keep open while building.
-3. Section 6 is **Part A of the flow**: what happens at runtime when someone buys. Section 17 is **Part B of the flow**: what we build, in what order, with exit criteria. Section 18 is exactly what to do on day 1.
+3. Section 6 is **Part A of the flow**: what happens at runtime when someone buys. Section 17 is **Part B of the flow**: the build blueprint, with a milestone tracker, ordered tasks, exit criteria, and where to check and update progress. Section 18 is exactly what to do next.
 4. Every decision here is an interview talking point. If you can't explain a line, that is the next thing to study.
+5. Where this doc and the code disagree, the code and the service docs win. Fix this doc in the same pull request (17.3).
 
 Rendering: works in MDX setups with GFM tables and frontmatter (Docusaurus, Nextra, Astro). Mermaid diagrams need a Mermaid plugin, for example `@docusaurus/theme-mermaid`.
 
@@ -53,8 +54,8 @@ Rendering: works in MDX setups with GFM tables and frontmatter (Docusaurus, Next
 14. Failure modes and runbooks
 15. Repository layout and ADRs
 16. Local development, CI/CD and deployment
-17. Build flow, phase by phase (Part B)
-18. Day 1: start here
+17. Build plan, milestone by milestone (Part B)
+18. Start here: from Drop 1 to Phase 2
 19. README and demo video
 20. Interview talking points
 21. Resume bullets
@@ -73,6 +74,7 @@ Rendering: works in MDX setups with GFM tables and frontmatter (Docusaurus, Next
 | Hard guarantees | Zero oversell. Zero double charge. Every captured payment ends in a ticket or an automatic refund. Fair ordering. |
 | Stack | Go 1.27 services, PostgreSQL 18, Valkey 9.1, Apache Kafka 4.3, gRPC, NGINX, Next.js 16.3, OpenTelemetry, Prometheus, Grafana, k6 v2, Docker and Kubernetes. |
 | Proof | Six experiments (contention, waiting-room spike, payment chaos, infrastructure chaos, scale-out, fairness) with published numbers and hardware specs. |
+| Status | Drop 1 is built: the platform foundation and the inventory core (Phases 0 and 1), proven by E1. Next: the M1.5 bring-up, then Phase 2. Tracker in 17.1. |
 
 ---
 
@@ -113,7 +115,8 @@ HoldFast turns each of these facts into an engineering requirement.
 | I1 | **No oversell:** confirmed units never exceed capacity; a seat is sold at most once. | Atomic Lua holds (fast path) plus a PostgreSQL conditional update or primary key (final guard). | Contention test, auditor query, Prometheus gauge. |
 | I2 | **No double charge:** at most one captured payment per booking. | Idempotency keys at three layers, `UNIQUE(booking_id)` on payment intents, webhook dedup. | Payment chaos test, auditor. |
 | I3 | **Money safety:** every captured payment ends CONFIRMED or REFUNDED within 15 minutes. | Saga with compensation, plus the reconciler. | Payment chaos test, SLO alert. |
-| I4 | **Per-user cap:** held plus sold units per user per event never exceed the limit. | Lua counter plus a PostgreSQL conditional upsert. | Property tests, auditor. |
+| I4 | **Per-user cap:** held plus sold units per user per event never exceed the limit. | Lua counter plus a PostgreSQL conditional upsert. | Model-based randomized test, E1, auditor. |
+| I5 | **No lost units:** every hold ends SOLD or RELEASED; units available plus units held, in checkout and sold always equal capacity, except late confirmations, which are counted and reconciled. | Expiry index plus sweeper; atomic `release.lua` and `confirm.lua`. | Model-based randomized test, E1, auditor. |
 | F1 | **Fairness:** pre-T0 order is uniformly random, post-T0 order is FIFO, one slot per identity. | `ZADD NX` with server-side crypto-random scores. | Fairness statistical test (E6). |
 
 ### 2.4 Service-level objectives
@@ -128,7 +131,7 @@ These are design targets. Section 13 describes how each one is validated.
 | Create-booking API, p99 (excluding PSP time) | ≤ 300 ms |
 | Payment captured → booking confirmed, p99 | ≤ 5 s |
 | Availability of join and status during the sale window | 99.9% |
-| Violations of I1 to I4 | 0 |
+| Violations of I1 to I5 | 0 |
 
 ---
 
@@ -196,18 +199,18 @@ Versions below are the current stable lines as of September 2026 (sources in sec
 | Concern | Library | Notes |
 |---|---|---|
 | HTTP | standard `net/http` (method and wildcard routing) | No framework. Write small middleware yourself: auth, logging, metrics, panic recovery. |
-| gRPC | `google.golang.org/grpc` with Buf-generated code | Interceptors for auth, tracing, metrics and deadlines. |
-| PostgreSQL | `jackc/pgx/v5` + **sqlc** | sqlc generates type-safe Go from hand-written SQL. No ORM: you own every query and every lock. |
-| Migrations | `pressly/goose` | Plain SQL migrations, one folder per service schema. |
+| gRPC | `google.golang.org/grpc` with Buf-generated code | Interceptors for auth, tracing, metrics and deadlines. From Phase 3 (ADR 0004). |
+| PostgreSQL | `jackc/pgx/v5`; **sqlc** from Phase 3 | Drop 1 writes its few queries by hand with pgx. sqlc generates type-safe Go from hand-written SQL once booking and payment add dozens of queries (ADR 0011). No ORM: you own every query and every lock. |
+| Migrations | Embedded runner (`internal/platform/postgres`) | Plain SQL in goose format, one folder per service schema, embedded in the binaries and applied with an advisory lock and checksums (ADR 0003). The goose CLI stays a drop-in alternative. |
 | Valkey / Redis | `redis/go-redis/v9` | Works with Valkey (`valkey-io/valkey-go` is an alternative). Load Lua once, call with `EVALSHA`. |
-| Kafka | `twmb/franz-go` | Pure Go, idempotent producer, fast consumer groups. |
+| Kafka | `twmb/franz-go` | Pure Go, idempotent producer, fast consumer groups. From Phase 3. |
 | Tokens and crypto | `golang-jwt/jwt/v5`, standard `crypto/ed25519`, `crypto/hmac` | EdDSA-signed tokens; constant-time HMAC comparison for webhooks. |
-| Resilience | `sony/gobreaker`, `cenkalti/backoff` | Circuit breaker plus exponential backoff with jitter for the PSP client. |
-| Observability | OpenTelemetry Go SDK (`otelhttp`, `otelgrpc`), `prometheus/client_golang` | Traces and metrics; the W3C `traceparent` header travels through gRPC metadata and Kafka headers. |
-| Logging | standard `log/slog` with the JSON handler | Structured logs with a `trace_id` on every line. |
-| Testing | standard `testing` and `testing/synctest`, `testcontainers-go`, `pgregory.net/rapid`, `stretchr/testify` | Fake-clock time tests, real PostgreSQL/Valkey/Kafka in tests, property-based tests. |
+| Resilience | `sony/gobreaker`, `cenkalti/backoff` | Circuit breaker plus exponential backoff with jitter for the PSP client. From Phase 3. |
+| Observability | `prometheus/client_golang` (built); OpenTelemetry Go SDK with `otelhttp` and `otelgrpc` (Phase 3) | Metrics today; traces from Phase 3, when the W3C `traceparent` header starts travelling through gRPC metadata and Kafka headers. |
+| Logging | standard `log/slog` with the JSON handler | Structured logs with a `request_id` on every line today, and a `trace_id` from Phase 3. |
+| Testing | standard `testing` with the race detector; `testing/synctest` from Phase 2 | Integration tests against real PostgreSQL and Valkey (Kafka from Phase 3), configured by environment variables; model-based randomized tests; fake-clock time tests. No testify, rapid or testcontainers needed so far. |
 | Config | `caarlos0/env` | 12-factor configuration from environment variables. |
-| Ops CLI | `spf13/cobra` | `holdfastctl` for freezes, rebuilds, DLQ replay and manual refunds. |
+| Ops CLI | standard `flag` with subcommands | `holdfastctl` (built): migrations, keys, tokens, events, inventory provision and status. Freezes, DLQ replay and manual refunds arrive with their phases. |
 
 ### 4.3 Infrastructure, observability and tooling
 
@@ -216,13 +219,13 @@ Versions below are the current stable lines as of September 2026 (sources in sec
 | Local orchestration | Docker Compose | One command brings everything up (`make up`). |
 | Kubernetes (Phase 6) | kind plus Kustomize or Helm; Strimzi (Kafka operator); CloudNativePG (PostgreSQL operator) | Autoscaling (HPA), rolling deploys, PodDisruptionBudgets. |
 | Metrics and dashboards | Prometheus 3 + Grafana | RED metrics, invariant gauges, SLO alerts, the "mission control" dashboard. |
-| Tracing | OpenTelemetry Collector → Jaeger v2 (or Grafana Tempo) | One trace from "click Book" through Kafka to "confirmed". |
+| Tracing (Phase 3) | OpenTelemetry Collector → Jaeger v2 (or Grafana Tempo) | One trace from "click Book" through Kafka to "confirmed". |
 | Logs | JSON to stdout → Grafana Loki (optional) | Correlate logs with trace IDs. |
 | Load testing | **k6 v2** | Spike, soak, contention and polling scenarios with arrival-rate executors [14]. |
-| Fault injection | **Toxiproxy** plus container kills | Latency, timeouts and partitions between services and dependencies. |
-| Kafka UI | Redpanda Console | Inspect topics, consumer lag and messages. |
-| CI | GitHub Actions | Lint, `go test -race`, integration tests, image builds, Trivy scans, `govulncheck`. |
-| Code quality | golangci-lint, `buf lint`, `buf breaking` | Style and bug checks; protobuf backward-compatibility checks. |
+| Fault injection (Phase 5) | **Toxiproxy** plus container kills | Latency, timeouts and partitions between services and dependencies. |
+| Kafka UI (Phase 3) | Redpanda Console | Inspect topics, consumer lag and messages. |
+| CI | GitHub Actions | Built: lint, `go test -race`, integration tests with E1, `govulncheck`, gitleaks, image builds. Planned: Buf checks (Phase 3), Trivy scans (Phase 6). |
+| Code quality | golangci-lint (built); `buf lint` and `buf breaking` (Phase 3) | Style and bug checks; protobuf backward-compatibility checks. |
 | Profiling | `net/http/pprof`, `go tool trace` | Find CPU and allocation hotspots before you publish performance numbers. |
 
 ### 4.4 What we build ourselves, on purpose
@@ -251,7 +254,7 @@ Versions below are the current stable lines as of September 2026 (sources in sec
 | pgx + sqlc | JDBC + jOOQ (type-safe SQL) |
 | go-redis | Lettuce |
 | franz-go | Official Kafka Java client or Spring for Apache Kafka |
-| testcontainers-go, rapid | Testcontainers for Java, jqwik |
+| Env-configured integration tests, model-based randomized tests | Testcontainers for Java, jqwik |
 
 The design, invariants and experiments in this document stay exactly the same.
 
@@ -387,7 +390,7 @@ sequenceDiagram
   participant PW as payment-svc
   participant PSP as mockpsp
   participant K as Kafka
-  U->>I: POST /v1/holds (admission token, qty 2, Idempotency-Key)
+  U->>I: POST /v1/events/{id}/holds (admission token, qty 2, Idempotency-Key)
   I->>I: hold.lua, atomic check and decrement
   I-->>U: holdId, expiresAt in 5 min
   U->>BK: POST /v1/bookings (holdId, Idempotency-Key)
@@ -671,12 +674,15 @@ Every key for event E carries the hash tag `{E}`, so all keys a script touches l
 | `adm:{E}:epoch` | integer | leader fencing token | event |
 | `adm:{E}:sessions` | sorted set | session → expiry in ms, for concurrency accounting | event |
 | `inv:{E}:avail` | integer | units available to hold | event |
+| `inv:{E}:config` | hash | `capacity` and `per_user_limit`, written once by `provision.lua` | event |
 | `inv:{E}:user:U` | integer | units held plus sold by user U, for I4 | event |
-| `inv:{E}:hold:H` | hash | user, qty, state, expires_at | tombstone kept 1 hour after release |
+| `inv:{E}:hold:H` | hash | user, qty, state, expires_at, created_at, released_by | tombstone kept 1 hour after release |
 | `inv:{E}:expiry` | sorted set | hold-and-user member → expiry in ms (sweeper index) | event |
+| `inv:events` | set | provisioned events: the sweeper's work list (one global key, never used inside multi-key scripts) | permanent |
 | `rl:SCOPE:ID` | hash | token-bucket state: tokens and last refill | auto-expiring |
 | `jti:ID` | string | spent one-time token IDs, for replay protection | token lifetime |
 
+- **Built so far.** The `inv:*` keys exist since Drop 1. The `q:*`, `adm:*`, `rl:*` and `jti:*` keys arrive in Phase 2.
 - **A deliberate hot key.** One event's inventory lives on one shard. Admission control caps that traffic at a few hundred operations per second, so this is fine. Seat-map mode (Phase 7) shards by section with tags like `{E:S}`.
 - **Durability.** AOF with `appendfsync everysec`, plus a replica and Sentinel in Phase 5. A crash can lose roughly the last second of writes, which is exactly why PostgreSQL owns the final guard and why runbook RB-2 exists.
 - **Memory.** One million queue members at roughly 100 bytes each is about 100 MB. Compact user IDs (16 raw bytes instead of a 36-character UUID string) shrink that a lot.
@@ -900,131 +906,207 @@ booking done/left: ZREM adm:{E}:sessions <sid>
 
 ### 9.3 Atomic holds
 
-```lua
--- hold.lua (quantity mode)
--- KEYS[1] inv:{E}:avail   KEYS[2] inv:{E}:user:U   KEYS[3] inv:{E}:hold:H   KEYS[4] inv:{E}:expiry
--- ARGV[1] qty   ARGV[2] per_user_limit   ARGV[3] expiry member "H|U"   ARGV[4] user_id   ARGV[5] ttl_ms
--- Returns {code, n}:  1 OK (n = units left)          2 hold already exists (idempotent retry)
---                     0 SOLD_OUT (n = units left)   -1 USER_LIMIT (n = units already used)
---                    -2 BAD_QTY
-local qty   = tonumber(ARGV[1])
-local limit = tonumber(ARGV[2])
-if not qty or qty < 1 or qty > limit then return {-2, 0} end
+These are the scripts shipped in Drop 1 (`internal/inventory/scripts/`), which remain the source of truth. `provision.lua` sets up an event's counters exactly once; each of the others is one atomic state change. The Go code wraps them with `redis.NewScript`, which uses `EVALSHA` and falls back to `EVAL` on a cache miss.
 
-if redis.call('EXISTS', KEYS[3]) == 1 then            -- same Idempotency-Key, same hold ID
-  return {2, tonumber(redis.call('GET', KEYS[1]) or '0')}
+```lua
+-- provision.lua: initialise an event's inventory exactly once (idempotent).
+-- KEYS[1] inv:{E}:avail   KEYS[2] inv:{E}:config
+-- ARGV[1] capacity        ARGV[2] per_user_limit
+-- ARGV[3] initial available units (capacity for a new sale; capacity minus
+--         units already sold when rebuilding after data loss)
+-- Returns  1 created
+--          0 already provisioned with identical settings (safe retry)
+--         -1 already provisioned with different settings (refuse; see runbook)
+local cap = redis.call('HGET', KEYS[2], 'capacity')
+if cap then
+  if cap == ARGV[1] and redis.call('HGET', KEYS[2], 'per_user_limit') == ARGV[2] then
+    return 0
+  end
+  return -1
+end
+redis.call('HSET', KEYS[2], 'capacity', ARGV[1], 'per_user_limit', ARGV[2])
+redis.call('SET', KEYS[1], ARGV[3])
+return 1
+```
+
+```lua
+-- hold.lua: atomically hold units for one user (quantity mode).
+-- Runs as a single atomic step on the server: no locks, no check-then-act race.
+-- KEYS[1] inv:{E}:avail     KEYS[2] inv:{E}:config    KEYS[3] inv:{E}:user:U
+-- KEYS[4] inv:{E}:hold:H    KEYS[5] inv:{E}:expiry
+-- ARGV[1] qty   ARGV[2] user_id   ARGV[3] expiry member "H|U"   ARGV[4] ttl_ms
+-- Returns {code, n, expires_at_ms}
+--    1 held           n = units left
+--    2 replay         n = units left (a hold already exists for this idempotency key)
+--    0 sold out       n = units left
+--   -1 user limit     n = units this user already holds or bought
+--   -2 bad quantity   n = per-user limit
+--   -3 event not provisioned
+local limit = tonumber(redis.call('HGET', KEYS[2], 'per_user_limit'))
+if not limit then return {-3, 0, 0} end
+
+local qty = tonumber(ARGV[1])
+if (not qty) or qty < 1 or qty > limit then return {-2, limit, 0} end
+
+if redis.call('EXISTS', KEYS[4]) == 1 then
+  local exp = tonumber(redis.call('HGET', KEYS[4], 'expires_at')) or 0
+  return {2, tonumber(redis.call('GET', KEYS[1]) or '0'), exp}
 end
 
-local used = tonumber(redis.call('GET', KEYS[2]) or '0')
-if used + qty > limit then return {-1, used} end
+local used = tonumber(redis.call('GET', KEYS[3]) or '0')
+if used + qty > limit then return {-1, used, 0} end
 
 local avail = tonumber(redis.call('GET', KEYS[1]) or '0')
-if avail < qty then return {0, avail} end
+if avail < qty then return {0, avail, 0} end
 
-local t = redis.call('TIME')                          -- one clock for every app instance
-local now = t[1] * 1000 + math.floor(t[2] / 1000)
-local expires = now + tonumber(ARGV[5])
+-- Server time, not client time: every replica agrees on when a hold expires.
+local t = redis.call('TIME')
+local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
+local expires = now + tonumber(ARGV[4])
 
 redis.call('DECRBY', KEYS[1], qty)
-redis.call('INCRBY', KEYS[2], qty)
-redis.call('HSET', KEYS[3], 'user', ARGV[4], 'qty', qty, 'state', 'HELD', 'expires_at', expires)
-redis.call('ZADD', KEYS[4], expires, ARGV[3])
-return {1, avail - qty}
+redis.call('INCRBY', KEYS[3], qty)
+redis.call('HSET', KEYS[4], 'user', ARGV[2], 'qty', qty, 'state', 'HELD',
+           'expires_at', expires, 'created_at', now)
+redis.call('ZADD', KEYS[5], expires, ARGV[3])
+return {1, avail - qty, expires}
 ```
 
 The hold ID is derived from the user ID and the client's Idempotency-Key (for example a UUIDv5), so a retried request lands on the `EXISTS` branch instead of holding twice. If that existing hold was already released, the API returns 409 and the client retries with a fresh key.
 
 ```lua
--- mark_paying.lua: HELD → PAYING, extending expiry to deadline plus grace (idempotent)
+-- mark_paying.lua: HELD -> PAYING when checkout starts. A PAYING hold is
+-- protected from the expiry sweeper until the payment deadline (plus grace).
 -- KEYS[1] inv:{E}:hold:H   KEYS[2] inv:{E}:expiry
--- ARGV[1] expiry member "H|U"   ARGV[2] user_id   ARGV[3] extend_ms
--- Returns 1 marked, 2 already PAYING, 0 gone or expired, -1 not your hold
-local st = redis.call('HGET', KEYS[1], 'state')
-if not st then return 0 end
-if redis.call('HGET', KEYS[1], 'user') ~= ARGV[2] then return -1 end
-if st == 'PAYING' then return 2 end
-if st ~= 'HELD' then return 0 end
+-- ARGV[1] user_id   ARGV[2] expiry member "H|U"   ARGV[3] payment_window_ms
+-- Returns {code, expires_at_ms}
+--    1 marked PAYING   2 already PAYING (idempotent retry)
+--    0 hold missing, released or expired   -1 hold belongs to another user
+local h = redis.call('HMGET', KEYS[1], 'user', 'state', 'expires_at')
+if not h[1] then return {0, 0} end
+if h[1] ~= ARGV[1] then return {-1, 0} end
+if h[2] == 'PAYING' then return {2, tonumber(h[3])} end
+if h[2] ~= 'HELD' then return {0, 0} end
+
 local t = redis.call('TIME')
-local now = t[1] * 1000 + math.floor(t[2] / 1000)
-if now >= tonumber(redis.call('HGET', KEYS[1], 'expires_at')) then return 0 end  -- expired, not yet swept
-local new_exp = now + tonumber(ARGV[3])
-redis.call('HSET', KEYS[1], 'state', 'PAYING', 'expires_at', new_exp)
-redis.call('ZADD', KEYS[2], new_exp, ARGV[1])
-return 1
+local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
+if tonumber(h[3]) <= now then return {0, 0} end
+
+local expires = now + tonumber(ARGV[3])
+redis.call('HSET', KEYS[1], 'state', 'PAYING', 'expires_at', expires)
+redis.call('ZADD', KEYS[2], expires, ARGV[2])
+return {1, expires}
 ```
 
 ```lua
--- release.lua (idempotent)
+-- release.lua: return a hold's units to the pool.
 -- KEYS[1] inv:{E}:avail   KEYS[2] inv:{E}:user:U   KEYS[3] inv:{E}:hold:H   KEYS[4] inv:{E}:expiry
--- ARGV[1] expiry member "H|U"
--- ARGV[2] mode: EXPIRE (sweeper), USER_CANCEL (buyer), PAYMENT_FAILED (booking-svc)
--- Returns 1 released, 0 no-op, -1 not expired yet, -2 refused (a PAYING hold can't be abandoned)
-local st = redis.call('HGET', KEYS[3], 'state')
-if (not st) or st == 'SOLD' or st == 'RELEASED' then
+-- ARGV[1] expiry member "H|U"   ARGV[2] mode: EXPIRE | USER_CANCEL | PAYMENT_FAILED
+-- ARGV[3] user_id (must own the hold; KEYS[2] is derived from it)
+-- Returns  1 released
+--          0 nothing to do (already released or sold; unknown holds are cleaned up)
+--         -1 not expired yet (EXPIRE mode only; the sweeper will retry later)
+--         -2 a PAYING hold cannot be cancelled by the user
+--         -3 the hold belongs to a different user
+local h = redis.call('HMGET', KEYS[3], 'user', 'qty', 'state', 'expires_at')
+if not h[1] then
   redis.call('ZREM', KEYS[4], ARGV[1])
   return 0
 end
-if ARGV[2] == 'USER_CANCEL' and st ~= 'HELD' then return -2 end
-if ARGV[2] == 'EXPIRE' then
-  local t = redis.call('TIME')
-  local now = t[1] * 1000 + math.floor(t[2] / 1000)
-  if now < tonumber(redis.call('HGET', KEYS[3], 'expires_at')) then return -1 end
+local state = h[3]
+if state == 'RELEASED' or state == 'SOLD' then
+  redis.call('ZREM', KEYS[4], ARGV[1])
+  return 0
 end
-local qty = tonumber(redis.call('HGET', KEYS[3], 'qty'))
+if h[1] ~= ARGV[3] then return -3 end
+
+local mode = ARGV[2]
+if mode == 'EXPIRE' then
+  local t = redis.call('TIME')
+  local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
+  if tonumber(h[4]) > now then return -1 end
+elseif mode == 'USER_CANCEL' then
+  if state == 'PAYING' then return -2 end
+end
+
+local qty = tonumber(h[2])
 redis.call('INCRBY', KEYS[1], qty)
-redis.call('DECRBY', KEYS[2], qty)
-redis.call('HSET', KEYS[3], 'state', 'RELEASED')
-redis.call('PEXPIRE', KEYS[3], 3600000)     -- keep a tombstone for 1 hour
+local used = redis.call('DECRBY', KEYS[2], qty)
+if used <= 0 then redis.call('DEL', KEYS[2]) end
+redis.call('HSET', KEYS[3], 'state', 'RELEASED', 'released_by', mode)
+redis.call('PEXPIRE', KEYS[3], 3600000) -- keep a 1-hour tombstone for replays and audits
 redis.call('ZREM', KEYS[4], ARGV[1])
 return 1
 ```
 
 ```lua
--- confirm.lua (runs when booking.confirmed arrives; idempotent)
+-- confirm.lua: mark a hold SOLD once PostgreSQL has committed the booking.
 -- KEYS[1] inv:{E}:hold:H   KEYS[2] inv:{E}:expiry   KEYS[3] inv:{E}:avail   KEYS[4] inv:{E}:user:U
--- ARGV[1] expiry member "H|U"   ARGV[2] qty
--- Returns 1 confirmed, 2 already SOLD, 3 late confirm (units re-debited)
-local st = redis.call('HGET', KEYS[1], 'state')
-if st == 'SOLD' then return 2 end
-if st == 'HELD' or st == 'PAYING' then
+-- ARGV[1] expiry member "H|U"   ARGV[2] qty   ARGV[3] user_id
+-- Returns  1 confirmed
+--          2 already confirmed (idempotent retry)
+--          3 late confirm: the hold had been released, so its units were
+--            re-taken from the pool (avail may go negative; the edge treats
+--            anything <= 0 as sold out and reconciliation reports it)
+--         -1 the hold belongs to a different user
+local h = redis.call('HMGET', KEYS[1], 'user', 'state')
+if h[1] and h[1] ~= ARGV[3] then return -1 end
+local state = h[2]
+if state == 'SOLD' then return 2 end
+if state == 'HELD' or state == 'PAYING' then
   redis.call('HSET', KEYS[1], 'state', 'SOLD')
   redis.call('PERSIST', KEYS[1])
   redis.call('ZREM', KEYS[2], ARGV[1])
   return 1
 end
--- RELEASED, or the tombstone is gone. PostgreSQL has already accepted this sale,
--- so re-debit the units to keep Valkey honest. avail may dip below zero briefly;
--- new holds are refused until releases bring it back. Oversell stays impossible
--- because PostgreSQL made the decision, not Valkey.
 local qty = tonumber(ARGV[2])
 redis.call('DECRBY', KEYS[3], qty)
 redis.call('INCRBY', KEYS[4], qty)
-redis.call('HSET', KEYS[1], 'state', 'SOLD')
+redis.call('HSET', KEYS[1], 'user', ARGV[3], 'qty', qty, 'state', 'SOLD')
 redis.call('PERSIST', KEYS[1])
+redis.call('ZREM', KEYS[2], ARGV[1])
 return 3
 ```
 
 ### 9.4 The expiry sweeper and the TTL race
 
 ```go
-// Runs in every inventory-svc instance. No leader is needed: release.lua re-checks
-// state and expiry atomically, so two sweepers racing on one hold is harmless.
-func (s *Sweeper) sweepOnce(ctx context.Context, event string) error {
-    upTo := strconv.FormatInt(time.Now().UnixMilli(), 10) // coarse filter; the script uses server time
-    members, err := s.kv.ZRangeByScore(ctx, expiryKey(event), &redis.ZRangeBy{
-        Min: "-inf", Max: upTo, Count: 500,
-    }).Result()
-    if err != nil {
-        return err
-    }
-    for _, m := range members { // m is "holdID|userID": enough to declare every key
-        holdID, userID, _ := strings.Cut(m, "|")
-        keys := []string{availKey(event), userKey(event, userID), holdKey(event, holdID), expiryKey(event)}
-        if err := s.release.Run(ctx, s.kv, keys, m, "EXPIRE").Err(); err != nil {
-            s.log.Warn("release failed", "hold", holdID, "err", err)
+// Condensed from internal/inventory/sweeper.go. Runs in every inventory-svc replica.
+// No leader is needed: release.lua re-checks state and expiry against the Valkey
+// clock, so two sweepers racing on one hold is harmless.
+func (s *Sweeper) sweepEvent(ctx context.Context, eventID string) (int, error) {
+    released := 0
+    for {
+        // Coarse filter by the app clock; the script decides with the server clock.
+        members, err := s.store.ExpiredMembers(ctx, eventID, s.now(), s.batch)
+        if err != nil {
+            return released, err
+        }
+        progress := 0
+        for _, member := range members { // "holdID|userID": enough to declare every key
+            holdID, userID, ok := parseExpiryMember(member)
+            if !ok {
+                _ = s.store.RemoveExpiryMember(ctx, eventID, member) // malformed: drop it
+                progress++
+                continue
+            }
+            freed, err := s.store.Release(ctx, eventID, userID, holdID, ReleaseExpire)
+            switch {
+            case errors.Is(err, errNotExpiredYet):
+                continue // our clock runs ahead of the server's; retry next tick
+            case err != nil:
+                return released, err
+            }
+            progress++
+            if freed {
+                released++
+            }
+        }
+        // Stop when the index is drained, or when nothing moved this round.
+        if int64(len(members)) < s.batch || progress == 0 {
+            return released, nil
         }
     }
-    return nil
 }
 ```
 
@@ -1032,7 +1114,7 @@ func (s *Sweeper) sweepOnce(ctx context.Context, event string) error {
 
 1. `MarkPaying` moves the hold to PAYING and extends it to deadline plus grace.
 2. The PSP order expires at the deadline, so late payments are rare.
-3. If a capture still lands late, the PostgreSQL final guard decides: confirm if capacity remains, otherwise refund automatically. Every case is counted in `holdfast_late_confirm_total`.
+3. If a capture still lands late, the PostgreSQL final guard decides: confirm if capacity remains, otherwise refund automatically. inventory counts each one in `holdfast_hold_confirms_total{outcome="late"}` (built), and booking-svc records whether it was honoured or refunded in `holdfast_late_confirm_total` (Phase 3).
 
 ### 9.5 Idempotency keys (Stripe-style)
 
@@ -1266,18 +1348,23 @@ Measure the **collapse ratio**: edge requests per second (`X-Cache-Status: HIT`)
 | `POST /v1/auth/otp/verify` | none | Verify the OTP; returns an access token and sets a refresh cookie | 200; 401 |
 | `POST /v1/auth/refresh` | refresh cookie | Rotate the refresh token | 200; 401 and the whole family revoked if an old token is reused |
 | `GET /.well-known/jwks.json` | none | Public signing keys | 200, cacheable |
-| `GET /v1/events/:id` | none | Event details | 200, cached 60 s |
-| `GET /v1/events/:id/status` | none | The shared status document | 200, edge-cached 1 s |
-| `GET /v1/queue/:id/challenge` | access token | Proof-of-work challenge | 200 |
-| `POST /v1/queue/:id/join` | access token + PoW solution | Join the waiting room | 202; 403 outside your policy window; 409 when closed |
-| `GET /v1/queue/:id/me` | access token | Your rank after T0 | 200 with `rank`, or `randomizingAt` before T0 |
-| `POST /v1/queue/:id/admit` | access token | Exchange your turn for an admission token | 200; 409 `NOT_YOUR_TURN` |
-| `POST /v1/holds` | admission token + Idempotency-Key | Hold N units | 201; 409 `SOLD_OUT`; 422 `USER_LIMIT` |
-| `DELETE /v1/holds/:holdId` | admission token | Release a HELD hold | 204; 409 if it is already PAYING |
+| `GET /v1/events/{id}` | none | Event details | 200, cached 60 s |
+| `GET /v1/events/{id}/status` | none | The shared status document | 200, edge-cached 1 s |
+| `GET /v1/queue/{id}/challenge` | access token | Proof-of-work challenge | 200 |
+| `POST /v1/queue/{id}/join` | access token + PoW solution | Join the waiting room | 202; 403 outside your policy window; 409 when closed |
+| `GET /v1/queue/{id}/me` | access token | Your rank after T0 | 200 with `rank`, or `randomizingAt` before T0 |
+| `POST /v1/queue/{id}/admit` | access token | Exchange your turn for an admission token | 200; 409 `NOT_YOUR_TURN` |
+| `POST /v1/events/{id}/holds` | admission token + Idempotency-Key | Hold N units ✅ | 201, and 201 with `Idempotent-Replayed: true` on a replay; 409 `SOLD_OUT`; 422 `USER_LIMIT`, `INVALID_QUANTITY` or `IDEMPOTENCY_KEY_REUSED`; 403 `TOKEN_EVENT_MISMATCH` |
+| `GET /v1/events/{id}/holds/{holdId}` | admission token, owner only | Read your hold ✅ | 200; 404 for non-owners as well |
+| `DELETE /v1/events/{id}/holds/{holdId}` | admission token | Release your hold ✅ | 204, also when already released; 409 `HOLD_NOT_CANCELLABLE` when PAYING or SOLD |
+| `GET /v1/events/{id}/availability` | none | Units left ✅ | 200, `Cache-Control: public, max-age=1` |
 | `POST /v1/bookings` | access token + Idempotency-Key | Create the booking and get a checkout URL | 201; 409 `HOLD_EXPIRED`; 503 with Retry-After |
-| `GET /v1/bookings/:id` | access token, owner only | Booking status | 200; 404 for non-owners as well |
+| `GET /v1/bookings/{id}` | access token, owner only | Booking status | 200; 404 for non-owners as well |
 | `POST /v1/webhooks/psp` | HMAC signature | PSP callbacks | 200 quickly; 401 on a bad signature |
-| `POST /v1/admin/events/:id/freeze` | admin token | Kill switch: pause admissions | 204 |
+| `POST /internal/v1/events/{id}/freeze` (admin port) | operator token | Kill switch: pause admissions (Phase 4) | 204 |
+| `PUT /internal/v1/events/{id}/inventory` (admin port) | operator token | Provision inventory ✅ | 201 created; 200 unchanged; 409 `PROVISION_CONFLICT` |
+
+✅ marks endpoints built in Drop 1. Operator endpoints live on each service's admin port, never on the public port.
 
 Errors follow RFC 9457 Problem Details (`application/problem+json`) with a stable, machine-readable `code`:
 
@@ -1288,7 +1375,7 @@ Errors follow RFC 9457 Problem Details (`application/problem+json`) with a stabl
   "status": 409,
   "code": "SOLD_OUT",
   "detail": "No units are left for this event.",
-  "instance": "/v1/holds"
+  "instance": "/v1/events/0196f0c1-7a3e-7c51-9b0e-5d2f8a1c4e77/holds"
 }
 ```
 
@@ -1377,23 +1464,28 @@ Tune `d` so a mid-range phone solves it in about one to two seconds; measure thi
 
 ### 12.1 Metrics
 
-| Metric | Type | Why it exists |
-|---|---|---|
-| `holdfast_queue_size` | gauge | People waiting |
-| `holdfast_admitted_upto` | gauge | Queue progress |
-| `holdfast_active_sessions` | gauge | Little's Law L |
-| `holdfast_admission_rate` | gauge | The λ actually applied after AIMD |
-| `holdfast_holds_total` (label `result`) | counter | ok, sold_out, user_limit, duplicate |
-| `holdfast_hold_duration_seconds` | histogram | Hold API latency |
-| `holdfast_inventory_available` | gauge | Units left |
-| `holdfast_booking_transitions_total` (labels `from`, `to`) | counter | Saga health |
-| `holdfast_capture_to_confirm_seconds` | histogram | SLO: p99 ≤ 5 s |
-| `holdfast_webhooks_total` (labels `type`, `duplicate`) | counter | PSP behaviour |
-| `holdfast_outbox_lag_seconds` | gauge | Age of the oldest unpublished outbox row |
-| `holdfast_invariant_violations` (label `invariant`) | gauge | **Must always be 0** (published by the auditor) |
-| `holdfast_recon_mismatch_total` (label `type`) | counter | Reconciliation findings |
-| `holdfast_late_confirm_total` (label `outcome`) | counter | Late captures honored versus refunded |
-| Kafka consumer lag, Go runtime, Valkey and PostgreSQL exporters | various | Saturation signals |
+| Metric | Type | Phase | Why it exists |
+|---|---|---|---|
+| `holdfast_holds_total` (label `result`) | counter | 1 ✅ | held, replay, sold_out, user_limit, invalid, not_provisioned, error |
+| `holdfast_hold_script_duration_seconds` | histogram | 1 ✅ | Round trip of `hold.lua` to Valkey |
+| `holdfast_hold_releases_total` (label `mode`) | counter | 1 ✅ | Holds returned: EXPIRE, USER_CANCEL, PAYMENT_FAILED |
+| `holdfast_hold_confirms_total` (label `outcome`) | counter | 1 ✅ | confirmed, replay, late |
+| `holdfast_inventory_available` (label `event`) | gauge | 1 ✅ | Units left |
+| `holdfast_sweeper_runs_total` (label `result`), `holdfast_sweeper_duration_seconds` | counter, histogram | 1 ✅ | Sweeper health |
+| `holdfast_http_requests_total` (labels `route`, `code`), `holdfast_http_request_duration_seconds` (label `route`), `holdfast_http_requests_in_flight` | counter, histogram, gauge | 0 ✅ | RED metrics per route pattern, never per raw path |
+| `holdfast_build_info` | gauge | 0 ✅ | Version and commit of each running binary |
+| `holdfast_queue_size` | gauge | 2 | People waiting |
+| `holdfast_admitted_upto` | gauge | 2 | Queue progress |
+| `holdfast_active_sessions` | gauge | 2 | Little's Law L |
+| `holdfast_admission_rate` | gauge | 2 (AIMD in 5) | The λ actually applied |
+| `holdfast_booking_transitions_total` (labels `from`, `to`) | counter | 3 | Saga health |
+| `holdfast_capture_to_confirm_seconds` | histogram | 3 | SLO: p99 ≤ 5 s |
+| `holdfast_webhooks_total` (labels `type`, `duplicate`) | counter | 3 | PSP behaviour |
+| `holdfast_outbox_lag_seconds` | gauge | 3 | Age of the oldest unpublished outbox row |
+| `holdfast_late_confirm_total` (label `outcome`) | counter | 3 | Late captures honoured versus refunded |
+| `holdfast_invariant_violations` (label `invariant`) | gauge | 5 | **Must always be 0** (published by the auditor) |
+| `holdfast_recon_mismatch_total` (label `type`) | counter | 5 | Reconciliation findings |
+| Kafka consumer lag, Valkey and PostgreSQL exporters, Go runtime and process collectors | various | 0 to 5 | Saturation signals (the Go runtime and process collectors are built) |
 
 All events carry an `event` label; keep label cardinality low (never label by user ID).
 
@@ -1415,7 +1507,7 @@ All events carry an `event` label; keep label cardinality low (never label by us
 
 1. **Row 1, the queue:** queue size, admitted-up-to, active sessions, admission rate.
 2. **Row 2, the sale:** units available, holds per second, bookings by status, capture-to-confirm p99.
-3. **Row 3, correctness:** four invariant tiles (green at 0), reconciliation mismatches, outbox lag, consumer lag.
+3. **Row 3, correctness:** five invariant tiles, I1 to I5 (green at 0), reconciliation mismatches, outbox lag, consumer lag.
 4. **Row 4, health:** p50, p95 and p99 per endpoint; error rates; Valkey and PostgreSQL CPU.
 
 This dashboard, recorded live during a load test, is the centerpiece of your demo video.
@@ -1427,9 +1519,9 @@ This dashboard, recorded live during a load test, is the centerpiece of your dem
 ### 13.1 The testing pyramid
 
 1. **Unit tests (many, fast):** table-driven tests for every state machine, the token bucket, AIMD, lottery-score distribution, HMAC verification, and the policy engine.
-2. **Property-based tests:** generate random sequences of hold, mark-paying, confirm, release and expire operations with `rapid`. After every step, assert `avail + held + sold == capacity` and that no user exceeds the cap. Compare against a simple in-memory reference model written in plain Go.
-3. **Integration tests:** `testcontainers-go` starts real Valkey, PostgreSQL and Kafka, so the Lua scripts and SQL are tested exactly as deployed.
-4. **Time-based tests:** `testing/synctest` runs expiry, deadline and TTL-race logic against a fake clock, with no real sleeping and no flakiness.
+2. **Model-based randomized tests:** random sequences of hold, cancel, mark-paying, confirm and failed-payment operations run against Valkey and against an in-memory reference model of the rules. After every step the two must agree on units left, per-user counters and hold states. The seed is printed, so any failure can be replayed. Built in Phase 1; extend the pattern to the queue (Phase 2) and the saga (Phase 3). Add `rapid` only if you want automatic shrinking.
+3. **Integration tests:** real Valkey, PostgreSQL and (from Phase 3) Kafka, reached through `HOLDFAST_TEST_*` environment variables: Compose locally (`make itest`), service containers in CI. The Lua scripts and SQL are tested exactly as deployed. The tests skip when the variables are unset, so `make test` stays hermetic.
+4. **Time-based tests:** `testing/synctest` (Go 1.25 and later) runs tick, deadline and TTL-race logic against a fake clock, with no real sleeping. Phase 1 uses millisecond TTLs against the real server clock instead; adopt synctest from Phase 2.
 5. **End-to-end tests:** Docker Compose plus scripted purchase flows through the public API.
 6. **Experiments:** load and chaos runs that produce your published numbers (13.2).
 
@@ -1439,7 +1531,7 @@ Always run with `go test -race`. A data race in a system like this is a correctn
 
 | ID | Experiment | Setup | Pass criteria | What it proves on your resume |
 |---|---|---|---|---|
-| E1 | Contention | 50,000 concurrent hold attempts on 1,000 units, then the full purchase flow with 10% payment failures | Exactly 1,000 successful holds; final sold count is 1,000; all invariant gauges at 0; race-detector clean across 100 runs | Zero oversells under extreme contention |
+| E1 | Contention | Part A (built): 50,000 concurrent hold attempts on 1,000 units, plus 10,000 concurrent confirmations through the PostgreSQL guard. Part B (Phase 3): the full purchase flow with 10% payment failures | Exactly 1,000 successful holds; exactly 1,000 sold; per-user cap held; all invariant gauges at 0; 100 of 100 runs pass | Zero oversells under extreme contention |
 | E2 | Waiting-room spike | k6 ramps joins from 0 to maximum in 10 s while 50,000 virtual users poll status every 3 s | Join p99 within SLO; origin status requests stay roughly flat while edge requests grow | The collapse ratio: many client polls per second served by about one origin request per second |
 | E3 | Payment chaos | 5,000 purchases while mockpsp injects 20% duplicate webhooks, 10% delayed by 30 to 90 s, 5% lost, 10% failures and 5% API timeouts | I2 at 0; every I3 case resolved within 15 min; every lost webhook recovered by the reconciler | Zero double charges under injected faults |
 | E4 | Infrastructure chaos | Kill the Valkey primary mid-sale; kill booking-svc mid-saga; restart Kafka; partition PostgreSQL for 5 s with Toxiproxy | Invariants hold throughout; recovery time measured and documented | Recovery time from failover with invariants intact |
@@ -1521,80 +1613,100 @@ Section 6.5 lists how the system reacts automatically. These runbooks cover what
 | RB-4 Manual refund | Customer escalation | `holdfastctl refund --booking ID` goes through the normal saga path. Never edit rows by hand. |
 | RB-5 PSP outage | `PSPBreakerOpen` | Automatic: admissions pause via backpressure. When the PSP recovers, the breaker half-opens and AIMD ramps admissions back up. Watch the dashboard; intervene only if it doesn't recover. |
 
+Service-level runbooks live next to the code in `docs/runbooks/`. inventory's runbooks (RB-INV-1 to RB-INV-6) are built; RB-2 here is RB-INV-4 extended with pending bookings in Phase 5. RB-1 arrives in Phase 4, RB-3 and RB-4 in Phase 3, RB-5 in Phase 5.
+
 Practise RB-1 and RB-2 during experiment E4 and time them. "I rebuilt inventory state from the source of truth in N seconds during a live failover drill" is a strong interview line.
 
 ---
 
 ## 15. Repository layout and ADRs
 
+The tree shows the repository as built in Drop 1 (✅) and what each later phase adds (⏳, with the phase number). It follows conventions borrowed from a production codebase: one binary per service, shared infrastructure in one place, a root `compose.yaml`, and docs next to the code.
+
 ```text
 holdfast/
-├── cmd/                      one main package per deployable
-│   ├── queue/  inventory/  booking/  payment/  auth/
-│   └── mockpsp/  auditor/  holdfastctl/  hello/
+├── cmd/                              one main package per binary
+│   ├── inventory/                    ✅ inventory-svc (public :8080, admin :9090)
+│   ├── holdfastctl/                  ✅ operator CLI
+│   ├── contention/                   ✅ experiment E1 harness
+│   ├── queue/                        ⏳ 2
+│   ├── booking/  payment/  mockpsp/  ⏳ 3
+│   ├── auth/                         ⏳ 4
+│   └── auditor/                      ⏳ 5
 ├── internal/
-│   ├── platform/             config, logging, otel, health, pg, valkey, kafka, outbox, idempotency, ratelimit
-│   ├── queue/                lottery, admission controller, status document
-│   ├── inventory/            Lua scripts (go:embed), sweeper
-│   ├── booking/              saga state machine, final guards, deadline job
-│   ├── payment/              intents, webhooks, ledger, reconciler, PSP client
-│   ├── auth/                 OTP, tokens, JWKS
-│   └── policy/               verified window, agent lockout, caps, freeze
-├── proto/                    buf.yaml; events/v1, inventory/v1, payment/v1
-├── db/migrations/            booking/, payment/, auth/ (goose)
-├── deploy/
-│   ├── compose/              docker-compose.yml, nginx.conf, prometheus.yml, otel-collector.yaml, grafana/
-│   ├── docker/               Dockerfile (multi-stage, distroless)
-│   └── k8s/                  Kustomize bases and overlays
-├── loadtest/                 k6 scripts, token generator, results/
-├── chaos/                    Toxiproxy scenarios, kill scripts
-├── docs/adr/                 architecture decision records
-├── web/                      Next.js app
-├── Makefile
-└── README.md
+│   ├── platform/                     ✅ app, authn, buildinfo, config, health, httpx, logging, metrics, postgres, valkey
+│   │                                 ⏳ ratelimit (2); kafka, otel, outbox, idempotency, grpcx (3)
+│   ├── inventory/                    ✅ Lua scripts (go:embed), store, service, sweeper, HTTP handler, metrics
+│   ├── booking/                      ✅ catalog, guard         ⏳ saga, deadline job (3)
+│   ├── queue/                        ⏳ lottery, admission controller, status document (2)
+│   ├── payment/                      ⏳ intents, webhooks, ledger, PSP client (3); reconciler (5)
+│   ├── auth/                         ⏳ OTP, tokens, JWKS (4)
+│   ├── policy/                       ⏳ verified window, agent lockout, caps, freeze (4)
+│   └── testenv/                      ✅ wiring for integration tests
+├── db/migrations/                    ✅ embed.go, booking/    ⏳ payment/ (3), auth/ (4)
+├── proto/                            ⏳ buf.yaml; events/v1, inventory/v1, payment/v1 (3)
+├── deploy/                           ✅ prometheus/, grafana/ ⏳ nginx/ (2), otel-collector/ (3), alerting/ (5), k8s/ (6)
+├── loadtest/                         ⏳ results/ (M1.5); k6 scripts (2)
+├── chaos/                            ⏳ Toxiproxy scenarios, kill scripts (5)
+├── web/                              ⏳ Next.js app (4)
+├── docs/                             ✅ architecture.md, services/, runbooks/, adr/, design/
+├── scripts/                          ✅ check-migrations.sh
+├── .github/workflows/ci.yml          ✅
+├── compose.yaml  Dockerfile  Makefile  .golangci.yml  .pre-commit-config.yaml   ✅
+└── README.md  AGENTS.md  CONTRIBUTING.md   ✅        CHANGELOG.md   ⏳ M1.5
 ```
 
-Write one ADR per major decision (context, decision, alternatives considered, consequences; one page each):
+Write one ADR per significant decision in `docs/adr/`, starting from `0000-template.md` (context, decision, consequences; about a page each). ADRs are numbered in the order they are written:
 
-1. **ADR-001:** Go for all services.
-2. **ADR-002:** Valkey for hot state; PostgreSQL as the source of truth.
-3. **ADR-003:** Transactional outbox with a polling relay, instead of dual writes (CDC later).
-4. **ADR-004:** Orchestrated saga in booking-svc, versus choreography and versus Temporal.
-5. **ADR-005:** Lottery before T0, FIFO after.
-6. **ADR-006:** Cached status polling instead of WebSockets or SSE for the waiting room.
-7. **ADR-007:** gRPC for synchronous calls, Kafka for asynchronous events.
-8. **ADR-008:** Leader election with PostgreSQL advisory locks plus fencing epochs.
+| ADR | Decision | Phase | Status |
+|---|---|---|---|
+| 0001 | One Go module, one binary per service | 0 | ✅ Written |
+| 0002 | Holds in Valkey, truth in PostgreSQL | 1 | ✅ Written |
+| 0003 | Embedded migration runner | 0 | ✅ Written |
+| 0004 | Add gRPC and tracing with the first cross-service call | 1 | ✅ Written |
+| 0005 | Lottery before T0, FIFO after | 2 | ⏳ |
+| 0006 | Cached status polling instead of WebSockets or SSE | 2 | ⏳ |
+| 0007 | Leader election with PostgreSQL advisory locks plus fencing epochs | 2 | ⏳ |
+| 0008 | gRPC for synchronous calls, Kafka for asynchronous events | 3 | ⏳ |
+| 0009 | Transactional outbox with a polling relay (CDC later) | 3 | ⏳ |
+| 0010 | Orchestrated saga in booking-svc, instead of choreography or Temporal | 3 | ⏳ |
+| 0011 | sqlc for booking and payment queries | 3 | ⏳ |
+| 0012 | Access tokens and refresh rotation with reuse detection | 4 | ⏳ |
+| 0013 | AIMD adaptive admission and PSP backpressure | 5 | ⏳ |
 
-Interviewers love ADRs: they show you considered alternatives instead of copying a tutorial.
+Interviewers love ADRs: they show you weighed alternatives instead of copying a tutorial.
 
 ---
 
 ## 16. Local development, CI/CD and deployment
 
-### 16.1 Docker Compose (infrastructure first; add each service as you build it)
+### 16.1 Docker Compose
+
+**As built:** `compose.yaml` at the repository root runs PostgreSQL 18, Valkey 9.1.2 (AOF with `appendfsync everysec`, `noeviction`), the `holdfastctl` migration job (runs once, then exits), inventory-svc, Prometheus 3.15 and Grafana 13.2. Services wait for healthy dependencies and for the migration job to finish.
+
+| Host port | Service |
+|---|---|
+| 8081 | inventory-svc public API |
+| 9091 | inventory-svc admin port (metrics, health, pprof, operator API) |
+| 9090 | Prometheus |
+| 3000 | Grafana (dashboard "HoldFast / Inventory") |
+| 5432 | PostgreSQL |
+| 6379 | Valkey |
+
+**Each phase adds services:**
+
+| Phase | Add to Compose |
+|---|---|
+| 2 | `queue`, `nginx` (routing and the one-second micro-cache) |
+| 3 | `kafka`, `redpanda-console`, `otel-collector`, `jaeger`, `booking`, `payment`, `mockpsp` |
+| 4 | `auth`, `web` |
+| 5 | Valkey replica and three Sentinels, `toxiproxy`, `auditor`, optionally `alertmanager` |
+
+Every Go service follows the same pattern: build from the root `Dockerfile` with `SERVICE=<name>`, expose metrics and health on its admin port, wait for the `holdfastctl` migration job, and get a scrape job in `deploy/prometheus/prometheus.yml`. Pin every image to an exact version; never use `latest`.
+
+**Reference for Phase 3** (versions current as of October 2026):
 
 ```yaml
-# deploy/compose/docker-compose.yml
-name: holdfast
-services:
-  postgres:
-    image: postgres:18
-    environment:
-      POSTGRES_USER: holdfast
-      POSTGRES_PASSWORD: holdfast        # local development only
-      POSTGRES_DB: holdfast
-    command: ["postgres", "-c", "max_connections=300", "-c", "shared_buffers=512MB"]
-    ports: ["5432:5432"]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U holdfast"]
-      interval: 5s
-      retries: 10
-
-  valkey:
-    image: valkey/valkey:9.1
-    command: ["valkey-server", "--appendonly", "yes", "--appendfsync", "everysec"]
-    ports: ["6379:6379"]
-
   kafka:
     image: apache/kafka:4.3.1
     ports: ["29092:29092"]
@@ -1613,124 +1725,224 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
 
+  redpanda-console:
+    image: docker.redpanda.com/redpandadata/console:v3.12.0
+    environment:
+      KAFKA_BROKERS: kafka:9092
+    ports: ["8088:8080"]
+
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:latest
-    volumes: ["./otel-collector.yaml:/etc/otelcol-contrib/config.yaml:ro"]
+    image: otel/opentelemetry-collector-contrib:0.162.0
+    volumes: ["./deploy/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro"]
     ports: ["4317:4317", "4318:4318"]
 
   jaeger:
-    image: jaegertracing/jaeger:latest
+    image: jaegertracing/jaeger:2.21.0
     ports: ["16686:16686"]
+```
 
-  prometheus:
-    image: prom/prometheus:latest
-    volumes: ["./prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
-    ports: ["9090:9090"]
+**Reference for Phase 5:**
 
-  grafana:
-    image: grafana/grafana:latest
-    ports: ["3000:3000"]
-
+```yaml
   toxiproxy:
-    image: ghcr.io/shopify/toxiproxy:latest
+    image: ghcr.io/shopify/toxiproxy:2.12.0
     ports: ["8474:8474"]
 ```
 
-Pin every `latest` tag to an exact version after your first successful run. Topics are created explicitly by a `make topics` target, because auto-creation is disabled on purpose.
+Topics are created explicitly by `make topics`, because auto-creation is disabled on purpose.
 
 ### 16.2 Makefile
 
-```makefile
-# Recipe lines must be indented with a real TAB character.
-COMPOSE = docker compose -f deploy/compose/docker-compose.yml
+**As built:**
 
-up:        ## start infrastructure and services
-	$(COMPOSE) up -d --build
-down:      ## stop everything and delete volumes
-	$(COMPOSE) down -v
-gen:       ## regenerate protobuf and sqlc code
-	buf generate && sqlc generate
-migrate:   ## apply database migrations
-	goose -dir db/migrations/booking postgres "$(DB_URL)" up
-test:      ## unit tests with the race detector
-	go test -race ./...
-itest:     ## integration tests (testcontainers)
-	go test -race -tags=integration ./...
-load-e2:   ## waiting-room spike experiment
-	k6 run loadtest/join_spike.js
-```
+| Target | What it does |
+|---|---|
+| `make help` | Lists every target |
+| `make deps` | `go mod tidy`; writes `go.sum` |
+| `make deps-upgrade` | Moves every dependency to its latest release |
+| `make tools` | Installs golangci-lint v2.14.0 |
+| `make fmt`, `make vet`, `make lint` | Formatting; `go vet` with and without the `integration` tag; golangci-lint plus the migration checks |
+| `make test` | Unit tests with the race detector |
+| `make itest` | Integration tests (starts PostgreSQL and Valkey with Docker) |
+| `make cover` | Coverage report (`coverage.html`) |
+| `make build` | Binaries into `./bin` |
+| `make keys` | Dev admission-token key pair in `.local/keys` |
+| `make infra`, `make up`, `make down`, `make clean` | Compose lifecycle |
+| `make migrate` | Applies migrations to the local database |
+| `make event`, `make token` | Creates and provisions an event; mints a dev admission token |
+| `make run-inventory` | Runs inventory-svc on the host using `.env` |
+| `make e1` | Experiment E1 |
+| `make docker` | Builds the container images |
+
+**Planned additions:** `make load-e2` and `make fairness-e6` (Phase 2); `make topics` and `make gen` for `buf generate && sqlc generate` (Phase 3); `make web` (Phase 4); `make chaos-e3` and `make chaos-e4` (Phase 5); `make load-e5` (Phase 6).
 
 ### 16.3 Container image
 
-```dockerfile
-# deploy/docker/Dockerfile: one image recipe for every service
-FROM golang:1.27 AS build
-WORKDIR /src
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-ARG SVC
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/app ./cmd/${SVC}
+One `Dockerfile` at the repository root builds every Go binary:
 
+```dockerfile
+# syntax=docker/dockerfile:1
+# One Dockerfile for every Go binary in the repo; choose it with
+#   docker build --build-arg SERVICE=inventory .
+ARG GO_VERSION=1.27
+
+FROM golang:${GO_VERSION} AS build
+WORKDIR /src
+ENV CGO_ENABLED=0
+# Dependencies first, so source edits don't invalidate the module cache layer.
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+COPY . .
+ARG SERVICE
+ARG VERSION=dev
+ARG COMMIT=unknown
+RUN test -n "${SERVICE}" || (echo "build with --build-arg SERVICE=<directory under cmd/>" >&2 && exit 1)
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go build -trimpath \
+      -ldflags "-s -w \
+        -X github.com/Sanjay-Mx21/holdfast/internal/platform/buildinfo.Version=${VERSION} \
+        -X github.com/Sanjay-Mx21/holdfast/internal/platform/buildinfo.Commit=${COMMIT}" \
+      -o /out/app ./cmd/${SERVICE}
+
+# Distroless static: no shell, no package manager, runs as an unprivileged user.
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/app /app
 USER nonroot:nonroot
+EXPOSE 8080 9090
 ENTRYPOINT ["/app"]
 ```
 
 ### 16.4 CI pipeline (GitHub Actions)
 
-```yaml
-# .github/workflows/ci.yml (bump action versions to their latest majors)
-name: ci
-on: [push, pull_request]
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with: { go-version: '1.27.x' }
-      - run: go vet ./...
-      - uses: golangci/golangci-lint-action@v8
-      - run: go test -race -tags=integration ./...   # testcontainers uses the runner's Docker
-      - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
-  images:
-    needs: test
-    runs-on: ubuntu-latest
-    strategy:
-      matrix: { svc: [queue, inventory, booking, payment, auth, mockpsp, auditor] }
-    steps:
-      - uses: actions/checkout@v4
-      - run: docker build -f deploy/docker/Dockerfile --build-arg SVC=${{ matrix.svc }} -t holdfast-${{ matrix.svc }}:${{ github.sha }} .
-      - uses: aquasecurity/trivy-action@master
-        with: { image-ref: 'holdfast-${{ matrix.svc }}:${{ github.sha }}', severity: 'CRITICAL,HIGH', exit-code: '1' }
-```
+**As built** (`.github/workflows/ci.yml`):
 
-Add `buf lint` and `buf breaking --against '.git#branch=main'` as a separate job once the protobuf contracts exist.
+| Job | What it runs |
+|---|---|
+| `lint` | `gofmt` check, `go vet` with both build tags, golangci-lint v2.14.0, migration checks |
+| `unit` | `go test -race` |
+| `integration` | PostgreSQL 18 and Valkey 9.1.2 service containers; integration tests with the race detector; **E1 on every push**, with results uploaded as an artifact |
+| `security` | `govulncheck` and gitleaks secret scanning |
+| `images` | Builds the images for each service in the matrix (needs the three test jobs to pass) |
+
+**Planned additions:** a k6 smoke test for the waiting room (Phase 2); `buf lint` and `buf breaking --against '.git#branch=main'`, and new services in the image matrix (Phase 3); a Trivy scan on every image (Phase 6). Branch protection and Dependabot are set up at M1.5.
 
 ### 16.5 Kubernetes and the public demo
 
 - **Phase 6 (optional):** a kind cluster with Kustomize overlays; HPA on queue-svc and inventory-svc; PodDisruptionBudgets; readiness probes that fail while a service drains; Strimzi for Kafka and CloudNativePG for PostgreSQL.
-- **Graceful shutdown everywhere:** on SIGTERM, stop accepting new requests, finish in-flight work, commit Kafka offsets, then exit. Deploying in the middle of a sale must never break a purchase.
+- **Graceful shutdown everywhere:** on SIGTERM, stop accepting new requests, finish in-flight work, commit Kafka offsets, then exit. Deploying in the middle of a sale must never break a purchase. inventory-svc already does this: readiness turns false, a drain delay passes, then in-flight requests finish.
 - **Public demo:** one small VM running the Compose stack behind Cloudflare, with the waiting room and status endpoint cached at the edge. Run heavy load tests locally, never against the public VM. Set a billing alert and shut down anything you aren't using.
 
 ---
 
-## 17. Build flow, phase by phase (Part B)
+## 17. Build plan, milestone by milestone (Part B)
 
-Durations are **focused-work days**, not calendar days. With DSA practice alongside, stretch the calendar accordingly. Every phase ends with exit criteria; don't start the next phase until they pass.
+This is the blueprint for taking HoldFast from where it stands today (Drop 1) to v1.0. For every phase it says what to build and in what order, how to prove each step works, and where to record progress.
+
+Durations are the original **focused-work-day** estimates, which assumed learning Go and building solo. AI-assisted coding is faster, but every exit criterion still has to pass: the order and the gates matter, not the dates. Don't start a phase until the previous milestone is complete.
+
+### 17.1 Milestone tracker
+
+| Milestone | Phase | Status | Git tag | Exit evidence |
+|---|---|---|---|---|
+| M0 Foundation | 0 | ✅ Built (Drop 1) | v0.1.0, tagged at M1.5 | Platform packages built; `gofmt`, `go vet` and golangci-lint clean; race tests pass |
+| M1 Correctness core | 1 | ✅ Built (Drop 1) | v0.1.0, tagged at M1.5 | E1: 50,000 buyers → exactly 1,000 holds; 10,000 confirmations → exactly 1,000 sold |
+| M1.5 Bring-up and baseline | none | ⏳ **Next** | v0.1.0 | CI green on `main`; E1 passes 100 of 100 runs on your hardware; hold p99 recorded |
+| M2 Fair waiting room | 2 | ⏳ Planned | v0.2.0 | E2 collapse ratio, E6 fairness, leader-failover test |
+| M3 MVP backend | 3 | ⏳ Planned | v0.3.0 | One trace across every service; a 1,000-purchase fault run keeps I1, I2 and I4 at 0 |
+| M4 Resume-ready product | 4 | ⏳ Planned | v0.4.0 | Buy a ticket by hand during a k6 rush; README v1 and demo video v1 |
+| M5 Hardened | 5 | ⏳ Planned | v0.5.0 | E3 and E4 pass with every invariant at 0; recovery times documented |
+| M6 v1.0, proven at scale | 6 | ⏳ Planned | v1.0.0 | Every published number traces to a committed results file |
+| M7 Stretch | 7 | Optional | v1.x | Depends on the goal chosen |
+
+Update this table, and tick the task boxes in the phase sections below, **in the same pull request** that completes the work.
+
+### 17.2 How to work through the plan
+
+**For every task:**
+
+1. Pick the next unticked task. Its GitHub issue has the same number (for example `2.5`).
+2. Branch as `<tag>/p<phase>-<slug>`, for example `feat/p2-join-lua`.
+3. Write the test first where practical: unit tests for logic, integration tests for anything that touches Valkey, PostgreSQL or Kafka.
+4. Implement it in the package the task names. Keep the service layer transport-agnostic, so HTTP handlers and gRPC adapters stay thin.
+5. Run the local gates: `make fmt vet lint test`, plus `make itest` when storage is touched and `make e1` when inventory, the guard or the saga is touched.
+6. Update the docs the task needs (17.3 says which file covers what).
+7. Commit in the `CONTRIBUTING.md` format, open a pull request, wait for CI to pass, and merge.
+8. Tick the task here and close the issue.
+
+**At the end of every phase (the milestone protocol):**
+
+1. Run the exit checks and commit the evidence to `loadtest/results/`, with the git SHA, the date and a hardware note.
+2. Write the phase's ADRs (each phase section, and the ADR table in section 15, names them).
+3. Update `README.md` (status, layout, numbers), `docs/architecture.md`, the service docs and the runbooks.
+4. Update the tracker in 17.1 and the Roadmap tab of `holdfast-build-status.xlsx`.
+5. Add a `CHANGELOG.md` entry, tag `vX.Y.0`, and publish a GitHub release with the evidence attached.
+6. Record the phase's demo checkpoint (a screenshot or a short clip).
+7. Only now update your resume, and only with numbers from committed results.
+
+### 17.3 Where to check and where to update
+
+**Where to check:**
+
+| What | Where | When |
+|---|---|---|
+| Build health | GitHub Actions, workflow `ci` | Every push; `main` must stay green |
+| Correctness proof | `make e1` locally, and the `e1-results` artifact of each CI run | Every change to inventory, the guard or (from Phase 3) the saga |
+| Live behaviour | Grafana at `localhost:3000`, Prometheus at `localhost:9090`, `/readyz` and `/metrics` on each service's admin port | While developing and during every experiment |
+| Logs | `docker compose logs -f <service>`, filtered by `request_id` (and by `trace_id` from Phase 3) | When debugging |
+| Traces | Jaeger at `localhost:16686` | From Phase 3 |
+| Kafka topics, lag and messages | Redpanda Console | From Phase 3 |
+| Progress at a glance | 17.1 in this doc; the Roadmap tab of `holdfast-build-status.xlsx` | Weekly, and at every milestone |
+
+**Where to update:**
+
+| What changed | File to update | When |
+|---|---|---|
+| A task finished | Its checkbox in this section; its GitHub issue | Same pull request |
+| A milestone finished | 17.1 tracker, the spreadsheet, `CHANGELOG.md`, a git tag and a GitHub release | End of the phase |
+| Status, quickstart or results | `README.md` | Every milestone |
+| Services, flows or invariants | `docs/architecture.md` | Same pull request as the change |
+| An API, key, config value, metric or error code | `docs/services/<service>.md`, one file per service | Same pull request as the change |
+| A new failure mode or operator action | `docs/runbooks/<service>.md` | Same pull request as the change |
+| A significant decision | `docs/adr/NNNN-title.md`, from `0000-template.md` | When the decision is made |
+| An experiment you might publish | `loadtest/results/<experiment>-<date>-<sha>.*` with a hardware note | Every such run |
+| This blueprint itself | This file, in the repo at `docs/design/` | Whenever the plan or design changes |
+
+Where this doc and the code disagree, the code and the service docs win. Fix this doc in the same pull request.
+
+### 17.4 Quality gates
+
+**Definition of done for every task:**
+
+- [ ] It compiles; `gofmt`, `go vet` (with and without the `integration` tag) and golangci-lint are clean.
+- [ ] Unit tests cover the logic; integration tests cover anything that touches Valkey, PostgreSQL or Kafka; failure paths are tested; the race detector is on.
+- [ ] Every state change is atomic (one Lua script or one conditional SQL statement) and idempotent under retries.
+- [ ] Errors map to stable problem codes, nothing internal leaks to clients, and unexpected errors are logged with the request ID.
+- [ ] Metric labels are bounded; no secrets, tokens or OTPs appear in logs.
+- [ ] The docs from 17.3 are updated, and CI is green.
+
+**Definition of done for every milestone:**
+
+- [ ] Every task box in the phase is ticked.
+- [ ] Every exit criterion passes, with the evidence committed.
+- [ ] E1 still passes.
+- [ ] The phase's ADRs are written; README, architecture, service docs and runbooks are current.
+- [ ] Tracker and spreadsheet updated, `CHANGELOG.md` entry added, tag pushed, release published.
+
+### 17.5 Timeline
 
 ```mermaid
 gantt
-  title HoldFast build flow in focused-work days
+  title HoldFast build plan in focused-work days
   dateFormat YYYY-MM-DD
   axisFormat %d %b
-  section Foundations
-  Phase 0 Setup and Go ramp-up           :p0, 2026-09-28, 4d
+  section Built in Drop 1
+  Phase 0 Foundation                     :done, p0, 2026-09-21, 4d
+  Phase 1 Inventory core and E1          :done, p1, after p0, 6d
+  section Next
+  M1.5 Bring-up and baseline             :active, m15, after p1, 1d
   section Correctness core
-  Phase 1 Inventory core and E1          :p1, after p0, 6d
-  Phase 2 Waiting room and admission     :p2, after p1, 7d
+  Phase 2 Waiting room and admission     :p2, after m15, 7d
   Phase 3 Booking saga and payments      :p3, after p2, 11d
   section Product
   Phase 4 Frontend identity and policies :p4, after p3, 7d
@@ -1738,123 +1950,254 @@ gantt
   Phase 5 Reliability and chaos          :p5, after p4, 8d
   Phase 6 Scale proof and packaging      :p6, after p5, 7d
   section Stretch
-  Phase 7 Seat maps cluster and pilot    :p7, after p6, 10d
+  Phase 7 Stretch goals                  :p7, after p6, 10d
 ```
 
-### Phase 0: Setup and Go ramp-up (4 days)
+The dates are illustrative. The gates are not.
 
-**Study:** A Tour of Go; Effective Go; goroutines, channels, `select`; `context` cancellation; `errgroup`; interfaces; error wrapping; `go test -race`.
+### 17.6 Phase 0: Foundation ✅ (built in Drop 1)
 
-- [ ] Repository, `go mod init github.com/Sanjay-Mx21/holdfast`, Makefile, `.editorconfig`, golangci-lint config
-- [ ] Compose file for PostgreSQL, Valkey, Kafka, OpenTelemetry Collector, Jaeger, Prometheus, Grafana and Toxiproxy
-- [ ] `internal/platform`: config, JSON logger, OpenTelemetry setup, `/metrics`, health endpoints (`/livez`, `/readyz`), graceful shutdown, pgx pool, go-redis client, franz-go client
-- [ ] `cmd/hello` wired to all of the above
-- [ ] CI running lint, `go test -race` and a build
+**Delivered:**
 
-**Exit criteria:**
+- `internal/platform`: config (typed env vars with validation), slog logging with request IDs, the `httpx` toolkit (router with route labels, middleware, RFC 9457 errors, strict JSON, server with graceful shutdown, admin router), health checks with draining, a Prometheus registry, Ed25519 admission tokens, a PostgreSQL pool with an embedded migration runner, the Valkey client, the component lifecycle and build info.
+- Repository tooling: `Makefile`, root `compose.yaml` and `Dockerfile`, GitHub Actions CI, golangci-lint, pre-commit hooks, `scripts/check-migrations.sh`.
+- Docs: `README.md`, `AGENTS.md`, `CONTRIBUTING.md`, `docs/architecture.md`, ADR 0001 and ADR 0003.
 
-- [ ] `make up` works from a clean clone
-- [ ] A request to `hello` produces a trace in Jaeger and a metric in Grafana
-- [ ] CI is green on `main`
+**Original exit criteria:**
 
-### Phase 1: Inventory core and the correctness proof (6 days)
+- [ ] `make up` works from a clean clone. *Written; first real run at M1.5.*
+- [ ] A request produces a trace in Jaeger. *Moved to Phase 3 (ADR 0004).*
+- [x] Metrics are exposed. *`/metrics` on the admin port, verified end to end.*
+- [ ] CI is green on `main`. *First run at M1.5.*
 
-**Study:** Valkey's single-threaded execution model; Lua scripting and `EVALSHA`; hash tags and cluster slots; AOF durability; property-based testing.
+**Deviations from version 1 of this plan:** no `cmd/hello` (inventory-svc was the first real service); OpenTelemetry, Kafka, Jaeger and Toxiproxy wait for the phases that use them; an embedded migration runner instead of goose (ADR 0003); a standard-library `flag` CLI instead of cobra; a root `compose.yaml` and `Dockerfile` instead of `deploy/compose/` and `deploy/docker/`.
 
-- [ ] `hold.lua`, `mark_paying.lua`, `confirm.lua`, `release.lua`, with Go wrappers and embedded scripts
-- [ ] Expiry sweeper that is safe to run in every instance
-- [ ] inventory-svc: REST for holds; gRPC for `MarkPaying` and `GetHold`
-- [ ] PostgreSQL `event_inventory` and `user_event_purchases` guards (goose migration plus sqlc queries)
-- [ ] Reference model and property tests; integration tests with testcontainers
-- [ ] **E1 contention harness**: a Go program firing N goroutines of hold attempts at M units
+### 17.7 Phase 1: Inventory core and the correctness proof ✅ (built in Drop 1)
 
-**Exit criteria:**
+**Delivered:**
 
-- [ ] E1 gives exactly `capacity` successful holds in 100 out of 100 runs, race-detector clean
-- [ ] Hold p99 measured and recorded with hardware details
-- [ ] ADR-002 written
+- inventory-svc with five atomic Lua scripts (`provision`, `hold`, `mark_paying`, `release`, `confirm`), the store, service, expiry sweeper, HTTP handler and metrics.
+- The PostgreSQL final guard and event catalog (`internal/booking`), and migration `booking/00001`.
+- `holdfastctl`: migrate, keys, tokens, events, inventory provision and status.
+- The E1 harness (`cmd/contention`): holds mode and guard mode.
+- 58 tests (117 with subtests), including a seeded, model-based randomized test that checks 1,500 random operations against a simple model of the rules.
+- Docs: `docs/services/inventory.md`, `docs/runbooks/inventory.md` (RB-INV-1 to RB-INV-6), ADR 0002 and ADR 0004.
 
-### Phase 2: Waiting room and admission control (7 days)
+**Original exit criteria:**
 
-**Study:** Little's Law; token bucket versus GCRA; leader election and fencing tokens; AIMD; HTTP caching semantics; JWTs and EdDSA.
+- [x] E1 grants exactly `capacity` holds on every run so far, race-detector clean. *The 100-run soak happens at M1.5.*
+- [ ] Hold p99 measured and recorded with hardware details. *M1.5, on your hardware.*
+- [x] ADR written (ADR 0002).
 
-- [ ] `join.lua` (lottery, then FIFO), the T0 transition, the rank endpoint
-- [ ] Status document plus the NGINX micro-cache
-- [ ] Admission controller: advisory-lock leader, fencing epoch, sessions, oversubscription, your token bucket ported to Go, `advance.lua`
-- [ ] Admission tokens (Ed25519 JWT) and JWKS; inventory-svc verifies them
-- [ ] k6 script for E2; fairness test E6
+**Deviations from version 1 of this plan:** gRPC for `MarkPaying` and `GetHold` moves to Phase 3 (ADR 0004); sqlc arrives with booking and payment in Phase 3 (ADR 0011); property tests use a seeded model-based test instead of rapid; integration tests use real dependencies configured by environment variables instead of testcontainers. Holds use event-scoped REST paths (`/v1/events/{id}/holds`), provisioning is idempotent through `inv:{E}:config`, `release.lua` and `confirm.lua` check the hold's owner, and a late confirm re-takes units instead of dropping the sale.
 
-**Exit criteria:**
+**Known gaps carried forward (each one is a task in a later phase):**
 
-- [ ] 50,000 simulated users flow from join to admit, and origin status requests stay roughly flat while edge requests grow
-- [ ] Killing the leader hands over to the standby, and a test proves the stale leader's writes are rejected
-- [ ] E6 shows correlation close to 0 for pre-T0 joiners
+| Gap | Resolved in |
+|---|---|
+| Admission tokens can be reused until they expire (no `jti` check) | Phase 2, task 2.8 |
+| inventory reads trusted keys from files (no JWKS fetch) | Phase 2, task 2.8 |
+| `MarkPaying`, `Confirm` and `ReleaseForFailedPayment` are reachable only in-process | Phase 3, task 3.4 |
+| inventory has no sale-freeze check | Phase 4, task 4.3 |
+| The rebuild ignores units in pending bookings | Phase 5, task 5.3 |
 
-### Phase 3: Booking saga and payments (11 days)
+### 17.8 M1.5: Bring-up and baseline ⏳ next (about 1 day)
 
-**Study:** sagas (orchestration versus choreography); the transactional outbox; idempotency keys; at-least-once delivery; double-entry bookkeeping; circuit breakers.
+**Goal:** prove Drop 1 on your own machine and on GitHub before adding anything. Several pieces (Docker, Compose, CI, the Grafana dashboard) have never run in a real environment. Section 18 has every command.
 
-- [ ] booking-svc: `POST /v1/bookings` with idempotency, the booking state machine, and the deadline job using `SKIP LOCKED`
-- [ ] Outbox relay (leader-elected), Kafka topics, protobuf events, DLQs
-- [ ] payment-svc: intents; PSP client with retries, breaker and idempotency; webhook endpoint with HMAC and dedup; ledger; status polling
-- [ ] mockpsp: create order, hosted checkout page, signed webhooks, fault-injection admin API, settlement report
-- [ ] Confirmation path with final guards; compensation (refund) path end to end
-
-**Exit criteria:**
-
-- [ ] The happy-path purchase works end to end, with one trace spanning every service
-- [ ] A 1,000-purchase run with injected faults keeps I1, I2 and I4 at 0 (I3 goes fully green once the Phase 5 reconciler lands)
-- [ ] ADR-003 and ADR-004 written
-- [ ] **Milestone: MVP backend complete**
-
-### Phase 4: Frontend, identity and policies (7 days)
-
-**Study:** OTP security; refresh-token rotation; Web Workers; static export and caching; basic accessibility.
-
-- [ ] auth-svc: OTP with a mock SMS inbox, EdDSA access tokens, refresh rotation with reuse detection, JWKS
-- [ ] Policy engine: verified-only window, agent lockout, per-user caps, freeze switch
-- [ ] Proof-of-work challenge and a Web Worker solver
-- [ ] Next.js: static waiting room, countdown and rank, quantity picker, checkout redirect, booking status page
-- [ ] Grafana "mission control" dashboard
+- [ ] 1.5.1 Install the toolchain: Go 1.27.x, Docker with Compose v2, make, git, golangci-lint v2.14.0 (`make tools`), and k6 v2.3 (needed in Phase 2).
+- [ ] 1.5.2 Run `go mod tidy` and commit `go.sum`.
+- [ ] 1.5.3 `make test` and `make lint` pass.
+- [ ] 1.5.4 `make up`: every container is healthy, the `holdfastctl` migration job exits 0, and `curl localhost:9091/readyz` returns ok.
+- [ ] 1.5.5 The README quickstart works end to end: event, token, hold, replay, availability.
+- [ ] 1.5.6 `make itest` passes.
+- [ ] 1.5.7 E1 soak: 100 consecutive passes. Save the log and a hardware note (CPU, cores, RAM, OS, Docker limits, Go version, commit SHA) in `loadtest/results/`.
+- [ ] 1.5.8 Record the hold latency (p50, p95, p99) from E1 in `loadtest/results/README.md`.
+- [ ] 1.5.9 Push to GitHub; every CI job passes (lint, unit, integration with E1, security, images).
+- [ ] 1.5.10 Repository hygiene: branch protection on `main` (require CI), Dependabot for Go modules, Docker and Actions, a description and topics, and a `LICENSE` (MIT is common for portfolios).
+- [ ] 1.5.11 Add `CHANGELOG.md`, tag `v0.1.0`, and publish a GitHub release with the E1 results.
+- [ ] 1.5.12 Create GitHub milestones M2 to M6, with one issue per task in Phases 2 to 6.
 
 **Exit criteria:**
 
-- [ ] You can buy a ticket by hand while k6 simulates a rush, and the dashboard shows it live
-- [ ] README v1 and demo video v1 published
-- [ ] **Milestone: resume-ready.** Add HoldFast to your resume now, using the numbers from E1 and E2
+- [ ] CI is green on `main`, including the E1 job.
+- [ ] 100 of 100 E1 runs pass, recorded with hardware details.
+- [ ] `v0.1.0` is tagged and released.
 
-### Phase 5: Reliability hardening (8 days)
+### 17.9 Phase 2: Waiting room and admission control (7 days)
 
-**Study:** asynchronous replication and its failure modes; Sentinel failover; reconciliation; chaos-engineering practice.
+**Goal:** everyone waits fairly, and buyers enter the purchase path at a controlled rate carrying a signed admission token.
 
-- [ ] Reconciler with settlement-report diffing; auditor with invariant gauges and alerts
-- [ ] Valkey primary, replica and Sentinel; a failover drill; the RB-2 rebuild tool
-- [ ] AIMD adaptive admission and PSP-breaker backpressure
-- [ ] Toxiproxy scenarios and kill scripts for E3 and E4; runbooks RB-1 to RB-5; `holdfastctl`
+**Study:** Little's Law; token bucket versus GCRA; leader election and fencing tokens; HTTP caching and request collapsing; JWTs and JWKS; Spearman rank correlation; `testing/synctest`.
+
+**Design references:** 6.2 and 6.3 (flow), 8.2 (`q:*`, `adm:*`, `rl:*` and `jti:*` keys), 9.1 (lottery), 9.2 (admission controller), 9.10 (status endpoint), 10.1 (queue endpoints).
+
+**Deliverables:** `cmd/queue`; `internal/queue` (lottery, admission, status document, handlers, metrics); `internal/platform/ratelimit` (your token bucket, ported); `deploy/nginx/nginx.conf`; `queue` and `nginx` services in Compose; k6 scripts in `loadtest/`; `cmd/fairness` for E6; `docs/services/queue.md`; `docs/runbooks/queue.md`; ADRs 0005 to 0007.
+
+**Tasks, in order:**
+
+- [ ] 2.1 **Queue provisioning.** An operator endpoint on the queue admin port, `PUT /internal/v1/events/{id}/queue`, takes the sale opening time, admission rate, maximum sessions and session TTL, stores them in `q:{E}:config` and sets `q:{E}:state` to PRE. `holdfastctl event create` provisions the queue as well as inventory.
+- [ ] 2.2 **Joining.** `join.lua` and `POST /v1/queue/{id}/join`. The lottery score comes from `crypto/rand` in Go; `ZADD NX` makes joining idempotent and stops re-rolls. Apply per-IP and per-user token buckets (`rl:*`). Until Phase 4, identity comes from a development header.
+- [ ] 2.3 **The T0 transition.** The leader flips PRE to OPEN at the opening time; joins after T0 get FIFO scores.
+- [ ] 2.4 **Your position.** `GET /v1/queue/{id}/me` returns your rank after T0, and `randomizingAt` before it.
+- [ ] 2.5 **Admission controller.** One leader per event, elected with a PostgreSQL advisory lock. The fencing epoch `adm:{E}:epoch` is incremented on every leadership change, and `advance.lua` moves `admittedUpTo` only when the caller's epoch matches. The leader ticks every 250 ms and caps concurrency with Little's Law, using the session set `adm:{E}:sessions`.
+- [ ] 2.6 **Status document.** The leader writes `q:{E}:status` (state, `admittedUpTo`, queue size, `updatedAt`) on every tick. `GET /v1/events/{id}/status` serves it with `Cache-Control: public, max-age=1`.
+- [ ] 2.7 **Admission tokens.** `POST /v1/queue/{id}/admit` issues the Ed25519 token (reusing `authn.Issuer`) when your rank is within `admittedUpTo`, and records your session. Publish `GET /.well-known/jwks.json`.
+- [ ] 2.8 **Close the inventory token gaps.** Decide whether one admission token allows one hold or a bounded number, and enforce it with `jti:*`. Decide between trusted key files and fetching JWKS with caching. Record both decisions in `docs/services/queue.md`.
+- [ ] 2.9 **NGINX.** Route `/v1/queue/` to queue-svc and hold paths to inventory-svc. Micro-cache `/v1/events/{id}/status` and `/availability` for one second, with `proxy_cache_lock on` and `proxy_cache_use_stale updating`.
+- [ ] 2.10 **Metrics and dashboard.** Queue size, `admittedUpTo`, active sessions, admission rate, status-document age, leader epoch and join results, added to Grafana.
+- [ ] 2.11 **Tests.** Unit: admission math, token bucket, rank, the Spearman helper. Integration: join idempotency and no re-roll, the T0 switch, a stale epoch rejected by `advance.lua`, session expiry. A model test for F1 (nobody is admitted ahead of a lower rank). A failover test (two controllers, one killed). `testing/synctest` for the tick loop.
+- [ ] 2.12 **Experiments.** E2: k6 ramps joins from 0 to maximum in 10 s while 50,000 virtual users poll status every 3 s with jitter; compare origin and edge request counts. E6: 100,000 pre-T0 joins with recorded join times; Spearman correlation close to 0 before T0 and exactly 1 after.
+- [ ] 2.13 **`holdfastctl`.** `queue provision` and `queue status`; extend `event create`.
+- [ ] 2.14 **Docs.** Queue service doc and runbook; ADR 0005 (lottery before T0, FIFO after), ADR 0006 (cached status polling instead of WebSockets or SSE), ADR 0007 (leader election with advisory locks plus fencing epochs); README status; architecture sections 3 to 5.
 
 **Exit criteria:**
 
-- [ ] E3 and E4 pass with every invariant at 0, and recovery times are documented
+- [ ] 50,000 simulated users flow from join to admit, and origin status requests stay roughly flat while edge requests grow. *E2 results committed.*
+- [ ] Killing the leader hands over to the standby, and a test proves the stale leader's writes are rejected.
+- [ ] E6 shows correlation close to 0 for pre-T0 joiners and exactly 1 after T0.
+- [ ] In the end-to-end test, inventory accepts only queue-issued tokens, and E1 still passes.
 
-### Phase 6: Scale proof and packaging (7 days)
+**Demo checkpoint:** a 30-second clip of the k6 stampede with the queue draining on Grafana.
 
-- [ ] The final k6 matrix; E5 scale-out; pprof-driven optimizations (pipelining, pool sizing, batching)
-- [ ] Capacity model in the README using measured numbers
-- [ ] All ADRs; the architecture diagram; demo video v2; two blog posts (for example "How I proved zero oversells" and "Surviving lost payment webhooks")
-- [ ] Optional: kind plus Kustomize deployment with HPA; Strimzi and CloudNativePG
+**Rehearse:** sizing admission with Little's Law; why a lottery; what fencing tokens prevent; the cache collapse ratio.
+
+### 17.10 Phase 3: Booking saga and payments (11 days)
+
+**Goal:** every paid booking ends confirmed or refunded, the effect happens once even though delivery repeats, and every hop is traced.
+
+**Study:** sagas (orchestration versus choreography); the transactional outbox; idempotency keys; at-least-once delivery; double-entry bookkeeping; circuit breakers; gRPC deadlines; W3C trace context.
+
+**Design references:** 6.4 and 6.5 (flow), 7.2 and 7.3 (state machines), 8.1 (booking and payment schemas), 8.3 (topics and contracts), 9.5 to 9.8, 10.2 (gRPC).
+
+**Deliverables:** `cmd/booking`, `cmd/payment`, `cmd/mockpsp`; `internal/booking/saga`; `internal/payment`; `internal/platform` packages `kafka`, `otel`, `outbox`, `idempotency` and `grpcx`; `proto/` with Buf; migrations `booking/00002` onward and `payment/`; Kafka, Redpanda Console, OpenTelemetry Collector and Jaeger in Compose; service docs; ADRs 0008 to 0011.
+
+**Tasks, in order:**
+
+- [ ] 3.1 **Kafka.** Kafka 4.3 in KRaft mode and Redpanda Console in Compose (16.1); `make topics` creates every topic explicitly (auto-creation stays off); a franz-go client in `internal/platform/kafka` (idempotent producer, consumer-group helper with manual commits).
+- [ ] 3.2 **Tracing.** `internal/platform/otel` (OTLP to the collector, then Jaeger); `otelhttp` and `otelgrpc`; `trace_id` on every log line; `traceparent` in Kafka headers. Retrofit inventory-svc and queue-svc.
+- [ ] 3.3 **Contracts.** A Buf workspace; `proto/inventory/v1` (`GetHold`, `MarkPaying`, `Confirm`, `ReleaseForFailedPayment`) and `proto/events/v1` (the booking and payment events in 8.3); `buf lint` and `buf breaking` in CI.
+- [ ] 3.4 **inventory over gRPC.** A gRPC adapter on the existing service layer; service-to-service authentication (decide between per-service tokens and mTLS); deadlines and bounded retries in clients.
+- [ ] 3.5 **Booking schema.** `bookings` (the 7.2 state machine), `idempotency_keys`, `outbox` and `processed_messages`; sqlc set up for booking queries (ADR 0011).
+- [ ] 3.6 **booking-svc API.** `POST /v1/bookings` with Stripe-style idempotency (9.5) calls `MarkPaying` over gRPC, then creates a payment intent; `GET /v1/bookings/{id}` is owner-only; a deadline job uses `FOR UPDATE SKIP LOCKED`.
+- [ ] 3.7 **Outbox relay.** Leader-elected (reuse the Phase 2 pattern), with DLQ topics and a consumer-lag metric.
+- [ ] 3.8 **Payment schema.** `payment_intents` (unique `booking_id`), `webhook_events` (unique PSP event ID), `ledger_entries` (double entry) and `psp_orders`.
+- [ ] 3.9 **payment-svc.** Intents; a PSP client with idempotency keys, retries with backoff and jitter, and a circuit breaker; a webhook endpoint (HMAC checked in constant time, deduplicated, forward-only transitions); status polling for stuck intents.
+- [ ] 3.10 **mockpsp.** Create order, a hosted checkout page, signed webhooks, a fault-injection admin API (duplicate, delay, loss, failure, timeout) and a settlement report.
+- [ ] 3.11 **Confirmation and compensation.** The payment-succeeded consumer runs one transaction: `guard.Reserve`, booking CONFIRMED, outbox event. After commit it calls `inventory.Confirm`, which is idempotent. If the guard rejects, refund; if the payment fails, call `ReleaseForFailedPayment`. Count late captures in `holdfast_late_confirm_total`.
+- [ ] 3.12 **E1 part B.** A full-purchase mode in `cmd/contention`: holds, bookings and payments with 10% failures, checking the final sold count.
+- [ ] 3.13 **Tests.** Saga state-machine unit tests; idempotent consumers under redelivery; duplicate, out-of-order and late webhooks; outbox crash recovery; gRPC contract tests.
+- [ ] 3.14 **Docs.** Booking, payment and mockpsp service docs; runbooks RB-3 (DLQ) and RB-4 (manual refund) with `holdfastctl dlq replay` and `holdfastctl refund`; ADR 0008 (gRPC for synchronous calls, Kafka for asynchronous events), ADR 0009 (transactional outbox with a polling relay), ADR 0010 (orchestrated saga instead of choreography or Temporal), ADR 0011 (sqlc); the architecture update.
 
 **Exit criteria:**
 
-- [ ] Every number on your resume traces to a committed results file
+- [ ] The happy-path purchase works end to end, with one trace spanning every service.
+- [ ] A 1,000-purchase run with injected faults keeps I1, I2 and I4 at 0. (I3 goes fully green once the Phase 5 reconciler lands.)
+- [ ] E1 parts A and B pass.
+- [ ] ADRs 0008 to 0011 written. **Milestone: MVP backend complete.**
 
-### Phase 7: Stretch goals (pick one or two)
+**Demo checkpoint:** a Jaeger screenshot of one purchase crossing every service.
+
+**Rehearse:** why an outbox instead of dual writes; at-least-once delivery plus idempotency; saga compensation; the double-entry ledger.
+
+### 17.11 Phase 4: Frontend, identity and policies (7 days)
+
+**Goal:** a real person can buy a ticket through a web app, with real identity and the sale policies enforced.
+
+**Study:** OTP security; refresh-token rotation and reuse detection; Web Workers; static export and caching; basic accessibility.
+
+**Tasks, in order:**
+
+- [ ] 4.1 **auth-svc.** OTP with a mock SMS inbox, EdDSA access tokens, refresh rotation with reuse detection (token families), JWKS; migrations in `db/migrations/auth/` (users, hashed OTP codes, refresh tokens).
+- [ ] 4.2 **Wire identity in.** Access tokens replace the development identity header in queue-svc and booking-svc.
+- [ ] 4.3 **Policy engine** (`internal/policy`): the verified-only window, agent lockout, per-user caps and the freeze switch. inventory checks the freeze state. Add `holdfastctl freeze` and `unfreeze` and runbook RB-1.
+- [ ] 4.4 **Proof of work.** A challenge endpoint in queue-svc and a Web Worker solver in the web app.
+- [ ] 4.5 **Web app** (`web/`, Next.js with static export): event page, countdown, waiting room with rank (polling the status document with jitter), quantity picker, redirect to mockpsp checkout, booking status page. Cover the accessibility basics.
+- [ ] 4.6 **Mission-control dashboard** (12.4), provisioned in `deploy/grafana/`.
+- [ ] 4.7 **README v1 and demo video v1** (section 19).
+- [ ] 4.8 **Docs.** Auth and policy service docs; ADR 0012 (access tokens and refresh rotation with reuse detection).
+
+**Exit criteria:**
+
+- [ ] You can buy a ticket by hand while k6 simulates a rush, and the dashboard shows it live.
+- [ ] README v1 and demo video v1 published.
+- [ ] **Milestone: resume-ready.** Update the resume with the E1 and E2 numbers from committed results.
+
+**Rehearse:** refresh-token reuse detection; why proof of work; static waiting room versus server-rendered.
+
+### 17.12 Phase 5: Reliability hardening (8 days)
+
+**Goal:** prove the invariants survive failures, and make operator actions routine.
+
+**Study:** asynchronous replication and its failure modes; Sentinel failover; reconciliation; chaos engineering practice; AIMD.
+
+**Tasks, in order:**
+
+- [ ] 5.1 **Reconciler and auditor.** Settlement-report diffing in payment-svc; `cmd/auditor` publishing invariant gauges for I1 to I5 (`holdfast_invariant_violations`), plus alert rules (12.2).
+- [ ] 5.2 **Valkey high availability.** A primary, a replica and three Sentinels in Compose (the client already supports Sentinel through `VALKEY_SENTINEL_MASTER`); a failover drill.
+- [ ] 5.3 **Full RB-2 rebuild.** `holdfastctl inventory rebuild` computes `avail = capacity − sold − units in PENDING_PAYMENT bookings` and rebuilds the per-user counters, extending today's `inventory provision`.
+- [ ] 5.4 **Adaptive admission.** AIMD on the admission rate, and backpressure when the PSP circuit breaker opens.
+- [ ] 5.5 **Chaos.** Toxiproxy scenarios and kill scripts in `chaos/`; run E3 and E4.
+- [ ] 5.6 **Alerting.** Prometheus alert rules in `deploy/alerting/`, with Alertmanager optional.
+- [ ] 5.7 **Runbooks.** RB-1 to RB-5 written, practised and timed during E4.
+- [ ] 5.8 **Docs.** ADR 0013 (AIMD admission and PSP backpressure); runbook updates; recovery times in the README.
+
+**Exit criteria:**
+
+- [ ] E3 and E4 pass with every invariant at 0, and recovery times are documented.
+- [ ] RB-1 and RB-2 have been practised during a live drill, with timings recorded.
+
+**Rehearse:** what happens when Valkey fails over and loses the last second of writes; how you rebuilt inventory from the source of truth, and how long it took.
+
+### 17.13 Phase 6: Scale proof and packaging (7 days)
+
+**Goal:** turn claims into published, reproducible evidence, and package the project.
+
+**Tasks, in order:**
+
+- [ ] 6.1 **Scale.** The final k6 matrix and E5 scale-out (1, 2 and 4 instances); pprof-driven optimisation (pipelining, pool sizing, batching).
+- [ ] 6.2 **Results.** A results README with hardware and method; the capacity model (section 3) updated with measured numbers.
+- [ ] 6.3 **Security pass.** A Trivy image scan in CI, `govulncheck`, a review of the section 11 threat model, and dependency upgrades (`make deps-upgrade`, then every test and experiment).
+- [ ] 6.4 **Packaging.** Every ADR complete; the architecture diagram; demo video v2; two blog posts (for example "How I proved zero oversells" and "Surviving lost payment webhooks").
+- [ ] 6.5 **Optional deployment.** kind with Kustomize and HPA; Strimzi and CloudNativePG; or a public demo VM behind Cloudflare (16.5).
+- [ ] 6.6 **Release.** Tag `v1.0.0` and do the final resume update.
+
+**Exit criteria:**
+
+- [ ] Every number on your resume traces to a committed results file.
+- [ ] The definition of complete (17.15) is met.
+
+### 17.14 Phase 7: Stretch goals (pick one or two)
 
 - **Seat-map mode:** per-section hash tags `inv:{E:S}:*`; seat-availability bitmaps (50,000 seats fit in about 6.25 KB per event); the `sold_seats` primary key as the final guard.
-- **Valkey Cluster** with the queue sharded into K sub-queues.
+- **Valkey Cluster,** with the queue sharded into K sub-queues.
 - **Debezium CDC** in place of the polling relay; compare end-to-end latency.
 - **A Temporal-based saga** variant, with a written comparison.
 - **A multi-region design doc** (active-passive per event).
-- **A real pilot:** a college-fest pass sale, with the organizers' permission and a licensed payment gateway.
+- **A real pilot:** a college-fest pass sale, with the organisers' permission and a licensed payment gateway.
+
+### 17.15 Definition of complete (v1.0)
+
+- [ ] Every service in 5.2 is built and starts with `make up`.
+- [ ] Invariants I1 to I5 are enforced and continuously audited; F1 is verified by E6.
+- [ ] E1 to E6 pass, with results committed alongside hardware notes.
+- [ ] The section 2.4 SLOs are measured, and any miss is explained.
+- [ ] Runbooks RB-1 to RB-5, plus each service's runbook, are written and practised.
+- [ ] The README has the results table, the architecture diagram and a three-command quickstart; every service has a service doc; ADRs 0001 to 0013 are written.
+- [ ] CI is green with lint, unit tests, integration tests with E1, security scans, Buf checks and image builds.
+- [ ] Demo video v2 and two blog posts are published.
+- [ ] `v1.0.0` is tagged, and the resume is updated from committed numbers.
+
+### 17.16 Build risks
+
+| Risk | Impact | Mitigation |
+|---|---|---|
+| Spreading effort beyond Phase 4 before interviews | An unfinished core | Respect the MVP cut line below; finish phases in order |
+| Laptop RAM with Kafka, Jaeger and every service running | Flaky runs and distorted numbers | Add Compose profiles as the stack grows; stop unused services; run k6 on another machine; record the hardware |
+| This doc drifting from the code | The blueprint stops being trustworthy | Docs change in the same pull request; the tracker is part of every milestone's definition of done |
+| Time-dependent tests flaking | False failures that hide real ones | `testing/synctest`, server time inside scripts, and short TTLs instead of long sleeps |
+| Publishing numbers you can't defend | Lost credibility | Commit raw results with the SHA and hardware; cite only committed numbers |
+| AI-written code you can't explain | Interview risk | Write the "why" in every pull request description, and rehearse each phase's talking points |
 
 <Callout type="warn" title="The MVP cut line">
 
@@ -1862,88 +2205,95 @@ If time runs short, stop after Phase 4. Phases 0 to 4 already demonstrate every 
 
 </Callout>
 
+### 17.17 Changes to this plan
+
+**Version 2.0 (1 October 2026), after Drop 1:**
+
+- The build plan is now a milestone-by-milestone blueprint: tracker, working loop, where to check and update, quality gates, ordered tasks with exit criteria for every phase, the M1.5 bring-up milestone, a definition of complete and a build-risk register.
+- Phases 0 and 1 are marked built, with their deviations and the gaps they carry forward.
+- The doc is reconciled with the Drop 1 code: API paths, the Valkey keyspace, the five shipped Lua scripts, the sweeper, metrics, the testing approach, tooling, repository layout, Compose, Makefile, Dockerfile, CI and ADR numbering.
+- Invariant I5 (no lost units) was added, and invariant IDs are now the same in this doc and in the repo.
+- Section 18 starts from Drop 1 instead of an empty repository.
+- Resume bullets are split into verified-now bullets and templates for later phases.
+
+**Version 1.0 (25 September 2026):** the original design and build plan.
+
 ---
 
-## 18. Day 1: start here
+## 18. Start here: from Drop 1 to Phase 2
 
-**1. Install the tools:** Go 1.27.x, Docker (Desktop, or Engine plus the Compose plugin), k6 v2, the Buf CLI, sqlc, goose, golangci-lint, and a current Node.js LTS for the web app.
+This section is the command-by-command version of M1.5 (17.8). Finish it before starting Phase 2.
 
-**2. Create the repository and start the infrastructure:**
+**1. Check the toolchain** (versions current as of October 2026):
 
 ```bash
-mkdir holdfast && cd holdfast && git init
-go mod init github.com/Sanjay-Mx21/holdfast
-
-mkdir -p cmd/{queue,inventory,booking,payment,auth,mockpsp,auditor,holdfastctl,hello} \
-         internal/{platform,queue,inventory,booking,payment,auth,policy} \
-         proto/{events,inventory,payment}/v1 db/migrations/{booking,payment,auth} \
-         deploy/{compose,docker,k8s} loadtest/results chaos docs/adr web
-
-# Write deploy/compose/docker-compose.yml from section 16.1, then:
-docker compose -f deploy/compose/docker-compose.yml up -d
-docker compose -f deploy/compose/docker-compose.yml ps
-
-# Smoke-test each dependency
-docker compose -f deploy/compose/docker-compose.yml exec valkey valkey-cli PING
-docker compose -f deploy/compose/docker-compose.yml exec postgres psql -U holdfast -c 'SELECT version();'
-docker compose -f deploy/compose/docker-compose.yml exec kafka \
-  /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list
+go version              # go1.27.x
+docker compose version  # v2.x
+make tools              # installs golangci-lint v2.14.0
+k6 version              # v2.3.x, needed from Phase 2
 ```
 
-**3. Write your first service** (`cmd/hello/main.go`), which already has the graceful shutdown every HoldFast service needs:
+**2. Create the repository:**
 
-```go
-package main
-
-import (
-    "context"
-    "errors"
-    "log/slog"
-    "net/http"
-    "os"
-    "os/signal"
-    "syscall"
-    "time"
-)
-
-func main() {
-    log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-
-    mux := http.NewServeMux()
-    mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) {
-        w.WriteHeader(http.StatusOK)
-    })
-    mux.HandleFunc("GET /v1/hello/{name}", func(w http.ResponseWriter, r *http.Request) {
-        _, _ = w.Write([]byte("hello " + r.PathValue("name")))
-    })
-
-    srv := &http.Server{Addr: ":8080", Handler: mux, ReadHeaderTimeout: 5 * time.Second}
-
-    ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-    defer stop()
-
-    go func() {
-        if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-            log.Error("server failed", "err", err)
-            os.Exit(1)
-        }
-    }()
-    log.Info("listening", "addr", srv.Addr)
-
-    <-ctx.Done() // SIGTERM from Docker or Kubernetes
-    shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-    defer cancel()
-    _ = srv.Shutdown(shutdownCtx) // drain in-flight requests before exiting
-    log.Info("stopped cleanly")
-}
+```bash
+unzip holdfast.zip && cd holdfast
+git init && go mod tidy              # writes go.sum; commit it
+git add . && git commit -m "feat: Add foundation and inventory service"
+# Create an empty public repo named "holdfast" on GitHub, then:
+git remote add origin git@github.com:Sanjay-Mx21/holdfast.git
+git branch -M main && git push -u origin main
 ```
 
-**4. Commit, push, and add the CI workflow** from section 16.4.
+**3. Run the local gates and start the stack:**
 
-**Days 2 to 4:** finish the Phase 0 checklist, adding OpenTelemetry, Prometheus metrics and health checks to `internal/platform` until `hello` shows up in Jaeger and Grafana.
+```bash
+make test && make lint
+make keys && make up
+docker compose ps                    # all healthy; holdfastctl exited 0
+curl -s localhost:9091/readyz        # {"status":"ok",...}
+make itest
+```
+
+**4. Walk through the quickstart:**
+
+```bash
+make event NAME="Bring-up test" CAPACITY=1000      # note the event ID
+export EVENT=<event id>
+export TOKEN=$(make -s token EVENT=$EVENT)
+curl -s localhost:8081/v1/events/$EVENT/availability
+curl -s -X POST localhost:8081/v1/events/$EVENT/holds \
+  -H "Authorization: Bearer $TOKEN" -H "Idempotency-Key: order-0001" \
+  -H 'Content-Type: application/json' -d '{"quantity":2}'
+# Repeat the POST: same hold back, with the header Idempotent-Replayed: true
+```
+
+**5. Run the E1 soak and record the baseline:**
+
+```bash
+mkdir -p loadtest/results
+LOG=loadtest/results/e1-soak-$(date +%F)-$(git rev-parse --short HEAD).log
+for i in $(seq 1 100); do make e1 >> "$LOG" 2>&1 || { echo "run $i failed"; break; }; done
+grep -c "RESULT: PASS" "$LOG"        # expect 100
+```
+
+Write `loadtest/results/README.md` with the CPU model, cores, RAM, OS, Docker resource limits, Go version and commit SHA, plus the p50, p95 and p99 hold latency from the E1 output.
+
+**6. Confirm CI, then release:**
+
+- Open the Actions tab on GitHub and confirm every job is green, including "E1: no oversell under 50,000 concurrent buyers".
+- Turn on branch protection for `main` (require the CI checks) and Dependabot; add a `LICENSE`.
+- Add `CHANGELOG.md` with a v0.1.0 entry, then:
+
+```bash
+git tag -a v0.1.0 -m "Drop 1: foundation and inventory core"
+git push origin v0.1.0
+```
+
+- Publish a GitHub release for `v0.1.0` with the E1 soak log attached.
+
+**7. Plan Phase 2 on GitHub:** create milestones M2 to M6 and one issue per task in 17.9 to 17.13. Then start task 2.1.
 
 ---
-
 ## 19. README and demo video
 
 **README structure:**
@@ -1987,7 +2337,7 @@ func main() {
 | Payment correctness | Idempotency keys, webhooks, the ledger, reconciliation |
 | Security | OTP and token rotation, proof-of-work, HMAC, OWASP API6 |
 | Observability | RED metrics, traces through Kafka, invariant alerts |
-| Testing distributed systems | Property tests, `testing/synctest`, chaos runs, fairness statistics |
+| Testing distributed systems | Model-based randomized tests, the race detector, `testing/synctest`, chaos runs, fairness statistics |
 | Capacity planning | Little's Law, back-of-envelope math, the scale-out test |
 
 ### 20.2 Questions you should be able to answer cold
@@ -2041,13 +2391,21 @@ At a company, I'd probably choose it. I built the saga by hand to learn the fail
 
 ## 21. Resume bullets
 
-Use Google's X-Y-Z shape: accomplished X, as measured by Y, by doing Z [16]. Fill in **only** numbers that come from committed result files.
+Use Google's X-Y-Z shape: accomplished X, as measured by Y, by doing Z [16]. Use **only** numbers that come from committed result files.
 
-**HoldFast: surge-proof booking engine** (Go, PostgreSQL, Valkey, Kafka, gRPC, Kubernetes)
+**Verified now (Drop 1)**, as on the current resume:
 
-- Built a flash-sale booking engine sustaining `[X]` requests/s at p99 `[Y]` ms with zero oversells across `[Z]` concurrent buyers, using a lottery-based waiting room, Little's-Law admission control and atomic Lua holds.
-- Guaranteed zero double charges under injected payment faults (duplicate, delayed and lost webhooks) with a transactional-outbox saga, three-layer idempotency and automated PSP reconciliation.
-- Served `[N]` status polls/s with about 1 origin request/s through a micro-cached status endpoint, and recovered from a Valkey primary failover in `[T]` s with every invariant intact.
+- Built a ticket booking engine in Go that never oversells under extreme concurrency, using atomic Redis/Valkey Lua scripts, idempotent retries, per-user caps and a PostgreSQL final guard.
+- Applied secure coding practices and protected user privacy: Ed25519-signed JWT tokens, strict input validation, least-privilege containers, no cross-user data exposure, and CI secret scanning.
+- Wrote 58 unit and integration tests plus a CI acceptance test for scale and reliability (50,000 concurrent buyers, exactly 1,000 of 1,000 seats sold, zero errors); authored technical design documentation.
+
+Before sending these, the repository must be public with CI green (M1.5).
+
+**Templates for later milestones** (fill in only from committed results):
+
+- **After M2:** Built a fair virtual waiting room (a pre-sale lottery, then FIFO, on Valkey sorted sets) with leader-elected admission control, admitting `[N]` users at `[X]`/s while serving `[P]` status polls/s with about 1 origin request/s.
+- **After M3:** Guaranteed zero double charges under injected payment faults (duplicate, delayed and lost webhooks) with a transactional-outbox saga over Kafka and gRPC, three-layer idempotency and end-to-end OpenTelemetry tracing.
+- **After M5 and M6:** Sustained `[X]` requests/s at p99 `[Y]` ms with zero oversells across `[Z]` concurrent buyers, and recovered from a Valkey primary failover in `[T]` s with every invariant intact.
 
 ---
 
