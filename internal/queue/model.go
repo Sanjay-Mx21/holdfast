@@ -62,3 +62,32 @@ func (c EventConfig) Validate() error {
 	}
 	return nil
 }
+
+// Ordering says how a member's queue position is decided.
+type Ordering string
+
+// Orderings.
+const (
+	// OrderingLottery: joined before T0; the position is a random draw.
+	OrderingLottery Ordering = "LOTTERY"
+	// OrderingFIFO: joined after T0; the position is the arrival order.
+	OrderingFIFO Ordering = "FIFO"
+)
+
+// JoinResult is the outcome of a successful Join.
+type JoinResult struct {
+	EventID string
+	// Joined is false when the user was already in the queue; the original
+	// position stands (no re-rolling the lottery).
+	Joined   bool
+	Ordering Ordering
+}
+
+// orderingOf derives the ordering from a member's score: lottery scores are
+// in [0, 1), post-T0 scores are 1 plus the arrival counter.
+func orderingOf(score float64) Ordering {
+	if score < 1 {
+		return OrderingLottery
+	}
+	return OrderingFIFO
+}

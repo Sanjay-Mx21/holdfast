@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"strconv"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -21,8 +22,9 @@ func loadScript(name string) *redis.Script {
 
 var (
 	provisionScript = loadScript("provision.lua")
+	joinScript      = loadScript("join.lua")
 
-	allScripts = []*redis.Script{provisionScript}
+	allScripts = []*redis.Script{provisionScript, joinScript}
 )
 
 // Store is the Valkey-backed state of the waiting room. It runs the atomic
@@ -60,4 +62,31 @@ func (s *Store) Provision(ctx context.Context, eventID string, cfg EventConfig) 
 		return false, ErrProvisionConflict
 	}
 	return code == 1, nil
+}
+
+// Join adds userID to the event's queue with lotteryScore if the queue is
+// still before T0, or with the next arrival number after T0. It returns
+// whether this call added the user and the member's score.
+func (s *Store) Join(ctx context.Context, eventID, userID, lotteryScore string) (bool, float64, error) {
+	k := keysFor(eventID)
+	res, err := joinScript.Run(ctx, s.rdb, []string{k.state(), k.members(), k.seq()}, userID, lotteryScore).Slice()
+	if err != nil {
+		return false, 0, fmt.Errorf("queue: join: %w", err)
+	}
+	if len(res) != 2 {
+		return false, 0, fmt.Errorf("queue: join: unexpected reply %v", res)
+	}
+	code, _ := res[0].(int64)
+	switch code {
+	case -2:
+		return false, 0, ErrEventNotFound
+	case -1:
+		return false, 0, ErrQueueClosed
+	}
+	raw, _ := res[1].(string)
+	score, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		return false, 0, fmt.Errorf("queue: join: bad score %q", raw)
+	}
+	return code == 1, score, nil
 }
