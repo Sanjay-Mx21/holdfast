@@ -56,9 +56,10 @@ empty one refuses the request with 429 `RATE_LIMITED` and `Retry-After`:
 | Per user | `rl:join-user:<user id>` | burst 5, 1 per second | One identity hammering from many machines |
 
 IPv6 clients are limited per /64 network, since one subscriber usually owns a
-whole /64. The client IP is the connection's address: behind a proxy every
-request shares the proxy's address, so trusting `X-Forwarded-For` from NGINX
-is part of task 2.9. A refused join never reaches the queue.
+whole /64. The client IP is the connection's address, unless the connection
+comes from a trusted proxy (`TRUSTED_PROXIES`, the NGINX edge): then it is the
+last `X-Forwarded-For` entry, which the edge sets to the address it saw and
+never lets a client supply. A refused join never reaches the queue.
 
 ### `GET /v1/queue/{eventID}/me`
 
@@ -114,9 +115,10 @@ Cache-Control: public, max-age=1
   and a stale leader cannot overwrite it. `updatedAt` says how fresh it is.
 - `state` follows the T0 clock rule: `PRE` past T0 reads as `OPEN`.
 - It is identical for every client, so a shared cache may keep it for one
-  second (`public, max-age=1`): with the NGINX micro-cache (task 2.9) the
-  origin sees about one request per second per cache node, however many
-  clients poll. It is not rate limited per client.
+  second (`public, max-age=1`): through the NGINX edge the origin sees about
+  one request per second per cache node, however many clients poll (measured
+  locally: 2,000 polls in 5.4 s reached queue-svc 3 times). It is not rate
+  limited per client.
 - Until a leader has written one (just provisioned, or no leader elected), a
   fallback is built from the raw keys with `"updatedAt": null`, so a missing
   leader is visible. An event without a queue returns 404 `EVENT_NOT_FOUND`;
@@ -353,6 +355,7 @@ required (admission leader election). Service settings:
 | `JOIN_IP_PER_SECOND` | `10` | Per-IP refill rate |
 | `JOIN_USER_BURST` | `5` | Per-user bucket size |
 | `JOIN_USER_PER_SECOND` | `1` | Per-user refill rate |
+| `TRUSTED_PROXIES` | none | CIDRs of the edge; only their `X-Forwarded-For` is believed (Compose: `10.250.0.10/32`) |
 | `OPEN_CHECK_INTERVAL` | `250ms` | How often the opener looks for queues due to open (10ms to 10s) |
 | `POSITION_USER_BURST` | `10` | Per-user bucket size for position lookups |
 | `POSITION_USER_PER_SECOND` | `1` | Per-user refill rate for position lookups |

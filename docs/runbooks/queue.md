@@ -42,9 +42,10 @@ settings. Nothing was changed: the stored settings still apply.
 
 1. Tell the two apart with the metric's `result` label.
 2. **Per IP, many users:** usually a shared address: a campus, an office or a
-   mobile carrier's NAT, or every request arriving from a proxy because
-   forwarded-for headers are not trusted yet (task 2.9). Check the busiest
-   buckets: `docker compose exec valkey valkey-cli --scan --pattern 'rl:join-ip:*'`.
+   mobile carrier's NAT. If every bucket shows the edge's own address,
+   `TRUSTED_PROXIES` does not match the edge, so queue-svc ignores its
+   `X-Forwarded-For`. Check the busiest buckets:
+   `docker compose exec valkey valkey-cli --scan --pattern 'rl:join-ip:*'`.
    Raise `JOIN_IP_BURST` and `JOIN_IP_PER_SECOND` and restart queue-svc.
 3. **Per user:** a client retrying in a tight loop. Joining is idempotent, so
    one successful join is enough; fix the client before raising

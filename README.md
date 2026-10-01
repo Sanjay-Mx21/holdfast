@@ -34,20 +34,28 @@ sells exactly 1,000 (never 1,001) and stays up while doing it.
 Requirements: Go 1.27+, Docker with Compose v2, make.
 
 ```bash
-go mod tidy                                      # resolve modules and write go.sum; commit it
-make up                                          # dev keys, then PostgreSQL, Valkey, migrations, inventory, Prometheus, Grafana
-make event NAME="Coldplay Mumbai" CAPACITY=1000  # prints the event ID
+make up                                          # dev keys, PostgreSQL, Valkey, migrations, inventory-svc, queue-svc, the NGINX edge, Prometheus, Grafana
+make event NAME="Coldplay Mumbai" CAPACITY=1000  # the event, its inventory and its waiting room (opens now); prints the event ID
 export EVENT=<event id>
-export TOKEN=$(make -s token EVENT=$EVENT)       # dev-only admission token (stands in for the Phase 2 waiting room)
+export ME=$(cat /proc/sys/kernel/random/uuid)    # your buyer ID (development identity until Phase 4)
+EDGE=localhost:8088                              # the buyers' front door
 
-curl -s localhost:8081/v1/events/$EVENT/availability
-curl -s -X POST localhost:8081/v1/events/$EVENT/holds \
+curl -s -X POST $EDGE/v1/queue/$EVENT/join -H "X-Dev-User-Id: $ME"   # join the waiting room
+curl -s $EDGE/v1/events/$EVENT/status                                # the shared status document (cached 1 s)
+curl -s $EDGE/v1/queue/$EVENT/me -H "X-Dev-User-Id: $ME"             # your rank
+export TOKEN=$(curl -s -X POST $EDGE/v1/queue/$EVENT/admit -H "X-Dev-User-Id: $ME" | jq -r .token)
+
+curl -s $EDGE/v1/events/$EVENT/availability
+curl -s -X POST $EDGE/v1/events/$EVENT/holds \
   -H "Authorization: Bearer $TOKEN" \
   -H "Idempotency-Key: order-$(date +%s)" \
   -H 'Content-Type: application/json' -d '{"quantity":2}'
 
 make e1                                          # contention experiment against the local stack
 ```
+
+`make -s token EVENT=$EVENT` still mints a token directly, bypassing the waiting
+room, for development and load tests.
 
 Dashboards: Grafana at http://localhost:3000 (HoldFast / Inventory) and
 Prometheus at http://localhost:9090. The service's own metrics and health
