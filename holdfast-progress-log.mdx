@@ -37,11 +37,11 @@ All times are IST (UTC+05:30).
 | **Repository** | [github.com/Sanjay-Mx21/holdfast](https://github.com/Sanjay-Mx21/holdfast), branch `main` |
 | **First commit** | `2173e50` "first commit", 2026-10-01 20:20, 82 files, 12,973 lines |
 | **Last CI-verified commit** | `5da3051`, CI green on 2026-10-01 at 22:00 (all 6 jobs) |
-| **Issues so far** | 18 recorded: 15 resolved, 3 open (section 6) |
+| **Issues so far** | 20 recorded: 17 resolved, 3 open (section 6) |
 
 <Callout type="tip" title="Running locally and green in CI since 2026-10-01">
 
-Drop 1 builds, passes every test and runs on this machine (WSL2 Ubuntu 24.04): `make test`, `make lint`, `make up`, the quickstart, `make itest` and E1 all pass, and CI on GitHub is green. It took three CI runs to get there; section 6 records every issue met on the way. Still open for M1.5: the 100-run E1 soak, repository hygiene and the v0.1.0 release (section 7).
+Drop 1 builds, passes every test and runs on this machine (WSL2 Ubuntu 24.04): `make test`, `make lint`, `make up`, the quickstart, `make itest` and E1 all pass, and CI on GitHub is green. It took three CI runs to get there; section 6 records every issue met on the way. The 100-run E1 soak passed 100 of 100 (`loadtest/results/`). Still open for M1.5: repository hygiene and the v0.1.0 release (section 7).
 
 </Callout>
 
@@ -77,6 +77,9 @@ Sources: the dates recorded in the ADRs and the plan, file modification times, a
 | 2026-10-01 22:00 | **CI green on `main`:** all 6 jobs pass (task 1.5.9) | GitHub Actions run 36892043588 |
 | 2026-10-01 22:14 | Issues section added to this log; CI green again | Commit `1ec8da1`, run 36894186349 |
 | 2026-10-01 after 22:14 | Owner set the Ubuntu password and logged the GitHub CLI in; both verified | `passwd -S`, `gh auth status` |
+| 2026-10-01 22:22 | First soak attempt started on battery power (8%, discharging); stopped after 5 runs, all passed (issue E6) | `loadtest/results/*-on-battery-aborted.*` |
+| 2026-10-01 22:24 to 22:50 | **E1 soak: 100 of 100 runs pass** on AC power (task 1.5.7); 900 of 900 invariant checks pass; every run grants exactly 1,000 holds and sells exactly 1,000 units | `loadtest/results/e1-soak-2026-10-01-bf64b21.*` |
+| 2026-10-01 ~22:55 | Results README with hardware note, method, latency spread across all 100 runs and caveats (task 1.5.8); portable soak script added | `loadtest/results/README.md`, `loadtest/e1-soak.sh` |
 
 ## 3. What is complete, and what each piece contributes
 
@@ -147,16 +150,16 @@ Sources: the dates recorded in the ADRs and the plan, file modification times, a
 
 ## 6. Issues encountered
 
-Every problem met while bringing Drop 1 up on 2026-10-01, in three groups: defects in the repository, problems with the machine or network, and mistakes or detours in diagnosis. Nothing is left out because it was small or embarrassing.
+Every problem met while bringing Drop 1 up and running the soak on 2026-10-01, in three groups: defects in the repository, problems with the machine or network, and mistakes or detours in diagnosis. Nothing is left out because it was small or embarrassing.
 
 ### 6.1 Summary
 
 | Group | Recorded | Resolved | Open |
 |---|---|---|---|
 | P: defects in the repository | 9 | 6 | 3 |
-| E: machine and network | 5 | 5 | 0 |
-| D: diagnosis and process | 4 | 4 | 0 |
-| **Total** | **18** | **15** | **3** |
+| E: machine and network | 6 | 6 | 0 |
+| D: diagnosis and process | 5 | 5 | 0 |
+| **Total** | **20** | **17** | **3** |
 
 CI took **three runs** to go green:
 
@@ -189,6 +192,7 @@ CI took **three runs** to go green:
 | E3 | IPv6 connections also hang for Ubuntu mirrors and Docker Hub | Any download could stall | Network | Forced IPv4 in Ubuntu: `Acquire::ForceIPv4` for apt and IPv4 precedence in `/etc/gai.conf` | ✅ Worked around |
 | E4 | Docker Desktop was stopped and not connected to the Ubuntu distro | `docker` was unavailable inside Ubuntu | Default settings | Enabled WSL integration for Ubuntu-24.04 (original settings backed up to `settings-store.json.bak-holdfast`) and started Docker Desktop | ✅ |
 | E5 | The first `make up` failed: "TLS handshake timeout" while resolving `docker/dockerfile:1` from Docker Hub. While pre-pulling, `docker/dockerfile:1` timed out once more and `postgres:18` returned a transient 401 | Stack did not start on the first attempt | Flaky connection to Docker Hub | Pre-pulled all 7 images with retries; the next `make up` succeeded on its first attempt | ✅ |
+| E6 | The first soak attempt started while the laptop ran on battery at 8% and discharging | Risk of shutdown mid-soak, and throttled CPU: its first hold p99 was 218 ms against 142 and 167 ms earlier | Not checked before starting | Stopped after 5 runs (all passed), kept as `*-on-battery-aborted.*`, restarted on AC power. Check power before any benchmark | ✅ |
 
 ### 6.4 Diagnosis and process
 
@@ -198,6 +202,7 @@ CI took **three runs** to go green:
 | D2 | `proxy.golang.org` looked blocked: Git Bash's curl failed with error 100 | False alarm | PowerShell reached the proxy and checksum database normally; the error was a quirk of that curl build | ✅ |
 | D3 | Command plumbing between Windows and WSL went wrong three times: PowerShell garbled WSL output, Git Bash rewrote `/mnt/c/...` paths, and `wsl.exe` expanded shell variables early so one image pre-pull loop ran 24 empty retries | Wasted attempts; no effect on the project | Ran commands from script files with `wsl.exe --exec` and `MSYS_NO_PATHCONV=1` | ✅ |
 | D4 | The CI result could not be checked at first: GitHub CLI was not installed | CI status was unknown after the first push | Read CI status from GitHub's public API; GitHub CLI installed in Ubuntu and logged in (6.5) | ✅ |
+| D5 | While the AC soak's run 1 was starting, the assistant ran Docker and WSL diagnostics on the same machine | Run 1 is the slowest of 100: hold p99 1,088 ms against a median of 114 ms | Left the machine alone for the other 99 runs; run 1 is kept and reported, and the results README gives figures with and without it | ✅ |
 
 ### 6.5 Owner setup actions
 
@@ -210,7 +215,7 @@ These needed the owner to type a password or approve a browser login. Both are d
 
 ### 6.6 Observations to watch
 
-- E1 latency varies between runs on this laptop: guard p99 was 632 ms in the first run and 1,119 ms in the second; hold p99 was 142 ms and 167 ms. The 100-run soak (task 1.5.7) will show the real spread before any number is published.
+- E1 latency varies a lot on this laptop. Across the 100-run soak, per-run hold p99 ranged from 74 ms to 1,088 ms (median 114 ms) and guard p99 from 845 ms to 2,002 ms (median 918 ms). These are stress figures at about 85 times the design hold rate, not SLO measurements; `loadtest/results/README.md` explains why and must be read before quoting any of them.
 - GitHub notice on every CI run: `ubuntu-latest` moves to Ubuntu 26 from 19 October 2026. CI may need attention after that date.
 
 ## 7. Still open in M1.5
@@ -220,7 +225,7 @@ These needed the owner to type a password or approve a browser login. Both are d
 | 1.5.1 Install Go 1.27, make, golangci-lint (and k6 for Phase 2) | ✅ In WSL2 Ubuntu 24.04 |
 | 1.5.2 Run `go mod tidy` and commit `go.sum` | ✅ Committed in `f3567bb` |
 | 1.5.3 to 1.5.6 `make test`, `make lint`, `make up`, quickstart, `make itest` | ✅ All pass. Until issue P7 is fixed, run `docker compose stop inventory` before `make itest` |
-| 1.5.7 and 1.5.8 E1 soak (100 runs) and hold latency in `loadtest/results/` | ◐ One run passes (hold p99 142 ms on an i7-1250U, 16 GB); the 100-run soak and the results file are still to do |
+| 1.5.7 and 1.5.8 E1 soak (100 runs) and hold latency in `loadtest/results/` | ✅ 100 of 100 passed on 2026-10-01; results, hardware note and latency spread in `loadtest/results/README.md` |
 | 1.5.9 Push to GitHub with every CI job green | ✅ Green at `5da3051` on the third CI run (issues P1 and P6) |
 | 1.5.10 Branch protection, Dependabot, `LICENSE` | ⏳ |
 | 1.5.11 `CHANGELOG.md`, tag `v0.1.0`, GitHub release | ⏳ |
