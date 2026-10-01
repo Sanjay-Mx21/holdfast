@@ -1343,6 +1343,8 @@ async function waitForTurn(eventId: string, myRank: number): Promise<'admit' | '
 
 Measure the **collapse ratio**: edge requests per second (`X-Cache-Status: HIT`) divided by origin requests per second. It is one of your best resume numbers.
 
+**As built in task 2.9** (`deploy/nginx/nginx.conf`): the same cache settings, also for `/availability`, plus stale copies on origin errors; the edge overwrites `X-Forwarded-For`, `X-Real-IP` and `X-Request-Id`, and queue-svc believes `X-Forwarded-For` only from the edge's fixed address (`TRUSTED_PROXIES`). A first local measurement: 2,000 polls in 5.4 s reached queue-svc 3 times (667:1); the formal measurement is experiment E2 (task 2.12).
+
 ---
 
 ## 10. APIs
@@ -1653,7 +1655,7 @@ holdfast/
 │   └── testenv/                      ✅ wiring for integration tests
 ├── db/migrations/                    ✅ embed.go, booking/    ⏳ payment/ (3), auth/ (4)
 ├── proto/                            ⏳ buf.yaml; events/v1, inventory/v1, payment/v1 (3)
-├── deploy/                           ✅ prometheus/, grafana/ ⏳ nginx/ (2), otel-collector/ (3), alerting/ (5), k8s/ (6)
+├── deploy/                           ✅ prometheus/, grafana/, nginx/ (2.9) ⏳ otel-collector/ (3), alerting/ (5), k8s/ (6)
 ├── loadtest/                         ⏳ results/ (M1.5); k6 scripts (2)
 ├── chaos/                            ⏳ Toxiproxy scenarios, kill scripts (5)
 ├── web/                              ⏳ Next.js app (4)
@@ -2051,7 +2053,7 @@ The dates are illustrative. The gates are not.
 - [x] 2.6 **Status document.** The leader writes `q:{E}:status` (state, `admittedUpTo`, queue size, `updatedAt`) on every tick. `GET /v1/events/{id}/status` serves it with `Cache-Control: public, max-age=1`.
 - [x] 2.7 **Admission tokens.** `POST /v1/queue/{id}/admit` issues the Ed25519 token (reusing `authn.Issuer`) when your rank is within `admittedUpTo`, and records your session. Publish `GET /.well-known/jwks.json`. *Built with the session recorded when the leader admits a rank (a slot in `adm:{E}:sessions`, task 2.5); claiming is read-only and safe to repeat, and the token never outlives the slot.*
 - [x] 2.8 **Close the inventory token gaps.** Decide whether one admission token allows one hold or a bounded number, and enforce it with `jti:*`. Decide between trusted key files and fetching JWKS with caching. Record both decisions in `docs/services/queue.md`.
-- [ ] 2.9 **NGINX.** Route `/v1/queue/` to queue-svc and hold paths to inventory-svc. Micro-cache `/v1/events/{id}/status` and `/availability` for one second, with `proxy_cache_lock on` and `proxy_cache_use_stale updating`.
+- [x] 2.9 **NGINX.** Route `/v1/queue/` to queue-svc and hold paths to inventory-svc. Micro-cache `/v1/events/{id}/status` and `/availability` for one second, with `proxy_cache_lock on` and `proxy_cache_use_stale updating`.
 - [ ] 2.10 **Metrics and dashboard.** Queue size, `admittedUpTo`, active sessions, admission rate, status-document age, leader epoch and join results, added to Grafana.
 - [ ] 2.11 **Tests.** Unit: admission math, token bucket, rank, the Spearman helper. Integration: join idempotency and no re-roll, the T0 switch, a stale epoch rejected by `advance.lua`, session expiry. A model test for F1 (nobody is admitted ahead of a lower rank). A failover test (two controllers, one killed). `testing/synctest` for the tick loop.
 - [ ] 2.12 **Experiments.** E2: k6 ramps joins from 0 to maximum in 10 s while 50,000 virtual users poll status every 3 s with jitter; compare origin and edge request counts. E6: 100,000 pre-T0 joins with recorded join times; Spearman correlation close to 0 before T0 and exactly 1 after.

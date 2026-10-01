@@ -1,6 +1,8 @@
 # Local development stack. `make up` generates dev keys first, then runs this.
-# Host ports: inventory API 8081, inventory admin 9091, queue API 8082,
-# queue admin 9092, Prometheus 9090, Grafana 3000, PostgreSQL 5432, Valkey 6379.
+# Host ports: the edge (NGINX, the buyers' front door) 8088 (EDGE_PORT), inventory API 8081,
+# inventory admin 9091, queue API 8082, queue admin 9092, Prometheus 9090,
+# Grafana 3000, PostgreSQL 5432, Valkey 6379. The 808x API ports bypass the edge
+# and are for debugging only.
 name: holdfast
 
 services:
@@ -61,6 +63,7 @@ services:
       # Trust whatever queue-svc publishes: key rotation needs no restart here.
       ADMISSION_JWKS_URL: http://queue:8080/.well-known/jwks.json
       ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-only-admin-token-change-me-0123456789}
+    networks: [default, edge]
     ports:
       - "8081:8080" # public API
       - "9091:9090" # admin: metrics, health, pprof, operator API (never expose in production)
@@ -81,7 +84,9 @@ services:
       DEV_IDENTITY: "true" # buyers identified by X-Dev-User-Id until auth-svc (Phase 4)
       POSTGRES_DSN: postgres://holdfast:holdfast@postgres:5432/holdfast?sslmode=disable # admission leader election
       ADMISSION_PRIVATE_KEY_FILE: /keys/admission.key # signs admission tokens (dev key from make keys)
+      TRUSTED_PROXIES: 10.250.0.10/32 # only the edge's X-Forwarded-For is believed
       ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-only-admin-token-change-me-0123456789}
+    networks: [default, edge]
     ports:
       - "8082:8080" # public API
       - "9092:9090" # admin: metrics, health, pprof, operator API (never expose in production)
@@ -90,6 +95,26 @@ services:
     depends_on:
       valkey: { condition: service_healthy }
       postgres: { condition: service_healthy }
+    restart: unless-stopped
+
+  # The edge: routes, micro-caches the status and availability documents for
+  # one second, rate-limits the queue per client, and passes the client's
+  # address to the services. It has a fixed address on the edge network so
+  # queue-svc can trust exactly it (TRUSTED_PROXIES).
+  nginx:
+    image: nginx:1.30.5-alpine
+    volumes:
+      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      edge: { ipv4_address: 10.250.0.10 }
+    ports:
+      - "${EDGE_PORT:-8088}:80"
+    depends_on: [queue, inventory]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
     restart: unless-stopped
 
   prometheus:
@@ -111,6 +136,14 @@ services:
     ports: ["3000:3000"]
     depends_on: [prometheus]
     restart: unless-stopped
+
+networks:
+  # Edge to services. Its own subnet, so the edge's address is fixed and
+  # nothing else on it (the Docker gateway, other containers) can pose as it.
+  edge:
+    ipam:
+      config:
+        - subnet: 10.250.0.0/24
 
 volumes:
   postgres-data:

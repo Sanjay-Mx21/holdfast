@@ -13,8 +13,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/app"
@@ -61,6 +63,10 @@ type config struct {
 	AdmissionExtraPublicKeyFiles []string      `env:"ADMISSION_EXTRA_PUBLIC_KEY_FILES" envSeparator:","`
 	AdmissionTokenTTL            time.Duration `env:"ADMISSION_TOKEN_TTL" envDefault:"10m"`
 
+	// TrustedProxies are the addresses (CIDRs) of the edge: only requests
+	// from them have their X-Forwarded-For believed for per-IP limits.
+	TrustedProxies []string `env:"TRUSTED_PROXIES" envSeparator:","`
+
 	// OpenCheckInterval is how often the opener looks for queues due to open
 	// at T0. Joins open a due queue themselves, so this only bounds how long
 	// the state can read PRE after T0 when nobody joins.
@@ -72,6 +78,18 @@ type config struct {
 	AdmissionTick           time.Duration `env:"ADMISSION_TICK" envDefault:"250ms"`
 	LeaderRetryInterval     time.Duration `env:"LEADER_RETRY_INTERVAL" envDefault:"2s"`
 	AdmissionRescanInterval time.Duration `env:"ADMISSION_RESCAN_INTERVAL" envDefault:"2s"`
+}
+
+func (c *config) trustedProxies() ([]netip.Prefix, error) {
+	var out []netip.Prefix
+	for _, s := range c.TrustedProxies {
+		p, err := netip.ParsePrefix(strings.TrimSpace(s))
+		if err != nil {
+			return nil, fmt.Errorf("TRUSTED_PROXIES: %q is not a CIDR such as 10.250.0.10/32", s)
+		}
+		out = append(out, p.Masked())
+	}
+	return out, nil
 }
 
 func (c *config) limits() queue.Limits {
@@ -87,6 +105,9 @@ func (c *config) Validate() error {
 	errs := []error{cfgpkg.ValidateAll(c.Service, c.HTTP, c.Valkey, c.Postgres)}
 	if len(c.AdminToken) < 32 {
 		errs = append(errs, errors.New("ADMIN_TOKEN must be at least 32 characters"))
+	}
+	if _, err := c.trustedProxies(); err != nil {
+		errs = append(errs, err)
 	}
 	if c.OpenCheckInterval < 10*time.Millisecond || c.OpenCheckInterval > 10*time.Second {
 		errs = append(errs, errors.New("OPEN_CHECK_INTERVAL must be between 10ms and 10s"))
@@ -207,7 +228,12 @@ func run(ctx context.Context) error {
 		identity = authn.RequireDevIdentity()
 	}
 	qm := queue.NewMetrics(reg)
+	trusted, _ := cfg.trustedProxies() // validated at load
+	if len(trusted) > 0 {
+		log.Info("trusting X-Forwarded-For from the edge", "proxies", cfg.TrustedProxies)
+	}
 	queue.NewHandler(svc, lim, cfg.limits(), qm, authn.NewIssuer(signingKey, cfg.AdmissionTokenTTL), authn.NewJWKSet(published...)).
+		TrustProxies(trusted...).
 		Register(public, admin, identity, authn.RequireStaticToken(cfg.AdminToken))
 
 	return app.Run(ctx, log, hc, cfg.HTTP.DrainDelay,

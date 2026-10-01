@@ -43,7 +43,20 @@ Each service listens on two ports:
   `/buildz`, `/debug/pprof/*` and operator APIs. Internal network only.
 
 Locally, `compose.yaml` runs PostgreSQL 18, Valkey 9.1, a one-shot migration
-job, inventory-svc, queue-svc, Prometheus and Grafana.
+job, inventory-svc, queue-svc, the NGINX edge, Prometheus and Grafana.
+
+**The edge** (`deploy/nginx/nginx.conf`, host port 8088) is the buyers' front
+door, the role a CDN plays in production:
+
+- routes `/v1/queue/*` and `/.well-known/jwks.json` to queue-svc and the hold
+  paths to inventory-svc; everything else, admin paths included, is a 404;
+- micro-caches `/v1/events/{id}/status` and `/v1/events/{id}/availability`
+  for one second with `proxy_cache_lock` (concurrent misses wait for one
+  origin fetch), keyed by path only, serving stale copies while updating or
+  if the origin fails;
+- rate-limits `/v1/queue/` per client address (10/s, burst 20);
+- overwrites `X-Forwarded-For`, `X-Real-IP` and `X-Request-Id`. It sits on its
+  own network at a fixed address that queue-svc trusts (`TRUSTED_PROXIES`).
 
 ## 5. Request lifecycle: `POST /v1/events/{eventID}/holds`
 
@@ -145,6 +158,7 @@ connection; every 250 ms it runs `advance.lua`, which refuses a stale epoch
 | Sweeper failing | Expired holds keep units; any healthy replica recovers them | RB-INV-2 |
 | Payment confirmed after hold expiry | `confirm.lua` re-takes the units ("late") instead of dropping the sale | RB-INV-6 |
 | Pod killed | Readiness drains first; in-flight requests finish within `SHUTDOWN_TIMEOUT` | n/a |
+| queue-svc or inventory-svc down behind the edge | The edge keeps serving the last cached status and availability (stale, up to 30 s); other paths return 502 | RB-Q-2, RB-INV-1 |
 
 ## 11. Testing strategy
 

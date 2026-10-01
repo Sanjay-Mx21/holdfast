@@ -56,6 +56,12 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
   trusted too. `authn.JWKSClient`, `authn.ParseJWK` and `authn.NewVerifierWith`
   added. Decided that admission tokens stay reusable within their
   session-capped life rather than single use, so retries keep working.
+- **The NGINX edge** (task 2.9, `deploy/nginx/nginx.conf`, host port 8088): routes
+  queue and inventory paths, micro-caches the status and availability
+  documents for one second with request collapsing, rate-limits the queue per
+  client, and passes the client's address. queue-svc believes
+  `X-Forwarded-For` only from `TRUSTED_PROXIES`. The README quickstart now
+  walks the buyer journey through the edge.
 
 ### Fixed
 

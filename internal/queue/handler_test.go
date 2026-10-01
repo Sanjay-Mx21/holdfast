@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"testing"
 	"time"
@@ -408,7 +409,7 @@ func TestClientID(t *testing.T) {
 	for _, tt := range tests {
 		r := httptest.NewRequest(http.MethodPost, "/", nil)
 		r.RemoteAddr = tt.remote
-		if got := clientID(r); got != tt.want {
+		if got := clientID(r, nil); got != tt.want {
 			t.Errorf("clientID(%q) = %q, want %q", tt.remote, got, tt.want)
 		}
 	}
@@ -417,7 +418,7 @@ func TestClientID(t *testing.T) {
 	a.RemoteAddr = "[2001:db8:1:2::1]:1"
 	b := httptest.NewRequest(http.MethodPost, "/", nil)
 	b.RemoteAddr = "[2001:db8:1:3::1]:1"
-	if clientID(a) == clientID(b) {
+	if clientID(a, nil) == clientID(b, nil) {
 		t.Fatal("different /64 networks share a rate-limit bucket")
 	}
 }
@@ -740,5 +741,39 @@ func TestSessionIDIsStablePerEventAndUser(t *testing.T) {
 	}
 	if a == SessionID(eventID, "0196f0c2-0000-7000-8000-000000000002") || a == SessionID("0196f0c1-7a3e-7c51-9b0e-5d2f8a1c4e78", userID) {
 		t.Fatal("different users or events share a session ID")
+	}
+}
+
+func TestClientIDBehindTheEdge(t *testing.T) {
+	edge := []netip.Prefix{netip.MustParsePrefix("10.250.0.10/32")}
+	req := func(remote string, xff ...string) *http.Request {
+		r := httptest.NewRequest(http.MethodPost, "/", nil)
+		r.RemoteAddr = remote
+		for _, v := range xff {
+			r.Header.Add("X-Forwarded-For", v)
+		}
+		return r
+	}
+	tests := []struct {
+		name string
+		r    *http.Request
+		want string
+	}{
+		{"edge sets the client", req("10.250.0.10:5000", "203.0.113.7"), "203.0.113.7"},
+		{"only the last entry is believed", req("10.250.0.10:5000", "198.51.100.1, 203.0.113.7"), "203.0.113.7"},
+		{"last of several headers", req("10.250.0.10:5000", "198.51.100.1", "203.0.113.9"), "203.0.113.9"},
+		{"IPv6 client behind the edge, per /64", req("10.250.0.10:5000", "2001:db8:1:2::99"), "2001_db8_1_2__"},
+		{"untrusted sender's header ignored", req("172.20.0.1:5000", "203.0.113.7"), "172.20.0.1"},
+		{"edge without the header", req("10.250.0.10:5000"), "10.250.0.10"},
+		{"garbage header falls back to the edge", req("10.250.0.10:5000", "not-an-ip"), "10.250.0.10"},
+	}
+	for _, tt := range tests {
+		if got := clientID(tt.r, edge); got != tt.want {
+			t.Errorf("%s: clientID = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+	// Without trusted proxies, a forwarded-for header is never believed.
+	if got := clientID(req("10.250.0.10:5000", "203.0.113.7"), nil); got != "10.250.0.10" {
+		t.Errorf("no trusted proxies: clientID = %q, want the connection address", got)
 	}
 }
