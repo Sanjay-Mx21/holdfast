@@ -21,7 +21,9 @@ sells exactly 1,000 (never 1,001) and stays up while doing it.
   rank, a leader-elected controller admits them at the event's rate without
   exceeding its concurrent-session budget, one cacheable status document
   tells everyone how far admission has got, and an admitted buyer exchanges
-  their turn for the signed admission token inventory-svc requires.
+  their turn for the signed admission token inventory-svc requires;
+  inventory-svc follows the queue's published keys, so rotating them needs no
+  restart.
 - **holdfastctl** runs migrations, generates dev keys and tokens, creates
   events, provisions their inventory and queue, and rebuilds inventory.
 - **Experiment E1** (`cmd/contention`) fires 50,000 concurrent buyers at 1,000

@@ -50,6 +50,12 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
   of 10 minutes and your session slot; `GET /.well-known/jwks.json` publishes
   the public keys. `authn.IssueUntil` and `authn.NewJWKSet` added. queue-svc
   requires `ADMISSION_PRIVATE_KEY_FILE`. Inventory accepts these tokens.
+- **inventory-svc follows the queue's JWKS** (task 2.8): `ADMISSION_JWKS_URL`,
+  refreshed every 5 minutes and on an unknown key ID at most every 30 seconds,
+  with readiness failing while no key is known; key files still work and are
+  trusted too. `authn.JWKSClient`, `authn.ParseJWK` and `authn.NewVerifierWith`
+  added. Decided that admission tokens stay reusable within their
+  session-capped life rather than single use, so retries keep working.
 
 ### Fixed
 
@@ -63,6 +69,8 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
 
 ### Changed
 
+- `ADMISSION_PUBLIC_KEY_FILES` is no longer required by inventory-svc when
+  `ADMISSION_JWKS_URL` is set; Compose uses the JWKS.
 - `prometheus/client_golang` upgraded from 1.23.2 to 1.24.1, proposed by
   Dependabot (#1).
 

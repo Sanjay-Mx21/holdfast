@@ -128,7 +128,10 @@ are defined in `internal/platform/config`. Service settings:
 | `PAYMENT_WINDOW` | `10m` | Protection of a PAYING hold; must be at least `HOLD_TTL` |
 | `SWEEP_INTERVAL` | `500ms` | Sweeper period (at least 50ms) |
 | `SWEEP_BATCH` | `500` | Holds released per query |
-| `ADMISSION_PUBLIC_KEY_FILES` | required | Comma-separated PEM public keys; list two during rotation |
+| `ADMISSION_JWKS_URL` | none | queue-svc's key set, e.g. `http://queue:8080/.well-known/jwks.json`; followed without restarts (see `docs/services/queue.md`, decisions) |
+| `ADMISSION_PUBLIC_KEY_FILES` | none | Comma-separated PEM public keys, trusted in addition to the JWKS. At least one of the two is required |
+| `JWKS_REFRESH_INTERVAL` | `5m` | Periodic refresh of the key set |
+| `JWKS_MIN_REFRESH_INTERVAL` | `30s` | Shortest gap between fetches, also for tokens with unknown key IDs |
 | `TOKEN_LEEWAY` | `5s` | Clock skew tolerated on token times |
 | `ADMIN_TOKEN` | required | Operator token, at least 32 characters; removed from the environment after loading |
 | `HTTP_ACCESS_LOG_SUCCESS` | `true` | Log successful requests; set to `false` for load tests |
@@ -144,5 +147,6 @@ are defined in `internal/platform/config`. Service settings:
 | `holdfast_inventory_available` | `event` | Last observed pool per event |
 | `holdfast_sweeper_runs_total` | `result` | ok, error |
 | `holdfast_sweeper_duration_seconds` | | One pass over all events |
+| `holdfast_authn_jwks_fetches_total` | `result` | Key-set fetches: ok, error |
 | `holdfast_http_requests_total` | `route`, `code` | RED metrics per route pattern |
 | `holdfast_http_request_duration_seconds` | `route` | Latency per route pattern |

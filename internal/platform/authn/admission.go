@@ -83,16 +83,29 @@ func (i *Issuer) IssueUntil(userID, eventID, sessionID string, rank int64, notAf
 	return signed, exp, nil
 }
 
-// Verifier checks admission tokens against a set of trusted public keys.
+// KeyLookup finds the trusted public key for a key ID ("kid").
+type KeyLookup func(kid string) (ed25519.PublicKey, bool)
+
+// Verifier checks admission tokens against trusted public keys.
 type Verifier struct {
-	keys   map[string]ed25519.PublicKey
+	lookup KeyLookup
 	parser *jwt.Parser
 }
 
-// NewVerifier trusts keys (indexed by KeyID) and tolerates leeway of clock skew.
+// NewVerifier trusts a fixed set of keys (indexed by KeyID) and tolerates
+// leeway of clock skew.
 func NewVerifier(keys map[string]ed25519.PublicKey, leeway time.Duration) *Verifier {
+	return NewVerifierWith(func(kid string) (ed25519.PublicKey, bool) {
+		k, ok := keys[kid]
+		return k, ok
+	}, leeway)
+}
+
+// NewVerifierWith trusts whatever lookup returns, for example a JWKSClient
+// that follows the issuer's published key set.
+func NewVerifierWith(lookup KeyLookup, leeway time.Duration) *Verifier {
 	return &Verifier{
-		keys: keys,
+		lookup: lookup,
 		parser: jwt.NewParser(
 			jwt.WithValidMethods([]string{jwt.SigningMethodEdDSA.Alg()}), // rejects "none" and HMAC confusion
 			jwt.WithIssuer(IssuerQueue),
@@ -109,7 +122,7 @@ func (v *Verifier) Verify(token string) (*AdmissionClaims, error) {
 	claims := &AdmissionClaims{}
 	_, err := v.parser.ParseWithClaims(token, claims, func(t *jwt.Token) (any, error) {
 		kid, _ := t.Header["kid"].(string)
-		key, ok := v.keys[kid]
+		key, ok := v.lookup(kid)
 		if !ok {
 			return nil, fmt.Errorf("unknown key id %q", kid)
 		}

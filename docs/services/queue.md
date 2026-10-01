@@ -6,7 +6,7 @@ how fast. Binary: `cmd/queue`. Code: `internal/queue`.
 **Status:** Phase 2 in progress. Built: provisioning (task 2.1), joining
 (task 2.2), the T0 transition (task 2.3), positions (task 2.4), the admission
 controller (task 2.5), the status document (task 2.6) and admission tokens
-(task 2.7). Task 2.8 closes inventory's token gaps (single use, JWKS fetch).
+(task 2.7). Task 2.8 decided how inventory-svc trusts those tokens (below).
 
 ## Responsibilities
 
@@ -154,8 +154,8 @@ The public keys admission tokens are signed with, as RFC 8037 JWKs (`kty`
 `OKP`, `crv` `Ed25519`), each with the `kid` tokens carry. Public,
 `Cache-Control: public, max-age=300`. During a key rotation it lists the new
 signing key and the old one (`ADMISSION_EXTRA_PUBLIC_KEY_FILES`), so tokens
-signed by either stay verifiable. inventory-svc still reads trusted keys from
-files; fetching this set is part of task 2.8.
+signed by either stay verifiable. inventory-svc follows this set (see the
+decisions below).
 
 ### `PUT /internal/v1/events/{eventID}/queue` (admin port)
 
@@ -243,6 +243,40 @@ status document (task 2.6) and exchange their turn for an admission token
 Not built yet: limiting admissions by the units left in inventory
 (oversubscription) and marking the queue `SOLD_OUT` (see the progress log,
 issue P17); adaptive admission (AIMD) is Phase 5.
+
+## Decisions: how admission tokens are trusted (task 2.8)
+
+**One token per admission session, not single use.** A token may be used for
+several requests during its short life. A single-use token (a `jti` store
+consulted on every hold) would refuse a hold retried after a network failure,
+breaking the rule that every request can be retried. Reuse is bounded instead:
+
+- the token is bound to one user and one event;
+- it expires at the earlier of `ADMISSION_TOKEN_TTL` (10 minutes) and the
+  buyer's session slot (task 2.7);
+- holds are idempotent: a retried request returns the original hold;
+- the per-user cap (I4) bounds the units any token can hold, whatever it does.
+
+A stolen token therefore lets its thief act as that one buyer, on that one
+event, within that buyer's cap, for at most the rest of their session.
+
+**Keys come from this service's JWKS.** inventory-svc fetches
+`/.well-known/jwks.json` (`ADMISSION_JWKS_URL`) instead of being configured
+with key files (still supported, and trusted in addition):
+
+- it refreshes every 5 minutes, and at once when a token carries an unknown
+  key ID, but at most every 30 seconds, so made-up key IDs cannot make it
+  hammer queue-svc;
+- known keys are answered without waiting on any fetch; a failed fetch keeps
+  the last good keys; keys no longer published are dropped at the next
+  refresh;
+- only Ed25519 signing keys whose `kid` is the key ID of the key itself are
+  accepted;
+- inventory-svc is not ready (`/readyz`) while it knows no key.
+
+So a key rotation needs no restart of inventory-svc, but publish the new key
+before signing with it (RB-Q-7): an abrupt switch can see new tokens refused
+for up to 30 seconds.
 
 ## Error codes
 

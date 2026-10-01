@@ -1443,7 +1443,7 @@ Every gRPC call carries a deadline (for example 800 ms) and trace context. Serve
 | Multi-account scalping | One queue slot per verified identity; a per-user cap across holds and purchases; verified-only opening window | queue-svc, inventory-svc, booking-svc |
 | Agents grabbing the opening minutes | Role-based agent lockout window, mirroring the IRCTC rule | policy engine |
 | Token theft | 15-minute EdDSA access tokens; rotating refresh tokens with reuse detection; httpOnly, Secure, SameSite=Strict cookie | auth-svc |
-| Replayed admission tokens or webhooks | `jti` single-use store; HMAC over timestamp plus body with a 5-minute tolerance | queue-svc, payment-svc |
+| Replayed admission tokens or webhooks | Admission tokens: short-lived (capped at the buyer's session), bound to one user and event, with idempotent holds and the per-user cap; not single use, so retries work (decided in task 2.8). Webhooks: HMAC over timestamp plus body with a 5-minute tolerance, plus dedup | queue-svc, inventory-svc, payment-svc |
 | Reading someone else's booking (BOLA) | Ownership check on every read; 404 for non-owners | booking-svc |
 | Forged webhooks | HMAC-SHA256 with constant-time comparison; secret rotation | payment-svc |
 | Data exposure | Phone stored as an HMAC plus last 4 digits; OTPs and refresh tokens stored hashed; least-privilege database roles | auth-svc, PostgreSQL |
@@ -2002,8 +2002,8 @@ The dates are illustrative. The gates are not.
 
 | Gap | Resolved in |
 |---|---|
-| Admission tokens can be reused until they expire (no `jti` check) | Phase 2, task 2.8 |
-| inventory reads trusted keys from files (no JWKS fetch) | Phase 2, task 2.8 |
+| Admission tokens can be reused until they expire (no `jti` check) | Phase 2, task 2.8: ✅ decided to keep reuse within the session-capped lifetime (retries must work) |
+| inventory reads trusted keys from files (no JWKS fetch) | Phase 2, task 2.8: ✅ inventory follows queue-svc's JWKS |
 | `MarkPaying`, `Confirm` and `ReleaseForFailedPayment` are reachable only in-process | Phase 3, task 3.4 |
 | inventory has no sale-freeze check | Phase 4, task 4.3 |
 | The rebuild ignores units in pending bookings | Phase 5, task 5.3 |
@@ -2050,7 +2050,7 @@ The dates are illustrative. The gates are not.
 - [x] 2.5 **Admission controller.** One leader per event, elected with a PostgreSQL advisory lock. The fencing epoch `adm:{E}:epoch` is incremented on every leadership change, and `advance.lua` moves `admittedUpTo` only when the caller's epoch matches. The leader ticks every 250 ms and caps concurrency with Little's Law, using the session set `adm:{E}:sessions`.
 - [x] 2.6 **Status document.** The leader writes `q:{E}:status` (state, `admittedUpTo`, queue size, `updatedAt`) on every tick. `GET /v1/events/{id}/status` serves it with `Cache-Control: public, max-age=1`.
 - [x] 2.7 **Admission tokens.** `POST /v1/queue/{id}/admit` issues the Ed25519 token (reusing `authn.Issuer`) when your rank is within `admittedUpTo`, and records your session. Publish `GET /.well-known/jwks.json`. *Built with the session recorded when the leader admits a rank (a slot in `adm:{E}:sessions`, task 2.5); claiming is read-only and safe to repeat, and the token never outlives the slot.*
-- [ ] 2.8 **Close the inventory token gaps.** Decide whether one admission token allows one hold or a bounded number, and enforce it with `jti:*`. Decide between trusted key files and fetching JWKS with caching. Record both decisions in `docs/services/queue.md`.
+- [x] 2.8 **Close the inventory token gaps.** Decide whether one admission token allows one hold or a bounded number, and enforce it with `jti:*`. Decide between trusted key files and fetching JWKS with caching. Record both decisions in `docs/services/queue.md`.
 - [ ] 2.9 **NGINX.** Route `/v1/queue/` to queue-svc and hold paths to inventory-svc. Micro-cache `/v1/events/{id}/status` and `/availability` for one second, with `proxy_cache_lock on` and `proxy_cache_use_stale updating`.
 - [ ] 2.10 **Metrics and dashboard.** Queue size, `admittedUpTo`, active sessions, admission rate, status-document age, leader epoch and join results, added to Grafana.
 - [ ] 2.11 **Tests.** Unit: admission math, token bucket, rank, the Spearman helper. Integration: join idempotency and no re-roll, the T0 switch, a stale epoch rejected by `advance.lua`, session expiry. A model test for F1 (nobody is admitted ahead of a lower rank). A failover test (two controllers, one killed). `testing/synctest` for the tick loop.

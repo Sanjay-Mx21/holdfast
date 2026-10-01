@@ -99,7 +99,13 @@ connection; every 250 ms it runs `advance.lua`, which refuses a stale epoch
   (`POST /v1/queue/{id}/admit`), capped at their session slot, and publishes
   its public keys at `/.well-known/jwks.json`.
 - Buyers present admission tokens: EdDSA JWTs bound to one user and one
-  event, with audience `holdfast-inventory` and issuer `holdfast-queue`. Only
+  event, with audience `holdfast-inventory` and issuer `holdfast-queue`.
+  inventory-svc follows queue-svc's JWKS (refreshed every 5 minutes, and on an
+  unknown key ID at most every 30 seconds), so key rotation needs no restart.
+  Tokens are usable for their short life, not single use, so retries work;
+  reuse is bounded by the session-capped expiry, the user and event binding,
+  idempotent holds and the per-user cap (decision record in
+  `docs/services/queue.md`). Only
   the EdDSA algorithm is accepted, and `kid` selects among trusted public keys
   so rotation needs no downtime.
 - Until auth-svc exists, queue-svc identifies buyers by the `X-Dev-User-Id`
@@ -125,7 +131,8 @@ connection; every 250 ms it runs `advance.lua`, which refuses a stale epoch
   `holdfast_hold_confirms_total{outcome}`, `holdfast_inventory_available{event}`,
   `holdfast_sweeper_*`, `holdfast_http_*` (labelled by route pattern, never
   raw paths) and `holdfast_build_info`.
-- **Health:** `/livez` never checks dependencies. `/readyz` checks Valkey and
+- **Health:** `/livez` never checks dependencies. `/readyz` checks Valkey (and,
+  on inventory-svc with a JWKS URL, that some admission-token key is known) and
   returns 503 from the moment SIGTERM arrives.
 - Tracing arrives with the first cross-service call (ADR 0004).
 
