@@ -1,0 +1,119 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # the migration check compares against origin/main
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - name: go vet
+        run: go vet ./... && go vet -tags=integration ./...
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.14.0
+      - name: Migration files
+        run: ./scripts/check-migrations.sh
+
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: go test -race -count=1 ./...
+
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: holdfast
+          POSTGRES_PASSWORD: holdfast
+          POSTGRES_DB: holdfast
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U holdfast -d holdfast"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      valkey:
+        image: valkey/valkey:9.1.2
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "valkey-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      HOLDFAST_TEST_VALKEY_ADDR: localhost:6379
+      HOLDFAST_TEST_POSTGRES_DSN: postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Integration tests
+        run: go test -race -count=1 -tags=integration ./...
+      - name: "E1: no oversell under 50,000 concurrent buyers"
+        run: >-
+          go run ./cmd/contention -mode all
+          -valkey "$HOLDFAST_TEST_VALKEY_ADDR" -dsn "$HOLDFAST_TEST_POSTGRES_DSN"
+          -json e1-results.json
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: e1-results
+          path: e1-results.json
+          if-no-files-found: ignore
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # secret scanning looks at history
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      - uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  images:
+    needs: [lint, unit, integration]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [inventory, holdfastctl]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          tags: holdfast/${{ matrix.service }}:${{ github.sha }}
+          build-args: |
+            SERVICE=${{ matrix.service }}
+            VERSION=${{ github.sha }}
+            COMMIT=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}

@@ -1,0 +1,91 @@
+SHELL := /usr/bin/env bash
+.DEFAULT_GOAL := help
+
+GO       ?= go
+VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+COMMIT   ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+PKG      := github.com/Sanjay-Mx21/holdfast
+LDFLAGS  := -s -w -X $(PKG)/internal/platform/buildinfo.Version=$(VERSION) -X $(PKG)/internal/platform/buildinfo.Commit=$(COMMIT)
+BINARIES := inventory holdfastctl contention
+IMAGES   := inventory holdfastctl
+GOLANGCI_LINT_VERSION := v2.14.0
+
+# Local dependencies started by `make infra` / `make up`.
+export HOLDFAST_TEST_VALKEY_ADDR  ?= localhost:6379
+export HOLDFAST_TEST_POSTGRES_DSN ?= postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable
+
+NAME     ?= Demo Concert
+CAPACITY ?= 1000
+
+help: ## Show available targets
+	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+deps: ## Resolve modules and write go.sum (run once after cloning, then commit go.sum)
+	$(GO) mod tidy
+
+deps-upgrade: ## Upgrade every dependency to its latest release
+	$(GO) get -u ./... && $(GO) mod tidy
+
+tools: ## Install golangci-lint
+	$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+
+fmt: ## Format all Go code
+	gofmt -w -s .
+
+vet: ## go vet, including integration-tagged files
+	$(GO) vet ./... && $(GO) vet -tags=integration ./...
+
+lint: ## golangci-lint + migration checks
+	golangci-lint run ./...
+	./scripts/check-migrations.sh
+
+test: ## Unit tests with the race detector (no external dependencies)
+	$(GO) test -race -count=1 ./...
+
+itest: infra ## Integration tests against PostgreSQL + Valkey (starts them with Docker)
+	$(GO) test -race -count=1 -tags=integration ./...
+
+cover: ## Unit + integration coverage report (coverage.html)
+	$(GO) test -count=1 -tags=integration -coverprofile=coverage.out ./... && $(GO) tool cover -html=coverage.out -o coverage.html
+
+build: ## Build every binary into ./bin
+	@mkdir -p bin
+	@for b in $(BINARIES); do $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o bin/$$b ./cmd/$$b || exit 1; done
+
+keys: ## Generate the dev admission-token key pair in .local/keys (idempotent)
+	$(GO) run ./cmd/holdfastctl keys generate --out-dir .local/keys --if-missing
+
+infra: ## Start only PostgreSQL and Valkey
+	docker compose up -d --wait postgres valkey
+
+up: keys ## Start the whole local stack (migrations run automatically)
+	docker compose up -d --build
+
+down: ## Stop the stack (keeps data volumes)
+	docker compose down
+
+clean: ## Stop the stack, delete volumes and build output
+	docker compose down -v; rm -rf bin coverage.out coverage.html e1-results.json
+
+migrate: ## Apply migrations to the local database
+	$(GO) run ./cmd/holdfastctl migrate --dsn "$(HOLDFAST_TEST_POSTGRES_DSN)"
+
+event: ## Create and provision an event: make event NAME="Coldplay Mumbai" CAPACITY=1000
+	$(GO) run ./cmd/holdfastctl event create --name "$(NAME)" --capacity $(CAPACITY) \
+		--dsn "$(HOLDFAST_TEST_POSTGRES_DSN)" --valkey "$(HOLDFAST_TEST_VALKEY_ADDR)"
+
+token: ## Print a dev admission token: make -s token EVENT=<event id>
+	@test -n "$(EVENT)" || (echo "usage: make -s token EVENT=<event id>" >&2 && exit 1)
+	@$(GO) run ./cmd/holdfastctl token mint --event "$(EVENT)" 2>/dev/null
+
+run-inventory: ## Run inventory-svc on the host using .env
+	@test -f .env || (echo "copy .env.example to .env first" >&2 && exit 1)
+	set -a && . ./.env && set +a && $(GO) run ./cmd/inventory
+
+e1: ## Experiment E1: contention against local Valkey and PostgreSQL
+	$(GO) run ./cmd/contention -mode all -valkey "$(HOLDFAST_TEST_VALKEY_ADDR)" -dsn "$(HOLDFAST_TEST_POSTGRES_DSN)" -json e1-results.json
+
+docker: ## Build container images for the deployable binaries
+	@for s in $(IMAGES); do docker build --build-arg SERVICE=$$s --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) -t holdfast/$$s:$(VERSION) . || exit 1; done
+
+.PHONY: help deps deps-upgrade tools fmt vet lint test itest cover build keys infra up down clean migrate event token run-inventory e1 docker

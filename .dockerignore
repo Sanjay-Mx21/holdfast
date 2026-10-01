@@ -1,0 +1,10 @@
+.git
+.github
+.local
+.env
+bin
+docs
+deploy
+*.md
+coverage.*
+e1-results.json
