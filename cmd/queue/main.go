@@ -1,8 +1,9 @@
 // Command queue runs queue-svc: the waiting room and admission control.
 //
-// Ports: HTTP_ADDR serves the public API (joining the queue); ADMIN_ADDR
-// (internal only) serves /metrics, /livez, /readyz, /buildz, /debug/pprof
-// and operator endpoints.
+// Ports: HTTP_ADDR serves the public API (joining the queue, positions);
+// ADMIN_ADDR (internal only) serves /metrics, /livez, /readyz, /buildz,
+// /debug/pprof and operator endpoints. Background work: the T0 opener and
+// the admission controllers (one per event, leader-elected in PostgreSQL).
 package main
 
 import (
@@ -22,6 +23,7 @@ import (
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/httpx"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/logging"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/metrics"
+	"github.com/Sanjay-Mx21/holdfast/internal/platform/postgres"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/ratelimit"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/valkey"
 	"github.com/Sanjay-Mx21/holdfast/internal/queue"
@@ -30,9 +32,10 @@ import (
 const serviceName = "queue"
 
 type config struct {
-	Service cfgpkg.Service
-	HTTP    cfgpkg.HTTP
-	Valkey  cfgpkg.Valkey
+	Service  cfgpkg.Service
+	HTTP     cfgpkg.HTTP
+	Valkey   cfgpkg.Valkey
+	Postgres cfgpkg.Postgres
 
 	AdminToken string `env:"ADMIN_TOKEN,required,unset"`
 
@@ -52,6 +55,13 @@ type config struct {
 	// at T0. Joins open a due queue themselves, so this only bounds how long
 	// the state can read PRE after T0 when nobody joins.
 	OpenCheckInterval time.Duration `env:"OPEN_CHECK_INTERVAL" envDefault:"250ms"`
+
+	// Admission control: the leader of each event admits every
+	// ADMISSION_TICK; standbys retry leadership every LEADER_RETRY_INTERVAL;
+	// new events are picked up every ADMISSION_RESCAN_INTERVAL.
+	AdmissionTick           time.Duration `env:"ADMISSION_TICK" envDefault:"250ms"`
+	LeaderRetryInterval     time.Duration `env:"LEADER_RETRY_INTERVAL" envDefault:"2s"`
+	AdmissionRescanInterval time.Duration `env:"ADMISSION_RESCAN_INTERVAL" envDefault:"2s"`
 }
 
 func (c *config) limits() queue.Limits {
@@ -63,12 +73,21 @@ func (c *config) limits() queue.Limits {
 }
 
 func (c *config) Validate() error {
-	errs := []error{cfgpkg.ValidateAll(c.Service, c.HTTP, c.Valkey)}
+	errs := []error{cfgpkg.ValidateAll(c.Service, c.HTTP, c.Valkey, c.Postgres)}
 	if len(c.AdminToken) < 32 {
 		errs = append(errs, errors.New("ADMIN_TOKEN must be at least 32 characters"))
 	}
 	if c.OpenCheckInterval < 10*time.Millisecond || c.OpenCheckInterval > 10*time.Second {
 		errs = append(errs, errors.New("OPEN_CHECK_INTERVAL must be between 10ms and 10s"))
+	}
+	if c.AdmissionTick < 10*time.Millisecond || c.AdmissionTick > 10*time.Second {
+		errs = append(errs, errors.New("ADMISSION_TICK must be between 10ms and 10s"))
+	}
+	if c.LeaderRetryInterval < 100*time.Millisecond || c.LeaderRetryInterval > time.Minute {
+		errs = append(errs, errors.New("LEADER_RETRY_INTERVAL must be between 100ms and 1m"))
+	}
+	if c.AdmissionRescanInterval < 100*time.Millisecond || c.AdmissionRescanInterval > time.Minute {
+		errs = append(errs, errors.New("ADMISSION_RESCAN_INTERVAL must be between 100ms and 1m"))
 	}
 	if c.DevIdentity && c.Service.Environment == "production" {
 		errs = append(errs, errors.New("DEV_IDENTITY must not be enabled in production: anyone could claim any user ID"))
@@ -114,6 +133,15 @@ func run(ctx context.Context) error {
 	}
 	defer func() { _ = rdb.Close() }()
 
+	// PostgreSQL elects the admission leaders (advisory locks). Readiness does
+	// not depend on it: if it is down, admissions pause but joining and
+	// positions keep working.
+	pool, err := postgres.NewPool(ctx, cfg.Postgres, serviceName)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+
 	store := queue.NewStore(rdb)
 	if err := store.LoadScripts(ctx); err != nil {
 		return err
@@ -149,6 +177,9 @@ func run(ctx context.Context) error {
 		httpx.NewServer("public", cfg.HTTP.Addr, public, cfg.HTTP, log),
 		httpx.NewServer("admin", cfg.HTTP.AdminAddr, admin, cfg.HTTP, log, httpx.WithWriteTimeout(90*time.Second)),
 		queue.NewOpener(store, cfg.OpenCheckInterval, qm, log),
+		queue.NewAdmission(store, pool, queue.AdmissionConfig{
+			Tick: cfg.AdmissionTick, RetryLeadership: cfg.LeaderRetryInterval, Rescan: cfg.AdmissionRescanInterval,
+		}, qm, log),
 	)
 }
 

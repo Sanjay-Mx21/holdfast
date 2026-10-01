@@ -26,8 +26,9 @@ var (
 	joinScript      = loadScript("join.lua")
 	openScript      = loadScript("open.lua")
 	positionScript  = loadScript("position.lua")
+	advanceScript   = loadScript("advance.lua")
 
-	allScripts = []*redis.Script{provisionScript, joinScript, openScript, positionScript}
+	allScripts = []*redis.Script{provisionScript, joinScript, openScript, positionScript, advanceScript}
 )
 
 // Store is the Valkey-backed state of the waiting room. It runs the atomic
@@ -151,6 +152,40 @@ func (s *Store) Position(ctx context.Context, eventID, userID string) (Position,
 		return Position{EventID: eventID, State: State(state), RandomizingAt: time.UnixMilli(value).UTC()}, nil
 	}
 	return Position{EventID: eventID, State: State(state), Rank: value}, nil
+}
+
+// NewTerm starts a leadership term for the event's admission controller and
+// returns its fencing epoch. Every call returns a larger epoch, so writes
+// from any earlier leader are refused from now on.
+func (s *Store) NewTerm(ctx context.Context, eventID string) (int64, error) {
+	epoch, err := s.rdb.Incr(ctx, keysFor(eventID).epoch()).Result()
+	if err != nil {
+		return 0, fmt.Errorf("queue: new term: %w", err)
+	}
+	return epoch, nil
+}
+
+// Advance is one admission tick for the leader holding epoch: it admits up to
+// n more people, within the session budget. A caller whose epoch is no
+// longer current gets ErrFenced and must stop leading.
+func (s *Store) Advance(ctx context.Context, eventID string, epoch int64, n int) (Advance, error) {
+	k := keysFor(eventID)
+	res, err := advanceScript.Run(ctx, s.rdb,
+		[]string{k.epoch(), k.state(), k.config(), k.members(), k.admitted(), k.sessions()},
+		epoch, n).Int64Slice()
+	if err != nil {
+		return Advance{}, fmt.Errorf("queue: advance: %w", err)
+	}
+	if len(res) != 4 {
+		return Advance{}, fmt.Errorf("queue: advance: unexpected reply %v", res)
+	}
+	switch res[0] {
+	case -1:
+		return Advance{}, ErrFenced
+	case -2:
+		return Advance{}, ErrEventNotFound
+	}
+	return Advance{AdmittedUpTo: res[1], Admitted: res[2], ActiveSessions: res[3]}, nil
 }
 
 // Events lists provisioned events (the opener's work list).
