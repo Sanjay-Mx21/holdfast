@@ -67,6 +67,8 @@ Sources: the dates recorded in the ADRs and the plan, file modification times, a
 | 2026-10-01 21:24 | Quickstart end to end (task 1.5.5): event created, hold 201 with 998 left, replay returns `Idempotent-Replayed: true`, no token returns 401 | `curl` against `localhost:8081` |
 | 2026-10-01 21:26 | `make itest` passes (task 1.5.6), with inventory-svc stopped (see section 6) | `make itest` |
 | 2026-10-01 21:26 | First E1 run passes: 50,000 buyers → 1,000 holds in 2.0 s (hold p50 34 ms, p95 61 ms, p99 142 ms); 10,000 guard confirmations → 1,000 sold; all invariant checks PASS | `make e1`, `RESULT: PASS` |
+| 2026-10-01 ~21:40 | Bring-up fixes and docs pushed to GitHub (4 commits, `f3567bb` to `e684acc`). CI: lint, unit, integration with E1, and both image builds pass; the security job fails on govulncheck (pgx GO-2026-5004, x/text GO-2026-5970) | GitHub Actions run 36889052003 |
+| 2026-10-01 ~22:00 | Vulnerable modules upgraded (pgx v5.11.0, x/text v0.42.0, x/sys v0.48.0); govulncheck clean; test, lint, itest and E1 pass again | Commit `1101cc3` |
 
 ## 3. What is complete, and what each piece contributes
 
@@ -140,10 +142,10 @@ Sources: the dates recorded in the ADRs and the plan, file modification times, a
 | Task | Status |
 |---|---|
 | 1.5.1 Install Go 1.27, make, golangci-lint (and k6 for Phase 2) | ✅ In WSL2 Ubuntu 24.04 |
-| 1.5.2 Run `go mod tidy` and commit `go.sum` | ◐ `go.sum` generated; not yet committed |
+| 1.5.2 Run `go mod tidy` and commit `go.sum` | ✅ Committed in `f3567bb` |
 | 1.5.3 to 1.5.6 `make test`, `make lint`, `make up`, quickstart, `make itest` | ✅ All pass. `make itest` is flaky while the `make up` stack runs: the inventory-svc sweeper releases the test's short-lived holds first. Stop it with `docker compose stop inventory` before `make itest` until this is fixed |
 | 1.5.7 and 1.5.8 E1 soak (100 runs) and hold latency in `loadtest/results/` | ◐ One run passes (hold p99 142 ms on an i7-1250U, 16 GB); the 100-run soak and the results file are still to do |
-| 1.5.9 Push to GitHub with every CI job green | ◐ Pushed on 2026-10-01; CI is expected to fail until `go.sum` is committed |
+| 1.5.9 Push to GitHub with every CI job green | ◐ Pushed; every job passed except security (govulncheck), fixed in `1101cc3`. Confirm the next run is green |
 | 1.5.10 Branch protection, Dependabot, `LICENSE` | ⏳ |
 | 1.5.11 `CHANGELOG.md`, tag `v0.1.0`, GitHub release | ⏳ |
 | 1.5.12 GitHub milestones M2 to M6, one issue per task | ⏳ |
