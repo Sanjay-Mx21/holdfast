@@ -4,9 +4,9 @@ The waiting room: decides who may enter the purchase path, in what order and
 how fast. Binary: `cmd/queue`. Code: `internal/queue`.
 
 **Status:** Phase 2 in progress. Built: provisioning (task 2.1), joining
-(task 2.2), the T0 transition (task 2.3), positions (task 2.4) and the
-admission controller (task 2.5). The status document and admission tokens
-follow in tasks 2.6 to 2.8.
+(task 2.2), the T0 transition (task 2.3), positions (task 2.4), the admission
+controller (task 2.5) and the status document (task 2.6). Admission tokens
+follow in tasks 2.7 and 2.8.
 
 ## Responsibilities
 
@@ -14,7 +14,7 @@ follow in tasks 2.6 to 2.8.
 - Accept joins: a random lottery position before T0, arrival order after (built).
 - Switch from PRE to OPEN at T0 and tell buyers their rank (built).
 - Admit buyers at a controlled rate (built) and issue admission tokens (task 2.7).
-- Publish the status document every client polls (task 2.6).
+- Publish the status document every client polls (built).
 
 ## API
 
@@ -93,6 +93,34 @@ Cache-Control: private, no-store
   (`rl:position-user:<user id>`, default burst 10, 1 per second) refuses
   polling with 429 `RATE_LIMITED` and `Retry-After`.
 - A user who never joined gets 404 `NOT_IN_QUEUE`.
+
+### `GET /v1/events/{eventID}/status`
+
+The status document: the one thing the whole waiting room polls (every 3 s
+plus jitter, in the design). No identity needed.
+
+```http
+HTTP/1.1 200 OK
+Cache-Control: public, max-age=1
+
+{"eventId":"0196f0c1-...","state":"OPEN","opensAt":"2026-10-05T12:00:00Z",
+ "admittedUpTo":4200,"queueSize":50000,"updatedAt":"2026-10-05T12:01:30.250Z"}
+```
+
+- A buyer whose rank (from `/me`) is at most `admittedUpTo` may claim their
+  turn (task 2.7).
+- The admission leader rewrites it on every tick, inside the fenced
+  `advance.lua`, in every state: it is always consistent with `admittedUpTo`,
+  and a stale leader cannot overwrite it. `updatedAt` says how fresh it is.
+- `state` follows the T0 clock rule: `PRE` past T0 reads as `OPEN`.
+- It is identical for every client, so a shared cache may keep it for one
+  second (`public, max-age=1`): with the NGINX micro-cache (task 2.9) the
+  origin sees about one request per second per cache node, however many
+  clients poll. It is not rate limited per client.
+- Until a leader has written one (just provisioned, or no leader elected), a
+  fallback is built from the raw keys with `"updatedAt": null`, so a missing
+  leader is visible. An event without a queue returns 404 `EVENT_NOT_FOUND`;
+  errors are never publicly cacheable (`no-store`).
 
 ### `PUT /internal/v1/events/{eventID}/queue` (admin port)
 
@@ -189,7 +217,7 @@ issue P17); adaptive admission (AIMD) is Phase 5.
 | `INVALID_REQUEST` | 400 | Malformed event ID, or a setting outside its bounds (`detail` says which) |
 | `INVALID_BODY`, `MALFORMED_JSON`, `EMPTY_BODY`, `TRAILING_DATA`, `INVALID_FIELD_TYPE` | 400 | Provisioning body problems, including unknown fields |
 | `UNSUPPORTED_MEDIA_TYPE` | 415 | Provisioning body is not JSON |
-| `EVENT_NOT_FOUND` | 404 | Join or position: the event has no waiting room (not provisioned) |
+| `EVENT_NOT_FOUND` | 404 | Join, position or status: the event has no waiting room (not provisioned) |
 | `NOT_IN_QUEUE` | 404 | Position: the caller has not joined this event's queue |
 | `QUEUE_CLOSED` | 409 | Join: the queue is `SOLD_OUT` or `CLOSED` |
 | `PROVISION_CONFLICT` | 409 | Queue already provisioned with different settings |
@@ -219,13 +247,13 @@ switch is task 4.3; `SOLD_OUT` and `CLOSED` come with the admission controller.
 | `q:{E}:members` | sorted set | user ID → score: lottery score in [0, 1) before T0, 1 plus the arrival number after |
 | `q:{E}:seq` | integer | Arrival counter for joins after T0 |
 | `q:{E}:admitted` | integer | `admittedUpTo`, the highest admitted rank |
+| `q:{E}:status` | string (JSON) | The status document: `state`, `opensAtMs`, `admittedUpTo`, `queueSize`, `updatedAtMs`; rewritten every tick by the leader |
 | `adm:{E}:epoch` | integer | Fencing token: incremented by every new admission leader |
 | `adm:{E}:sessions` | sorted set | Admitted rank → session expiry in ms; the concurrency budget |
 | `q:events` | set | Provisioned events: the opener's and the admission controllers' work list (one global key, never used inside multi-key scripts) |
 | `rl:SCOPE:ID` | hash | Token bucket: `tokens`, `ts_ms`; expires once the bucket would be full again |
 
-The remaining keys in the design doc (section 8.2), `q:{E}:status` and
-`jti:*`, arrive with tasks 2.6 to 2.8.
+The remaining key in the design doc (section 8.2), `jti:*`, arrives with task 2.8.
 
 ## Scripts
 
@@ -235,7 +263,8 @@ The remaining keys in the design doc (section 8.2), `q:{E}:status` and
 | `join.lua` | {1 joined, 0 already joined, -1 closed, -2 not provisioned, member's score, 1 if this join opened the queue at T0} |
 | `open.lua` | {1 opened, 0 nothing to do, -1 not provisioned; ms late after T0, or ms left until T0} |
 | `position.lua` | {1 ranked, 0 before T0, -1 not in queue, -2 not provisioned; rank or opens_at_ms; state} |
-| `advance.lua` | {1 admitted some, 0 nothing to admit, -1 fenced, -2 not provisioned; admittedUpTo, admitted now, active sessions} |
+| `advance.lua` | {1 admitted some, 0 nothing to admit, -1 fenced, -2 not provisioned; admittedUpTo, admitted now, active sessions}; also rewrites `q:{E}:status` unless fenced |
+| `status.lua` | {1 the leader's document, 0 fallback without `updatedAtMs`, -2 not provisioned; the document as JSON} |
 | `token_bucket.lua` (`internal/platform/ratelimit`) | {allowed 1 or 0, remaining tokens × 1000, retry after ms} |
 
 ## Configuration

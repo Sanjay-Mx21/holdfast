@@ -18,8 +18,9 @@ sells exactly 1,000 (never 1,001) and stays up while doing it.
   settings and lets buyers join: a random lottery position before the sale
   opens, arrival order after, behind per-IP and per-user rate limits. The
   switch at the opening time follows Valkey's clock, buyers can look up their
-  rank, and a leader-elected controller admits them at the event's rate
-  without exceeding its concurrent-session budget. Admission tokens come next.
+  rank, a leader-elected controller admits them at the event's rate without
+  exceeding its concurrent-session budget, and one cacheable status document
+  tells everyone how far admission has got. Admission tokens come next.
 - **holdfastctl** runs migrations, generates dev keys and tokens, creates
   events, provisions their inventory and queue, and rebuilds inventory.
 - **Experiment E1** (`cmd/contention`) fires 50,000 concurrent buyers at 1,000
@@ -103,6 +104,7 @@ failure with `HOLDFAST_TEST_SEED=<seed>`.
 | `PUT /internal/v1/events/{eventID}/inventory` | Operator token, admin port only | Provision inventory |
 | `POST /v1/queue/{eventID}/join` | `X-Dev-User-Id` until Phase 4 (queue-svc) | Join the waiting room |
 | `GET /v1/queue/{eventID}/me` | `X-Dev-User-Id` until Phase 4 (queue-svc) | Your rank after T0, or when the lottery closes |
+| `GET /v1/events/{eventID}/status` | Public (queue-svc) | The shared status document (cacheable for 1 s) |
 | `PUT /internal/v1/events/{eventID}/queue` | Operator token, queue-svc admin port only | Provision the queue |
 
 Errors are RFC 9457 problem documents with stable `code` values; see

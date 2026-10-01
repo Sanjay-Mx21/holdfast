@@ -32,13 +32,13 @@ All times are IST (UTC+05:30).
 | **Project** | A flash-sale booking engine that sells exactly the available units under extreme demand, never more |
 | **Plan version** | 2.0 (1 October 2026) |
 | **Milestones complete** | M0 Foundation, M1 Correctness core and M1.5 Bring-up and baseline |
-| **Current milestone** | M2 Fair waiting room: 5 of 14 tasks done (section 8); next task 2.6, [issue #10](https://github.com/Sanjay-Mx21/holdfast/issues/10) |
+| **Current milestone** | M2 Fair waiting room: 6 of 14 tasks done (section 8); next task 2.7, [issue #11](https://github.com/Sanjay-Mx21/holdfast/issues/11) |
 | **Progress to v1.0** | About 22% (11 of about 51 focused-work days, excluding Phase 7 stretch goals) |
 | **Repository** | [github.com/Sanjay-Mx21/holdfast](https://github.com/Sanjay-Mx21/holdfast), branch `main` |
 | **First commit** | `2173e50` "first commit", 2026-10-01 20:20, 82 files, 12,973 lines |
 | **Latest release** | [v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0), 2026-10-01 23:47, on `9dcd2f8` |
 | **CI** | Green since 2026-10-01 22:00; `main` is protected and every change needs a pull request with all 6 jobs passing |
-| **Issues so far** | 33 recorded: 27 resolved, 6 open (section 6) |
+| **Issues so far** | 35 recorded: 29 resolved, 6 open (section 6) |
 
 <Callout type="tip" title="v0.1.0 released, M1.5 complete (2026-10-01)">
 
@@ -100,7 +100,8 @@ Sources: the dates recorded in the ADRs and the plan, file modification times, a
 | 2026-10-02 01:41 | **Task 2.3 (the T0 transition) built and verified:** Valkey's clock decides T0; a join after T0 flips PRE to OPEN itself; an idempotent opener in every replica flips it when nobody joins. 11 new or changed tests; the full queue integration suite passed 100 runs with a live opener on the same Valkey; E1 still passes. End to end: a queue with no joins opened 63 ms after T0; a join after T0 got FIFO while the early joiner kept their lottery place; a join opened a queue whose T0 had passed unnoticed. Departs from the plan (issue P15) | PR #59 (merged by the assistant at 01:48 after all 7 checks passed), `fbb790a`; issue #7 closed |
 | 2026-10-02 ~01:50 | The owner asked for Phase 2 to be completed task by task, with the assistant merging, fixing issues itself unless critical, updating this log for every task, and stopping at the end of the phase | Conversation; saved as a standing instruction |
 | 2026-10-02 01:56 | **Task 2.4 (positions) built and verified:** `GET /v1/queue/{id}/me` returns `randomizingAt` before T0 and the 1-based rank from T0 on, judged by Valkey's clock in one read-only script, behind a per-user rate limit. 4 unit and 5 integration tests; the queue integration suite passed 20 runs; E1 still passes. End to end: 5 lottery joiners got ranks 1 to 5 in random order and a late joiner rank 6; 404 for a non-member; `private, no-store`; 10 lookups then 429 | PR #60 (merged by the assistant at 02:01 after all 7 checks passed), `2b099c4`; issue #8 closed |
-| 2026-10-02 02:12 | **Task 2.5 (admission controller) built and verified:** one leader per event (PostgreSQL advisory lock on a dedicated connection), fenced by `adm:{E}:epoch`; every 250 ms `advance.lua` admits at the event's rate within the session budget (Little's Law). 3 unit and 5 integration tests, including two real controllers with failover; the queue integration suite passed 20 runs with the stack's queue-svc running; E1 still passes. End to end: 84.5 admitted per second against 83 configured; admission stopped at exactly 50 with 50 sessions allowed; nothing admitted while FROZEN; restarting queue-svc moved leadership to a new process with epoch 2 | Branch `feat/p2-admission-controller`, issue #9 |
+| 2026-10-02 02:12 | **Task 2.5 (admission controller) built and verified:** one leader per event (PostgreSQL advisory lock on a dedicated connection), fenced by `adm:{E}:epoch`; every 250 ms `advance.lua` admits at the event's rate within the session budget (Little's Law). 3 unit and 5 integration tests, including two real controllers with failover; the queue integration suite passed 20 runs with the stack's queue-svc running; E1 still passes. End to end: 84.5 admitted per second against 83 configured; admission stopped at exactly 50 with 50 sessions allowed; nothing admitted while FROZEN; restarting queue-svc moved leadership to a new process with epoch 2 | PR #61 (merged by the assistant at 02:18 after all 7 checks passed), `5dea566`; issue #9 closed |
+| 2026-10-02 02:47 | **Task 2.6 (status document) built and verified:** the leader rewrites `q:{E}:status` every tick inside the fenced `advance.lua`; `GET /v1/events/{id}/status` serves it with `public, max-age=1`, or a fallback with `updatedAt: null` before any leader. 3 unit and 5 integration tests. Two timing tests made robust to WSL2 clock steps (E7, D11); the queue integration suite then passed 120 runs. End to end: 404 for an unknown event, the fallback right after provisioning, `queueSize` 300 and fresh `updatedAt` once the leader ticked, `admittedUpTo` climbing at 20 per second after T0 | Branch `feat/p2-status-document`, issue #10 |
 
 ## 3. What is complete, and what each piece contributes
 
@@ -178,9 +179,9 @@ Every problem met while bringing Drop 1 up and running the soak on 2026-10-01, i
 | Group | Recorded | Resolved | Open |
 |---|---|---|---|
 | P: defects in the repository | 17 | 11 | 6 |
-| E: machine and network | 6 | 6 | 0 |
-| D: diagnosis and process | 10 | 10 | 0 |
-| **Total** | **33** | **27** | **6** |
+| E: machine and network | 7 | 7 | 0 |
+| D: diagnosis and process | 11 | 11 | 0 |
+| **Total** | **35** | **29** | **6** |
 
 CI took **three runs** to go green:
 
@@ -222,6 +223,7 @@ CI took **three runs** to go green:
 | E4 | Docker Desktop was stopped and not connected to the Ubuntu distro | `docker` was unavailable inside Ubuntu | Default settings | Enabled WSL integration for Ubuntu-24.04 (original settings backed up to `settings-store.json.bak-holdfast`) and started Docker Desktop | ✅ |
 | E5 | The first `make up` failed: "TLS handshake timeout" while resolving `docker/dockerfile:1` from Docker Hub. While pre-pulling, `docker/dockerfile:1` timed out once more and `postgres:18` returned a transient 401 | Stack did not start on the first attempt | Flaky connection to Docker Hub | Pre-pulled all 7 images with retries; the next `make up` succeeded on its first attempt | ✅ |
 | E6 | The first soak attempt started while the laptop ran on battery at 8% and discharging | Risk of shutdown mid-soak, and throttled CPU: its first hold p99 was 218 ms against 142 and 167 ms earlier | Not checked before starting | Stopped after 5 runs (all passed), kept as `*-on-battery-aborted.*`, restarted on AC power. Check power before any benchmark | ✅ |
+| E7 | WSL2 steps the Linux wall clock to resync it with Windows: jumps of about 0.73 to 0.77 s, three times in about 8 minutes of testing | Anything comparing a wall-clock deadline with elapsed time can be off by that much. HoldFast's T0 is a wall-clock time judged by Valkey's clock, so after a step T0 arrives earlier in elapsed time, which is correct behaviour; production servers slew their clocks instead of stepping them | WSL2's time sync | Timing tests now judge "too early" by Valkey's clock and detect a step (wall-clock elapsed minus monotonic elapsed above 50 ms), then skip only the check the step invalidates, with a log line | ✅ Worked around in tests |
 
 ### 6.4 Diagnosis and process
 
@@ -237,6 +239,7 @@ CI took **three runs** to go green:
 | D8 | The first version of the new T0 tests provisioned an event (which registers it on the opener's work list) and then removed it from the list. A running stack's opener on the same Valkey could open the event in that gap | `TestJoinAtT0OpensTheQueueItself` failed once in 40 runs: the join found the queue already open | The repeat runs were there to catch exactly this. The fixture now runs `provision.lua` directly and never registers the event; the full suite then passed 100 runs with the stack's opener running | ✅ |
 | D9 | Multi-line edit scripts run inline through the shell aborted three times with an unmatched-quote error, so nothing ran; once, an edit script stopped partway because gofmt had re-aligned a line it expected, leaving one file edited and the rest not | Wasted attempts and a half-applied change, all caught before any commit | Each run was checked with git status before retrying; edit scripts now live in files and write a file only if all its edits match | ✅ |
 | D10 | The first end-to-end admission check joined 200 buyers from one machine; the per-IP join limit let 35 in, so the session cap of 50 was never reached and that part of the check proved nothing | Misleading partial result | Rerun with members written straight into the queue (testing admission, not joining): 50 of 500 admitted at a cap of 50 | ✅ |
+| D11 | `TestOpenerOpensAtT0WithoutJoins` failed about once in 60 to 100 runs ("queue opened before T0", later "opened 526 ms after T0"). The first fix, reading the state before checking the clock, assumed a slow read and was not enough | Two rounds of flaky failures | Instrumenting the failure showed the stored opening time already 541 ms in the past by the wall clock while the test's monotonic clock said 192 ms to go: the wall clock had stepped (E7). The test now uses the wall clock throughout and detects steps; 100 runs passed, 3 of them logging a step | ✅ |
 
 ### 6.5 Owner setup actions
 
@@ -277,8 +280,8 @@ Goal: everyone waits fairly, and buyers enter the purchase path at a controlled 
 | 2.2 Joining | [#6](https://github.com/Sanjay-Mx21/holdfast/issues/6) | ✅ 2026-10-02 (PR #58): `join.lua` (lottery in PRE only), `POST /v1/queue/{id}/join`, per-IP and per-user token buckets, development identity, join metric |
 | 2.3 The T0 transition | [#7](https://github.com/Sanjay-Mx21/holdfast/issues/7) | ✅ 2026-10-02 (PR #59): T0 by Valkey's clock inside `join.lua`, `open.lua` and an opener in every replica, `q:events` work list, metrics |
 | 2.4 Your position | [#8](https://github.com/Sanjay-Mx21/holdfast/issues/8) | ✅ 2026-10-02 (PR #60): `GET /v1/queue/{id}/me`, `position.lua`, per-user limit, metric |
-| 2.5 Admission controller | [#9](https://github.com/Sanjay-Mx21/holdfast/issues/9) | ✅ 2026-10-02: advisory-lock leader per event, fencing epoch, `advance.lua` with the session budget, rate allowance, metrics. Deferred: oversubscription and sold-out (P17) |
-| 2.6 Status document | [#10](https://github.com/Sanjay-Mx21/holdfast/issues/10) | ⏳ |
+| 2.5 Admission controller | [#9](https://github.com/Sanjay-Mx21/holdfast/issues/9) | ✅ 2026-10-02 (PR #61): advisory-lock leader per event, fencing epoch, `advance.lua` with the session budget, rate allowance, metrics. Deferred: oversubscription and sold-out (P17) |
+| 2.6 Status document | [#10](https://github.com/Sanjay-Mx21/holdfast/issues/10) | ✅ 2026-10-02: written by the leader every tick in `advance.lua`, `GET /v1/events/{id}/status` (`public, max-age=1`), fallback before any leader |
 | 2.7 Admission tokens | [#11](https://github.com/Sanjay-Mx21/holdfast/issues/11) | ⏳ |
 | 2.8 Close the inventory token gaps | [#12](https://github.com/Sanjay-Mx21/holdfast/issues/12) | ⏳ |
 | 2.9 NGINX | [#13](https://github.com/Sanjay-Mx21/holdfast/issues/13) | ⏳ |
