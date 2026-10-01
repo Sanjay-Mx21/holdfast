@@ -683,7 +683,7 @@ Every key for event E carries the hash tag `{E}`, so all keys a script touches l
 | `rl:SCOPE:ID` | hash | token-bucket state: tokens and last refill | auto-expiring |
 | `jti:ID` | string | spent one-time token IDs, for replay protection | token lifetime |
 
-- **Built so far.** The `inv:*` keys exist since Drop 1; `q:{E}:config` and `q:{E}:state` since task 2.1. The other `q:*` keys and the `adm:*`, `rl:*` and `jti:*` keys arrive with the rest of Phase 2.
+- **Built so far.** The `inv:*` keys exist since Drop 1; `q:{E}:config` and `q:{E}:state` since task 2.1. `q:{E}:members`, `q:{E}:seq` and `rl:*` since task 2.2. The other `q:*` keys and the `adm:*` and `jti:*` keys arrive with the rest of Phase 2.
 - **A deliberate hot key.** One event's inventory lives on one shard. Admission control caps that traffic at a few hundred operations per second, so this is fine. Seat-map mode (Phase 7) shards by section with tags like `{E:S}`.
 - **Durability.** AOF with `appendfsync everysec`, plus a replica and Sentinel in Phase 5. A crash can lose roughly the last second of writes, which is exactly why PostgreSQL owns the final guard and why runbook RB-2 exists.
 - **Memory.** One million queue members at roughly 100 bytes each is about 100 MB. Compact user IDs (16 raw bytes instead of a 36-character UUID string) shrink that a lot.
@@ -743,25 +743,28 @@ Store every Lua script in `internal/*/scripts/*.lua`, embed it with `go:embed`, 
 Under pure FIFO, whoever has the fastest network, the most tabs or a bot wins, and everyone is rewarded for hammering the site early. A lottery for everyone who arrives before T0 removes that incentive. `ZADD NX` makes joining idempotent and stops people re-rolling their position.
 
 ```lua
--- join.lua
+-- join.lua (as built in task 2.2: internal/queue/scripts/join.lua)
 -- KEYS[1] q:{E}:state   KEYS[2] q:{E}:members   KEYS[3] q:{E}:seq
 -- ARGV[1] user_id       ARGV[2] pre-T0 random score as a string, generated server-side
--- Returns {code, score}: 1 joined, 0 already joined (idempotent), -1 closed
+-- Returns {code, score}: 1 joined, 0 already joined (idempotent), -1 closed, -2 not provisioned
 local state = redis.call('GET', KEYS[1])
+if not state then return {-2, ''} end
 if state == 'SOLD_OUT' or state == 'CLOSED' then return {-1, ''} end
 
 local existing = redis.call('ZSCORE', KEYS[2], ARGV[1])
 if existing then return {0, existing} end        -- no re-rolling the lottery
 
 local score
-if state == 'OPEN' then
-  score = tostring(1 + redis.call('INCR', KEYS[3]))   -- FIFO after T0
-else
+if state == 'PRE' then
   score = ARGV[2]                                       -- lottery before T0
+else
+  score = tostring(1 + redis.call('INCR', KEYS[3]))   -- FIFO from T0 on, FROZEN included
 end
 redis.call('ZADD', KEYS[2], 'NX', score, ARGV[1])
 return {1, score}   -- strings, because Lua numbers are truncated to integers in replies
 ```
+
+Version 2.0 of this doc tested `state == 'OPEN'` and gave the lottery to every other state. FROZEN is only reachable after T0, so a join while frozen would have received a score below 1 and jumped ahead of everyone who joined after T0, breaking F1. Task 2.2 found and fixed it: the lottery is for `PRE` only.
 
 ```go
 // lotteryScore returns a crypto-random float64 in [0, 1) with 53 bits of entropy.
@@ -778,7 +781,7 @@ func lotteryScore() (string, error) {
 
 - At T0 the admission leader flips `q:{E}:state` from PRE to OPEN. Because scripts are atomic, every join lands unambiguously before or after the flip.
 - Rank is `ZRANK q:{E}:members user` plus 1. Before T0 the API returns "randomizing at T0" instead of a rank.
-- Joins are still accepted while the sale is FROZEN; only admissions pause.
+- Joins are still accepted while the sale is FROZEN, in arrival order; only admissions pause.
 
 ### 9.2 The admission controller
 
@@ -1352,7 +1355,7 @@ Measure the **collapse ratio**: edge requests per second (`X-Cache-Status: HIT`)
 | `GET /v1/events/{id}` | none | Event details | 200, cached 60 s |
 | `GET /v1/events/{id}/status` | none | The shared status document | 200, edge-cached 1 s |
 | `GET /v1/queue/{id}/challenge` | access token | Proof-of-work challenge | 200 |
-| `POST /v1/queue/{id}/join` | access token + PoW solution | Join the waiting room | 202; 403 outside your policy window; 409 when closed |
+| `POST /v1/queue/{id}/join` | access token + PoW solution (until Phase 4: the `X-Dev-User-Id` development header, no PoW) | Join the waiting room ✅ | 202; 403 outside your policy window (Phase 4); 404 `EVENT_NOT_FOUND`; 409 `QUEUE_CLOSED`; 429 `RATE_LIMITED` with Retry-After |
 | `GET /v1/queue/{id}/me` | access token | Your rank after T0 | 200 with `rank`, or `randomizingAt` before T0 |
 | `POST /v1/queue/{id}/admit` | access token | Exchange your turn for an admission token | 200; 409 `NOT_YOUR_TURN` |
 | `POST /v1/events/{id}/holds` | admission token + Idempotency-Key | Hold N units ✅ | 201, and 201 with `Idempotent-Replayed: true` on a replay; 409 `SOLD_OUT`; 422 `USER_LIMIT`, `INVALID_QUANTITY` or `IDEMPOTENCY_KEY_REUSED`; 403 `TOKEN_EVENT_MISMATCH` |
@@ -1631,16 +1634,16 @@ holdfast/
 │   ├── inventory/                    ✅ inventory-svc (public :8080, admin :9090)
 │   ├── holdfastctl/                  ✅ operator CLI
 │   ├── contention/                   ✅ experiment E1 harness
-│   ├── queue/                        ✅ queue-svc: provisioning (2.1)    ⏳ rest of 2
+│   ├── queue/                        ✅ queue-svc: provisioning, joining (2.1, 2.2)    ⏳ rest of 2
 │   ├── booking/  payment/  mockpsp/  ⏳ 3
 │   ├── auth/                         ⏳ 4
 │   └── auditor/                      ⏳ 5
 ├── internal/
 │   ├── platform/                     ✅ app, authn, buildinfo, config, health, httpx, logging, metrics, postgres, valkey
-│   │                                 ⏳ ratelimit (2); kafka, otel, outbox, idempotency, grpcx (3)
+│   │                                 ✅ ratelimit (2.2)    ⏳ kafka, otel, outbox, idempotency, grpcx (3)
 │   ├── inventory/                    ✅ Lua scripts (go:embed), store, service, sweeper, HTTP handler, metrics
 │   ├── booking/                      ✅ catalog, guard         ⏳ saga, deadline job (3)
-│   ├── queue/                        ✅ provisioning (2.1)    ⏳ lottery, admission controller, status document (2)
+│   ├── queue/                        ✅ provisioning, lottery and joining (2.1, 2.2)    ⏳ admission controller, status document (2)
 │   ├── payment/                      ⏳ intents, webhooks, ledger, PSP client (3); reconciler (5)
 │   ├── auth/                         ⏳ OTP, tokens, JWKS (4)
 │   ├── policy/                       ⏳ verified window, agent lockout, caps, freeze (4)
@@ -2038,7 +2041,7 @@ The dates are illustrative. The gates are not.
 **Tasks, in order:**
 
 - [x] 2.1 **Queue provisioning.** An operator endpoint on the queue admin port, `PUT /internal/v1/events/{id}/queue`, takes the sale opening time, admission rate, maximum sessions and session TTL, stores them in `q:{E}:config` and sets `q:{E}:state` to PRE. `holdfastctl event create` provisions the queue as well as inventory.
-- [ ] 2.2 **Joining.** `join.lua` and `POST /v1/queue/{id}/join`. The lottery score comes from `crypto/rand` in Go; `ZADD NX` makes joining idempotent and stops re-rolls. Apply per-IP and per-user token buckets (`rl:*`). Until Phase 4, identity comes from a development header.
+- [x] 2.2 **Joining.** `join.lua` and `POST /v1/queue/{id}/join`. The lottery score comes from `crypto/rand` in Go; `ZADD NX` makes joining idempotent and stops re-rolls. Apply per-IP and per-user token buckets (`rl:*`). Until Phase 4, identity comes from a development header.
 - [ ] 2.3 **The T0 transition.** The leader flips PRE to OPEN at the opening time; joins after T0 get FIFO scores.
 - [ ] 2.4 **Your position.** `GET /v1/queue/{id}/me` returns your rank after T0, and `randomizingAt` before it.
 - [ ] 2.5 **Admission controller.** One leader per event, elected with a PostgreSQL advisory lock. The fencing epoch `adm:{E}:epoch` is incremented on every leadership change, and `advance.lua` moves `admittedUpTo` only when the caller's epoch matches. The leader ticks every 250 ms and caps concurrency with Little's Law, using the session set `adm:{E}:sessions`.

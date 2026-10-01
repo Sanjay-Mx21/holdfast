@@ -1,8 +1,8 @@
 // Command queue runs queue-svc: the waiting room and admission control.
 //
-// Ports: HTTP_ADDR serves the public API (buyer routes arrive with joining,
-// task 2.2); ADMIN_ADDR (internal only) serves /metrics, /livez, /readyz,
-// /buildz, /debug/pprof and operator endpoints.
+// Ports: HTTP_ADDR serves the public API (joining the queue); ADMIN_ADDR
+// (internal only) serves /metrics, /livez, /readyz, /buildz, /debug/pprof
+// and operator endpoints.
 package main
 
 import (
@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/httpx"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/logging"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/metrics"
+	"github.com/Sanjay-Mx21/holdfast/internal/platform/ratelimit"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/valkey"
 	"github.com/Sanjay-Mx21/holdfast/internal/queue"
 )
@@ -33,12 +35,38 @@ type config struct {
 	Valkey  cfgpkg.Valkey
 
 	AdminToken string `env:"ADMIN_TOKEN,required,unset"`
+
+	// DevIdentity trusts the X-Dev-User-Id header as the buyer's identity
+	// until auth-svc exists (Phase 4). Never allowed in production.
+	DevIdentity bool `env:"DEV_IDENTITY" envDefault:"false"`
+
+	JoinIPBurst       int     `env:"JOIN_IP_BURST" envDefault:"30"`
+	JoinIPPerSecond   float64 `env:"JOIN_IP_PER_SECOND" envDefault:"10"`
+	JoinUserBurst     int     `env:"JOIN_USER_BURST" envDefault:"5"`
+	JoinUserPerSecond float64 `env:"JOIN_USER_PER_SECOND" envDefault:"1"`
+}
+
+func (c *config) joinLimits() queue.JoinLimits {
+	return queue.JoinLimits{
+		PerIP:   ratelimit.Rule{Capacity: c.JoinIPBurst, Rate: c.JoinIPPerSecond},
+		PerUser: ratelimit.Rule{Capacity: c.JoinUserBurst, Rate: c.JoinUserPerSecond},
+	}
 }
 
 func (c *config) Validate() error {
 	errs := []error{cfgpkg.ValidateAll(c.Service, c.HTTP, c.Valkey)}
 	if len(c.AdminToken) < 32 {
 		errs = append(errs, errors.New("ADMIN_TOKEN must be at least 32 characters"))
+	}
+	if c.DevIdentity && c.Service.Environment == "production" {
+		errs = append(errs, errors.New("DEV_IDENTITY must not be enabled in production: anyone could claim any user ID"))
+	}
+	l := c.joinLimits()
+	if err := l.PerIP.Validate(); err != nil {
+		errs = append(errs, fmt.Errorf("JOIN_IP_BURST / JOIN_IP_PER_SECOND: %w", err))
+	}
+	if err := l.PerUser.Validate(); err != nil {
+		errs = append(errs, fmt.Errorf("JOIN_USER_BURST / JOIN_USER_PER_SECOND: %w", err))
 	}
 	return errors.Join(errs...)
 }
@@ -76,6 +104,10 @@ func run(ctx context.Context) error {
 		return err
 	}
 	svc := queue.NewService(store)
+	lim := ratelimit.New(rdb)
+	if err := lim.Load(ctx); err != nil {
+		return err
+	}
 
 	hc := health.New(2*time.Second, valkey.Check(rdb))
 	httpMetrics := httpx.NewHTTPMetrics(reg)
@@ -89,10 +121,24 @@ func run(ctx context.Context) error {
 		httpx.Timeout(cfg.HTTP.RequestTimeout),
 	)
 	admin := httpx.NewAdminRouter(metrics.Handler(reg), hc)
-	queue.NewHandler(svc).Register(admin, authn.RequireStaticToken(cfg.AdminToken))
+	identity := noIdentity
+	if cfg.DevIdentity {
+		log.Warn("DEV_IDENTITY is on: buyers are identified by the X-Dev-User-Id header, which anyone can set")
+		identity = authn.RequireDevIdentity()
+	}
+	queue.NewHandler(svc, lim, cfg.joinLimits(), queue.NewMetrics(reg)).
+		Register(public, admin, identity, authn.RequireStaticToken(cfg.AdminToken))
 
 	return app.Run(ctx, log, hc, cfg.HTTP.DrainDelay,
 		httpx.NewServer("public", cfg.HTTP.Addr, public, cfg.HTTP, log),
 		httpx.NewServer("admin", cfg.HTTP.AdminAddr, admin, cfg.HTTP, log, httpx.WithWriteTimeout(90*time.Second)),
 	)
+}
+
+// noIdentity rejects every buyer request: without DEV_IDENTITY there is no
+// way to authenticate buyers until auth-svc exists (Phase 4).
+func noIdentity(http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		httpx.WriteProblem(w, r, httpx.Unauthorized("UNAUTHENTICATED", "buyer authentication is not available yet"))
+	})
 }

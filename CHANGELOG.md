@@ -16,6 +16,21 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
   `docs/runbooks/queue.md`.
 - `holdfastctl event create` provisions the queue as well as inventory
   (`--admission-rate`, `--max-sessions`, `--session-ttl`).
+- **Joining the queue** (task 2.2): `POST /v1/queue/{id}/join`. Before T0 a
+  joiner gets a random lottery position from `crypto/rand`; from T0 on, a
+  place in arrival order behind every lottery joiner. Idempotent: a rejoin
+  keeps the original position. Per-IP (IPv6 per /64) and per-user token
+  buckets return 429 `RATE_LIMITED` with `Retry-After`. Buyers are
+  identified by `X-Dev-User-Id` when `DEV_IDENTITY=true`, which production
+  refuses. Metric `holdfast_queue_joins_total{result}`.
+- `internal/platform/ratelimit`: a token bucket in Valkey, shared by every
+  replica.
+
+### Fixed
+
+- The design doc's `join.lua` gave a lottery position to joins while the sale
+  was `FROZEN`, which would have let them jump ahead of everyone who joined
+  after T0. The built script, and the doc, give the lottery to `PRE` only.
 
 ### Changed
 

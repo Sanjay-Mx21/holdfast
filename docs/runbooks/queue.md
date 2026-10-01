@@ -33,3 +33,21 @@ settings. Nothing was changed: the stored settings still apply.
 3. If Valkey lost its data, re-provision each event's queue with its original
    settings (provisioning is idempotent). Joined members cannot be recovered
    yet; the design's recovery path arrives with Phase 5.
+
+## RB-Q-3 Legitimate buyers get `RATE_LIMITED`
+
+**Symptom:** joins return 429 `RATE_LIMITED`;
+`holdfast_queue_joins_total{result="rate_limited_ip"}` or
+`{result="rate_limited_user"}` climbs.
+
+1. Tell the two apart with the metric's `result` label.
+2. **Per IP, many users:** usually a shared address: a campus, an office or a
+   mobile carrier's NAT, or every request arriving from a proxy because
+   forwarded-for headers are not trusted yet (task 2.9). Check the busiest
+   buckets: `docker compose exec valkey valkey-cli --scan --pattern 'rl:join-ip:*'`.
+   Raise `JOIN_IP_BURST` and `JOIN_IP_PER_SECOND` and restart queue-svc.
+3. **Per user:** a client retrying in a tight loop. Joining is idempotent, so
+   one successful join is enough; fix the client before raising
+   `JOIN_USER_BURST`.
+4. Buckets expire on their own once full. To clear one at once:
+   `valkey-cli DEL "rl:join-ip:<ip>"` (IPv6: the /64 with `:` written as `_`).

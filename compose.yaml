@@ -78,6 +78,7 @@ services:
       ENVIRONMENT: development
       LOG_FORMAT: text
       VALKEY_ADDRS: valkey:6379
+      DEV_IDENTITY: "true" # buyers identified by X-Dev-User-Id until auth-svc (Phase 4)
       ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-only-admin-token-change-me-0123456789}
     ports:
       - "8082:8080" # public API
