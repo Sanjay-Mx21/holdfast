@@ -29,7 +29,7 @@ IDs match section 2.3 of the design doc.
 | Service | Status | Owns | Talks to |
 |---|---|---|---|
 | inventory-svc (`cmd/inventory`) | Built | Valkey keys `inv:*` | Valkey |
-| queue-svc (`cmd/queue`) | Phase 2 in progress: provisioning, joining and the T0 transition built | Valkey keys `q:*`, `rl:*` | Valkey |
+| queue-svc (`cmd/queue`) | Phase 2 in progress: provisioning, joining, the T0 transition and positions built | Valkey keys `q:*`, `rl:*` | Valkey |
 | booking final guard (`internal/booking`) | Built as a library | `booking` schema | PostgreSQL |
 | holdfastctl (`cmd/holdfastctl`) | Built | Nothing (operator tool) | PostgreSQL, Valkey |
 | booking, payment, auth | Planned | See design doc | |
