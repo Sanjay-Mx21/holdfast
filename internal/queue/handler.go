@@ -23,6 +23,7 @@ import (
 type service interface {
 	Provision(ctx context.Context, eventID string, cfg EventConfig) (bool, error)
 	Join(ctx context.Context, eventID, userID string) (JoinResult, error)
+	Position(ctx context.Context, eventID, userID string) (Position, error)
 }
 
 // limiter is what the HTTP layer needs from *ratelimit.Limiter.
@@ -30,29 +31,33 @@ type limiter interface {
 	Allow(ctx context.Context, scope, id string, rule ratelimit.Rule) (ratelimit.Decision, error)
 }
 
-// JoinLimits are the token buckets applied to joining: one per client IP
-// (an IPv6 client counts per /64 network) and one per user.
-type JoinLimits struct {
-	PerIP   ratelimit.Rule
-	PerUser ratelimit.Rule
+// Limits are the token buckets applied to buyer requests. Joining passes one
+// per client IP (an IPv6 client counts per /64 network) and one per user;
+// position lookups pass one per user, since clients should ask once after T0
+// and then follow the shared status document.
+type Limits struct {
+	JoinPerIP       ratelimit.Rule
+	JoinPerUser     ratelimit.Rule
+	PositionPerUser ratelimit.Rule
 }
 
 // Rate-limit scopes (the SCOPE part of rl:SCOPE:ID keys).
 const (
-	scopeJoinIP   = "join-ip"
-	scopeJoinUser = "join-user"
+	scopeJoinIP       = "join-ip"
+	scopeJoinUser     = "join-user"
+	scopePositionUser = "position-user"
 )
 
 // Handler exposes the queue over HTTP.
 type Handler struct {
 	svc    service
 	lim    limiter
-	limits JoinLimits
+	limits Limits
 	m      *Metrics
 }
 
 // NewHandler returns a Handler.
-func NewHandler(svc service, lim limiter, limits JoinLimits, m *Metrics) *Handler {
+func NewHandler(svc service, lim limiter, limits Limits, m *Metrics) *Handler {
 	return &Handler{svc: svc, lim: lim, limits: limits, m: m}
 }
 
@@ -61,6 +66,7 @@ func NewHandler(svc service, lim limiter, limits JoinLimits, m *Metrics) *Handle
 // operator authentication.
 func (h *Handler) Register(public, internal *httpx.Router, identity, operator httpx.Middleware) {
 	public.Handle("POST /v1/queue/{eventID}/join", identity(http.HandlerFunc(h.join)))
+	public.Handle("GET /v1/queue/{eventID}/me", identity(http.HandlerFunc(h.position)))
 	internal.Handle("PUT /internal/v1/events/{eventID}/queue", operator(http.HandlerFunc(h.provision)))
 }
 
@@ -78,8 +84,8 @@ func (h *Handler) join(w http.ResponseWriter, r *http.Request) {
 	}
 	// Per-IP first: it is the cheaper signal against one machine hammering
 	// with many identities. Then per user, against one identity on many IPs.
-	if !h.allow(w, r, scopeJoinIP, clientID(r), h.limits.PerIP, joinRateLimitedIP) ||
-		!h.allow(w, r, scopeJoinUser, user, h.limits.PerUser, joinRateLimitUser) {
+	if !h.allow(w, r, scopeJoinIP, clientID(r), h.limits.JoinPerIP, h.m.join, joinRateLimitedIP) ||
+		!h.allow(w, r, scopeJoinUser, user, h.limits.JoinPerUser, h.m.join, joinRateLimitUser) {
 		return
 	}
 	res, err := h.svc.Join(r.Context(), r.PathValue("eventID"), user)
@@ -100,20 +106,57 @@ func (h *Handler) join(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusAccepted, joinResponse{EventID: res.EventID, Joined: res.Joined, Ordering: res.Ordering})
 }
 
-// allow takes a token for (scope, id). When the bucket is empty it writes
-// 429 with Retry-After and returns false.
-func (h *Handler) allow(w http.ResponseWriter, r *http.Request, scope, id string, rule ratelimit.Rule, result string) bool {
+type positionResponse struct {
+	EventID       string     `json:"eventId"`
+	State         State      `json:"state"`
+	Rank          int64      `json:"rank,omitempty"`
+	RandomizingAt *time.Time `json:"randomizingAt,omitempty"`
+}
+
+func (h *Handler) position(w http.ResponseWriter, r *http.Request) {
+	user, ok := authn.UserFrom(r.Context())
+	if !ok {
+		httpx.WriteProblem(w, r, httpx.Unauthorized("UNAUTHENTICATED", "authentication required"))
+		return
+	}
+	if !h.allow(w, r, scopePositionUser, user, h.limits.PositionPerUser, h.m.position, positionRateLimited) {
+		return
+	}
+	pos, err := h.svc.Position(r.Context(), r.PathValue("eventID"), user)
+	if err != nil {
+		h.m.position(positionResultOf(err))
+		writeError(w, r, err)
+		return
+	}
+	resp := positionResponse{EventID: pos.EventID, State: pos.State}
+	if pos.Rank > 0 {
+		h.m.position(positionRanked)
+		resp.Rank = pos.Rank
+	} else {
+		h.m.position(positionRandomizing)
+		at := pos.RandomizingAt
+		resp.RandomizingAt = &at
+	}
+	// One user's place in line: never stored by a shared cache.
+	w.Header().Set("Cache-Control", "private, no-store")
+	httpx.WriteJSON(w, http.StatusOK, resp)
+}
+
+// allow takes a token for (scope, id), recording refusals and limiter
+// failures with record. When the bucket is empty it writes 429 with
+// Retry-After and returns false.
+func (h *Handler) allow(w http.ResponseWriter, r *http.Request, scope, id string, rule ratelimit.Rule, record func(string), result string) bool {
 	d, err := h.lim.Allow(r.Context(), scope, id, rule)
 	if err != nil {
-		h.m.join(joinError)
+		record("error")
 		writeError(w, r, err)
 		return false
 	}
 	if d.Allowed {
 		return true
 	}
-	h.m.join(result)
-	p := httpx.NewProblem(http.StatusTooManyRequests, "RATE_LIMITED", "too many join attempts; retry after the time in Retry-After")
+	record(result)
+	p := httpx.NewProblem(http.StatusTooManyRequests, "RATE_LIMITED", "too many requests; retry after the time in Retry-After")
 	p.RetryAfter = int(math.Ceil(d.RetryAfter.Seconds()))
 	if p.RetryAfter < 1 {
 		p.RetryAfter = 1
@@ -138,6 +181,19 @@ func clientID(r *http.Request) string {
 		a = p.Addr()
 	}
 	return strings.ReplaceAll(a.String(), ":", "_")
+}
+
+func positionResultOf(err error) string {
+	switch {
+	case errors.Is(err, ErrNotInQueue):
+		return positionNotInQueue
+	case errors.Is(err, ErrEventNotFound):
+		return positionNotFound
+	case errors.Is(err, ErrInvalidRequest):
+		return positionInvalid
+	default:
+		return positionError
+	}
 }
 
 func joinResultOf(err error) string {
@@ -202,6 +258,8 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 		p = httpx.NotFound("EVENT_NOT_FOUND", "this event has no waiting room")
 	case errors.Is(err, ErrQueueClosed):
 		p = httpx.Conflict("QUEUE_CLOSED", "the waiting room for this event is closed")
+	case errors.Is(err, ErrNotInQueue):
+		p = httpx.NotFound("NOT_IN_QUEUE", "you have not joined this event's waiting room")
 	case isUnavailable(err):
 		logging.FromContext(r.Context()).Warn("dependency unavailable", "err", err)
 		p = httpx.Unavailable("queue is temporarily unavailable; retry shortly", 1)

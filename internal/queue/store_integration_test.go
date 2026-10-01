@@ -504,3 +504,101 @@ func TestOpenerOpensAtT0WithoutJoins(t *testing.T) {
 	}
 	mustEqual(t, "state", f.state(t), string(StateOpen))
 }
+
+// --- position ---
+
+func TestPositionBeforeT0IsRandomizing(t *testing.T) {
+	f := newFixture(t)
+	opensAt := time.Now().Add(time.Hour).Truncate(time.Millisecond)
+	f.provisionAt(t, opensAt)
+	user := uuid.NewString()
+	if _, err := f.svc.Join(ctx, f.eventID, user); err != nil {
+		t.Fatal(err)
+	}
+	pos, err := f.svc.Position(ctx, f.eventID, strings.ToUpper(user))
+	mustErr(t, "position", err, nil)
+	mustEqual(t, "rank before T0", pos.Rank, int64(0))
+	mustEqual(t, "state", pos.State, StatePre)
+	if !pos.RandomizingAt.Equal(opensAt) {
+		t.Fatalf("randomizingAt %s, want %s", pos.RandomizingAt, opensAt)
+	}
+}
+
+func TestPositionAfterT0IsRankInLine(t *testing.T) {
+	f := newFixture(t)
+	f.provision(t)
+	lottery := make([]string, 30)
+	for i := range lottery {
+		lottery[i] = uuid.NewString()
+		if _, err := f.svc.Join(ctx, f.eventID, lottery[i]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f.setState(t, StateOpen)
+	late := uuid.NewString()
+	if _, err := f.svc.Join(ctx, f.eventID, late); err != nil {
+		t.Fatal(err)
+	}
+	// Every rank 1..30 goes to exactly one lottery joiner, in score order.
+	seen := make(map[int64]bool)
+	for _, u := range lottery {
+		pos, err := f.svc.Position(ctx, f.eventID, u)
+		mustErr(t, "position", err, nil)
+		mustEqual(t, "state", pos.State, StateOpen)
+		if pos.Rank < 1 || pos.Rank > 30 || seen[pos.Rank] {
+			t.Fatalf("lottery joiner got rank %d (duplicate or out of 1..30)", pos.Rank)
+		}
+		seen[pos.Rank] = true
+		if !pos.RandomizingAt.IsZero() {
+			t.Fatal("randomizingAt set after T0")
+		}
+	}
+	pos, err := f.svc.Position(ctx, f.eventID, late)
+	mustErr(t, "late position", err, nil)
+	mustEqual(t, "rank of the first post-T0 joiner", pos.Rank, int64(31))
+}
+
+// A queue still marked PRE after T0 (no join or opener has flipped it yet)
+// already has final lottery ranks: T0 is the clock's call.
+func TestPositionPreButPastT0ReadsAsOpen(t *testing.T) {
+	f := newFixture(t)
+	f.provisionAt(t, time.Now().Add(150*time.Millisecond))
+	user := uuid.NewString()
+	if _, err := f.svc.Join(ctx, f.eventID, user); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(200 * time.Millisecond)
+	mustEqual(t, "stored state", f.state(t), string(StatePre))
+	pos, err := f.svc.Position(ctx, f.eventID, user)
+	mustErr(t, "position", err, nil)
+	mustEqual(t, "reported state", pos.State, StateOpen)
+	mustEqual(t, "rank", pos.Rank, int64(1))
+	mustEqual(t, "stored state untouched (lookups are read-only)", f.state(t), string(StatePre))
+}
+
+func TestPositionKeepsRankInLaterStates(t *testing.T) {
+	f := newFixture(t)
+	f.provision(t)
+	user := uuid.NewString()
+	if _, err := f.svc.Join(ctx, f.eventID, user); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []State{StateFrozen, StateSoldOut, StateClosed} {
+		f.setState(t, s)
+		pos, err := f.svc.Position(ctx, f.eventID, user)
+		mustErr(t, "position in "+string(s), err, nil)
+		mustEqual(t, "state", pos.State, s)
+		mustEqual(t, "rank", pos.Rank, int64(1))
+	}
+}
+
+func TestPositionNotInQueueOrNotProvisioned(t *testing.T) {
+	f := newFixture(t)
+	_, err := f.svc.Position(ctx, f.eventID, uuid.NewString())
+	mustErr(t, "unprovisioned", err, ErrEventNotFound)
+	f.provision(t)
+	_, err = f.svc.Position(ctx, f.eventID, uuid.NewString())
+	mustErr(t, "never joined", err, ErrNotInQueue)
+	_, err = f.svc.Position(ctx, f.eventID, "nope")
+	mustErr(t, "bad user", err, ErrInvalidRequest)
+}

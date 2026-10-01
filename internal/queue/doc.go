@@ -14,10 +14,12 @@
 //     per-IP and per-user token buckets first;
 //   - the T0 transition (task 2.3): PRE becomes OPEN when Valkey's clock
 //     reaches the opening time, done by the first join after T0 or by the
-//     Opener, whichever comes first.
+//     Opener, whichever comes first;
+//   - positions (task 2.4): before T0 a member learns when the lottery
+//     closes, from T0 on their 1-based rank.
 //
-// Ranks, the admission controller and the status document follow in tasks
-// 2.4 to 2.7.
+// The admission controller, the status document and admission tokens follow
+// in tasks 2.5 to 2.7.
 //
 // Queue states:
 //

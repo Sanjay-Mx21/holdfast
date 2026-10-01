@@ -94,3 +94,15 @@ func orderingOf(score float64) Ordering {
 	}
 	return OrderingFIFO
 }
+
+// Position is where a user stands in an event's queue.
+type Position struct {
+	EventID string
+	// State is the queue's state. A queue still marked PRE after T0 (nobody
+	// has flipped it yet) is reported as OPEN: T0 is decided by the clock.
+	State State
+	// Rank is the 1-based place in line from T0 on; zero before T0.
+	Rank int64
+	// RandomizingAt is T0 while the lottery is still open; zero from T0 on.
+	RandomizingAt time.Time
+}

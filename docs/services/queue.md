@@ -4,14 +4,15 @@ The waiting room: decides who may enter the purchase path, in what order and
 how fast. Binary: `cmd/queue`. Code: `internal/queue`.
 
 **Status:** Phase 2 in progress. Built: provisioning (task 2.1), joining
-(task 2.2) and the T0 transition (task 2.3). Ranks, the admission controller,
-the status document and admission tokens follow in tasks 2.4 to 2.8.
+(task 2.2), the T0 transition (task 2.3) and positions (task 2.4). The
+admission controller, the status document and admission tokens follow in
+tasks 2.5 to 2.8.
 
 ## Responsibilities
 
 - Store each event's queue settings and open its waiting room in state PRE (built).
 - Accept joins: a random lottery position before T0, arrival order after (built).
-- Switch from PRE to OPEN at T0 (built) and tell buyers their rank (task 2.4).
+- Switch from PRE to OPEN at T0 and tell buyers their rank (built).
 - Admit buyers at a controlled rate and issue admission tokens (tasks 2.5 to 2.7).
 - Publish the status document every client polls (task 2.6).
 
@@ -58,6 +59,40 @@ IPv6 clients are limited per /64 network, since one subscriber usually owns a
 whole /64. The client IP is the connection's address: behind a proxy every
 request shares the proxy's address, so trusting `X-Forwarded-For` from NGINX
 is part of task 2.9. A refused join never reaches the queue.
+
+### `GET /v1/queue/{eventID}/me`
+
+Where the caller stands. Same identity as joining (`X-Dev-User-Id` until
+Phase 4).
+
+Before T0, by Valkey's clock, there is no rank yet: lottery positions keep
+arriving until T0. The response says when the draw closes:
+
+```http
+HTTP/1.1 200 OK
+Cache-Control: private, no-store
+
+{"eventId":"0196f0c1-...","state":"PRE","randomizingAt":"2026-10-05T12:00:00Z"}
+```
+
+From T0 on it gives the 1-based rank. No lottery position can be added after
+T0, so a rank never gets worse; it improves as people ahead are admitted:
+
+```http
+HTTP/1.1 200 OK
+Cache-Control: private, no-store
+
+{"eventId":"0196f0c1-...","state":"OPEN","rank":18204}
+```
+
+- A queue still marked `PRE` after T0 (nobody has flipped it yet) is reported
+  as `OPEN` with a rank: T0 is the clock's call. The lookup itself is read-only.
+- Ranks are still reported in `FROZEN`, `SOLD_OUT` and `CLOSED`, with that state.
+- Clients should ask once after T0 and then follow the shared status document
+  (task 2.6), comparing their rank with `admittedUpTo`. A per-user bucket
+  (`rl:position-user:<user id>`, default burst 10, 1 per second) refuses
+  polling with 429 `RATE_LIMITED` and `Retry-After`.
+- A user who never joined gets 404 `NOT_IN_QUEUE`.
 
 ### `PUT /internal/v1/events/{eventID}/queue` (admin port)
 
@@ -123,10 +158,11 @@ after T0 the opener got to it) and counted in `holdfast_queue_opened_total`.
 | `INVALID_REQUEST` | 400 | Malformed event ID, or a setting outside its bounds (`detail` says which) |
 | `INVALID_BODY`, `MALFORMED_JSON`, `EMPTY_BODY`, `TRAILING_DATA`, `INVALID_FIELD_TYPE` | 400 | Provisioning body problems, including unknown fields |
 | `UNSUPPORTED_MEDIA_TYPE` | 415 | Provisioning body is not JSON |
-| `EVENT_NOT_FOUND` | 404 | Join: the event has no waiting room (not provisioned) |
+| `EVENT_NOT_FOUND` | 404 | Join or position: the event has no waiting room (not provisioned) |
+| `NOT_IN_QUEUE` | 404 | Position: the caller has not joined this event's queue |
 | `QUEUE_CLOSED` | 409 | Join: the queue is `SOLD_OUT` or `CLOSED` |
 | `PROVISION_CONFLICT` | 409 | Queue already provisioned with different settings |
-| `RATE_LIMITED` | 429 | Join: a rate-limit bucket is empty; retry after `Retry-After` seconds |
+| `RATE_LIMITED` | 429 | Join or position: a rate-limit bucket is empty; retry after `Retry-After` seconds |
 | `ROUTE_NOT_FOUND`, `METHOD_NOT_ALLOWED` | 404, 405 | No such endpoint or method |
 | `UNAVAILABLE` | 503 | Valkey unreachable or timed out; retry after `Retry-After` |
 | `INTERNAL` | 500 | Unexpected error, logged with the request ID |
@@ -164,6 +200,7 @@ The remaining keys in the design doc (section 8.2): `q:{E}:admitted`,
 | `provision.lua` | 1 created, 0 identical settings, -1 conflict |
 | `join.lua` | {1 joined, 0 already joined, -1 closed, -2 not provisioned, member's score, 1 if this join opened the queue at T0} |
 | `open.lua` | {1 opened, 0 nothing to do, -1 not provisioned; ms late after T0, or ms left until T0} |
+| `position.lua` | {1 ranked, 0 before T0, -1 not in queue, -2 not provisioned; rank or opens_at_ms; state} |
 | `token_bucket.lua` (`internal/platform/ratelimit`) | {allowed 1 or 0, remaining tokens × 1000, retry after ms} |
 
 ## Configuration
@@ -180,6 +217,8 @@ are defined in `internal/platform/config`. Service settings:
 | `JOIN_USER_BURST` | `5` | Per-user bucket size |
 | `JOIN_USER_PER_SECOND` | `1` | Per-user refill rate |
 | `OPEN_CHECK_INTERVAL` | `250ms` | How often the opener looks for queues due to open (10ms to 10s) |
+| `POSITION_USER_BURST` | `10` | Per-user bucket size for position lookups |
+| `POSITION_USER_PER_SECOND` | `1` | Per-user refill rate for position lookups |
 
 Locally, Compose maps the public port to 8082 and the admin port to 9092,
 and sets `DEV_IDENTITY=true`.
@@ -189,6 +228,7 @@ and sets `DEV_IDENTITY=true`.
 | Metric | Labels | Use |
 |---|---|---|
 | `holdfast_queue_joins_total` | `result` | Join outcomes: joined, already_joined, rate_limited_ip, rate_limited_user, closed, not_found, invalid, error |
+| `holdfast_queue_position_lookups_total` | `result` | Position lookups: ranked, randomizing, not_in_queue, not_found, rate_limited, invalid, error |
 | `holdfast_queue_opened_total` | `by` | T0 transitions: `join` (a join got there first) or `opener` |
 | `holdfast_queue_opener_runs_total` | `result` | Opener passes: ok, error |
 | `holdfast_queue_opener_duration_seconds` | | One opener pass over all events |

@@ -31,6 +31,10 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
   nobody joins (`OPEN_CHECK_INTERVAL`, default 250ms). Metrics
   `holdfast_queue_opened_total{by}`, `holdfast_queue_opener_runs_total{result}`
   and `holdfast_queue_opener_duration_seconds`.
+- **Positions** (task 2.4): `GET /v1/queue/{id}/me` returns `randomizingAt`
+  before T0 and the 1-based rank from T0 on, judged by Valkey's clock. Per-user
+  rate limit (`POSITION_USER_*`), 404 `NOT_IN_QUEUE`, `private, no-store`.
+  Metric `holdfast_queue_position_lookups_total{result}`.
 
 ### Fixed
 

@@ -1357,7 +1357,7 @@ Measure the **collapse ratio**: edge requests per second (`X-Cache-Status: HIT`)
 | `GET /v1/events/{id}/status` | none | The shared status document | 200, edge-cached 1 s |
 | `GET /v1/queue/{id}/challenge` | access token | Proof-of-work challenge | 200 |
 | `POST /v1/queue/{id}/join` | access token + PoW solution (until Phase 4: the `X-Dev-User-Id` development header, no PoW) | Join the waiting room ✅ | 202; 403 outside your policy window (Phase 4); 404 `EVENT_NOT_FOUND`; 409 `QUEUE_CLOSED`; 429 `RATE_LIMITED` with Retry-After |
-| `GET /v1/queue/{id}/me` | access token | Your rank after T0 | 200 with `rank`, or `randomizingAt` before T0 |
+| `GET /v1/queue/{id}/me` | access token (until Phase 4: the `X-Dev-User-Id` development header) | Your rank after T0 ✅ | 200 with `rank`, or `randomizingAt` before T0; 404 `NOT_IN_QUEUE`; 429 `RATE_LIMITED` |
 | `POST /v1/queue/{id}/admit` | access token | Exchange your turn for an admission token | 200; 409 `NOT_YOUR_TURN` |
 | `POST /v1/events/{id}/holds` | admission token + Idempotency-Key | Hold N units ✅ | 201, and 201 with `Idempotent-Replayed: true` on a replay; 409 `SOLD_OUT`; 422 `USER_LIMIT`, `INVALID_QUANTITY` or `IDEMPOTENCY_KEY_REUSED`; 403 `TOKEN_EVENT_MISMATCH` |
 | `GET /v1/events/{id}/holds/{holdId}` | admission token, owner only | Read your hold ✅ | 200; 404 for non-owners as well |
@@ -1635,7 +1635,7 @@ holdfast/
 │   ├── inventory/                    ✅ inventory-svc (public :8080, admin :9090)
 │   ├── holdfastctl/                  ✅ operator CLI
 │   ├── contention/                   ✅ experiment E1 harness
-│   ├── queue/                        ✅ queue-svc: provisioning, joining, T0 (2.1 to 2.3)    ⏳ rest of 2
+│   ├── queue/                        ✅ queue-svc: provisioning, joining, T0, positions (2.1 to 2.4)    ⏳ rest of 2
 │   ├── booking/  payment/  mockpsp/  ⏳ 3
 │   ├── auth/                         ⏳ 4
 │   └── auditor/                      ⏳ 5
@@ -2044,7 +2044,7 @@ The dates are illustrative. The gates are not.
 - [x] 2.1 **Queue provisioning.** An operator endpoint on the queue admin port, `PUT /internal/v1/events/{id}/queue`, takes the sale opening time, admission rate, maximum sessions and session TTL, stores them in `q:{E}:config` and sets `q:{E}:state` to PRE. `holdfastctl event create` provisions the queue as well as inventory.
 - [x] 2.2 **Joining.** `join.lua` and `POST /v1/queue/{id}/join`. The lottery score comes from `crypto/rand` in Go; `ZADD NX` makes joining idempotent and stops re-rolls. Apply per-IP and per-user token buckets (`rl:*`). Until Phase 4, identity comes from a development header.
 - [x] 2.3 **The T0 transition.** The leader flips PRE to OPEN at the opening time; joins after T0 get FIFO scores. *Built without the leader: Valkey's clock decides T0, a join after T0 flips the state itself, and an idempotent opener in every replica flips it when nobody joins (see 9.1).*
-- [ ] 2.4 **Your position.** `GET /v1/queue/{id}/me` returns your rank after T0, and `randomizingAt` before it.
+- [x] 2.4 **Your position.** `GET /v1/queue/{id}/me` returns your rank after T0, and `randomizingAt` before it.
 - [ ] 2.5 **Admission controller.** One leader per event, elected with a PostgreSQL advisory lock. The fencing epoch `adm:{E}:epoch` is incremented on every leadership change, and `advance.lua` moves `admittedUpTo` only when the caller's epoch matches. The leader ticks every 250 ms and caps concurrency with Little's Law, using the session set `adm:{E}:sessions`.
 - [ ] 2.6 **Status document.** The leader writes `q:{E}:status` (state, `admittedUpTo`, queue size, `updatedAt`) on every tick. `GET /v1/events/{id}/status` serves it with `Cache-Control: public, max-age=1`.
 - [ ] 2.7 **Admission tokens.** `POST /v1/queue/{id}/admit` issues the Ed25519 token (reusing `authn.Issuer`) when your rank is within `admittedUpTo`, and records your session. Publish `GET /.well-known/jwks.json`.
