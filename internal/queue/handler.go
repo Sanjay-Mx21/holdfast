@@ -66,12 +66,23 @@ type Handler struct {
 	m      *Metrics
 	tokens tokenIssuer
 	jwks   authn.JWKSet
+	// trusted are the proxies (the edge) whose X-Forwarded-For is believed.
+	trusted []netip.Prefix
 }
 
 // NewHandler returns a Handler. tokens signs admission tokens; jwks is the
 // public key set published for verifiers.
 func NewHandler(svc service, lim limiter, limits Limits, m *Metrics, tokens tokenIssuer, jwks authn.JWKSet) *Handler {
 	return &Handler{svc: svc, lim: lim, limits: limits, m: m, tokens: tokens, jwks: jwks}
+}
+
+// TrustProxies makes the handler believe X-Forwarded-For on connections from
+// these addresses only (the edge). Without it, the connection's own address
+// is the client's, which is safe but means everyone behind a proxy shares one
+// rate-limit bucket.
+func (h *Handler) TrustProxies(prefixes ...netip.Prefix) *Handler {
+	h.trusted = prefixes
+	return h
 }
 
 // Register mounts buyer-facing routes on public, behind identity (who the
@@ -100,7 +111,7 @@ func (h *Handler) join(w http.ResponseWriter, r *http.Request) {
 	}
 	// Per-IP first: it is the cheaper signal against one machine hammering
 	// with many identities. Then per user, against one identity on many IPs.
-	if !h.allow(w, r, scopeJoinIP, clientID(r), h.limits.JoinPerIP, h.m.join, joinRateLimitedIP) ||
+	if !h.allow(w, r, scopeJoinIP, clientID(r, h.trusted), h.limits.JoinPerIP, h.m.join, joinRateLimitedIP) ||
 		!h.allow(w, r, scopeJoinUser, user, h.limits.JoinPerUser, h.m.join, joinRateLimitUser) {
 		return
 	}
@@ -274,17 +285,24 @@ func (h *Handler) allow(w http.ResponseWriter, r *http.Request, scope, id string
 	return false
 }
 
-// clientID turns the connection's remote address into a rate-limit ID. An
-// IPv6 subscriber usually owns a whole /64 and can rotate addresses inside
-// it, so IPv6 clients are limited per /64. Colons become underscores to keep
-// the key unambiguous. Behind a proxy every request shares the proxy's
-// address; trusting a forwarded-for header is left to the NGINX task (2.9).
-func clientID(r *http.Request) string {
+// clientID turns the client's address into a rate-limit ID. The client is
+// the connection's address, unless that connection comes from a trusted
+// proxy: then it is the last X-Forwarded-For entry, the one that proxy wrote
+// (the edge overwrites the header, so a client cannot inject one). An IPv6
+// subscriber usually owns a whole /64 and can rotate addresses inside it, so
+// IPv6 clients are limited per /64. Colons become underscores to keep the key
+// unambiguous.
+func clientID(r *http.Request, trusted []netip.Prefix) string {
 	ap, err := netip.ParseAddrPort(r.RemoteAddr)
 	if err != nil {
 		return "unknown"
 	}
 	a := ap.Addr().Unmap().WithZone("")
+	if fromTrustedProxy(a, trusted) {
+		if fwd, ok := lastForwardedFor(r); ok {
+			a = fwd
+		}
+	}
 	if a.Is6() {
 		p, _ := a.Prefix(64)
 		a = p.Addr()
@@ -303,6 +321,31 @@ func positionResultOf(err error) string {
 	default:
 		return positionError
 	}
+}
+
+func fromTrustedProxy(a netip.Addr, trusted []netip.Prefix) bool {
+	for _, p := range trusted {
+		if p.Contains(a) {
+			return true
+		}
+	}
+	return false
+}
+
+// lastForwardedFor returns the last address in X-Forwarded-For: the one the
+// nearest (trusted) proxy added. Earlier entries came from the client side
+// and are not believed.
+func lastForwardedFor(r *http.Request) (netip.Addr, bool) {
+	values := r.Header.Values("X-Forwarded-For")
+	if len(values) == 0 {
+		return netip.Addr{}, false
+	}
+	parts := strings.Split(values[len(values)-1], ",")
+	a, err := netip.ParseAddr(strings.TrimSpace(parts[len(parts)-1]))
+	if err != nil {
+		return netip.Addr{}, false
+	}
+	return a.Unmap().WithZone(""), true
 }
 
 func joinResultOf(err error) string {
