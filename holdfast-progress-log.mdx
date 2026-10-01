@@ -81,6 +81,9 @@ Sources: the dates recorded in the ADRs and the plan, file modification times, a
 | 2026-10-01 22:24 to 22:50 | **E1 soak: 100 of 100 runs pass** on AC power (task 1.5.7); 900 of 900 invariant checks pass; every run grants exactly 1,000 holds and sells exactly 1,000 units | `loadtest/results/e1-soak-2026-10-01-bf64b21.*` |
 | 2026-10-01 ~22:55 | Results README with hardware note, method, latency spread across all 100 runs and caveats (task 1.5.8); portable soak script added | `loadtest/results/README.md`, `loadtest/e1-soak.sh` |
 | 2026-10-01 23:23 | MIT `LICENSE` added (copyright 2026 Sanjay M), linked from the README (part of task 1.5.10) | `LICENSE` |
+| 2026-10-01 ~23:30 | Dependabot configured: weekly update pull requests for Go modules, Docker images, Compose images and GitHub Actions; vulnerability alerts and automatic security-fix pull requests turned on | Commit `133bc61`; repository settings |
+| 2026-10-01 ~23:30 | Repository description and 11 topics set | GitHub repository page |
+| 2026-10-01 23:30 | **Branch protection on `main`** (task 1.5.10 complete): pull request required, all 6 CI jobs must pass, branch must be up to date, conversations resolved, applies to admins, no force pushes or deletion. From here on, every change reaches `main` through a pull request, starting with this log update | GitHub branch protection settings |
 
 ## 3. What is complete, and what each piece contributes
 
@@ -228,7 +231,7 @@ These needed the owner to type a password or approve a browser login. Both are d
 | 1.5.3 to 1.5.6 `make test`, `make lint`, `make up`, quickstart, `make itest` | ✅ All pass. Until issue P7 is fixed, run `docker compose stop inventory` before `make itest` |
 | 1.5.7 and 1.5.8 E1 soak (100 runs) and hold latency in `loadtest/results/` | ✅ 100 of 100 passed on 2026-10-01; results, hardware note and latency spread in `loadtest/results/README.md` |
 | 1.5.9 Push to GitHub with every CI job green | ✅ Green at `5da3051` on the third CI run (issues P1 and P6) |
-| 1.5.10 Branch protection, Dependabot, `LICENSE` | ◐ MIT `LICENSE` added; branch protection, Dependabot, description and topics still to do |
+| 1.5.10 Branch protection, Dependabot, `LICENSE` | ✅ MIT license, Dependabot with security alerts, description and topics, and branch protection on `main` (2026-10-01) |
 | 1.5.11 `CHANGELOG.md`, tag `v0.1.0`, GitHub release | ⏳ |
 | 1.5.12 GitHub milestones M2 to M6, one issue per task | ⏳ |
 
