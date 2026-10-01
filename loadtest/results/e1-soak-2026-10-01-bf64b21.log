@@ -1,0 +1,2400 @@
+===== run 1 of 100, 2026-10-01 22:24:41 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      9612 ms (5202 attempts/s)
+  latency      p50 118.99 ms | p95 497.82 ms | p99 1088.47 ms | max 3675.92 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      17825 ms (561 attempts/s)
+  latency      p50 26.85 ms | p95 581.34 ms | p99 2002.15 ms | max 5833.51 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 2 of 100, 2026-10-01 22:25:17 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      5170 ms (9672 attempts/s)
+  latency      p50 90.78 ms | p95 162.24 ms | p99 207.38 ms | max 1044.11 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      10232 ms (977 attempts/s)
+  latency      p50 17.00 ms | p95 357.87 ms | p99 1067.24 ms | max 2978.82 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 3 of 100, 2026-10-01 22:25:36 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2708 ms (18464 attempts/s)
+  latency      p50 47.13 ms | p95 78.98 ms | p99 102.23 ms | max 586.44 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9005 ms (1110 attempts/s)
+  latency      p50 17.07 ms | p95 294.77 ms | p99 907.29 ms | max 2964.58 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 4 of 100, 2026-10-01 22:25:52 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2827 ms (17686 attempts/s)
+  latency      p50 48.45 ms | p95 73.30 ms | p99 141.34 ms | max 633.64 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9926 ms (1007 attempts/s)
+  latency      p50 17.11 ms | p95 345.36 ms | p99 1055.91 ms | max 3072.36 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 5 of 100, 2026-10-01 22:26:09 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2736 ms (18276 attempts/s)
+  latency      p50 48.05 ms | p95 74.45 ms | p99 127.48 ms | max 470.55 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      10133 ms (987 attempts/s)
+  latency      p50 21.31 ms | p95 333.67 ms | p99 971.60 ms | max 2398.38 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 6 of 100, 2026-10-01 22:26:26 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2953 ms (16934 attempts/s)
+  latency      p50 46.50 ms | p95 111.38 ms | p99 143.41 ms | max 534.01 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      10616 ms (942 attempts/s)
+  latency      p50 22.51 ms | p95 344.55 ms | p99 975.41 ms | max 2789.06 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 7 of 100, 2026-10-01 22:26:43 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      7873 ms (6351 attempts/s)
+  latency      p50 137.34 ms | p95 326.47 ms | p99 398.52 ms | max 808.04 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      10257 ms (975 attempts/s)
+  latency      p50 16.73 ms | p95 376.40 ms | p99 1035.93 ms | max 3174.38 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 8 of 100, 2026-10-01 22:27:07 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2643 ms (18921 attempts/s)
+  latency      p50 41.85 ms | p95 82.85 ms | p99 142.73 ms | max 517.42 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9174 ms (1090 attempts/s)
+  latency      p50 17.57 ms | p95 312.14 ms | p99 920.25 ms | max 2612.97 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 9 of 100, 2026-10-01 22:27:23 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2100 ms (23810 attempts/s)
+  latency      p50 32.49 ms | p95 53.47 ms | p99 94.12 ms | max 351.25 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      10882 ms (919 attempts/s)
+  latency      p50 17.30 ms | p95 403.72 ms | p99 1148.18 ms | max 2906.63 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 10 of 100, 2026-10-01 22:27:39 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2802 ms (17843 attempts/s)
+  latency      p50 47.50 ms | p95 73.31 ms | p99 135.68 ms | max 574.99 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8930 ms (1120 attempts/s)
+  latency      p50 16.41 ms | p95 312.81 ms | p99 924.75 ms | max 2419.32 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 11 of 100, 2026-10-01 22:27:55 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2191 ms (22821 attempts/s)
+  latency      p50 37.84 ms | p95 58.01 ms | p99 80.04 ms | max 356.31 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9370 ms (1067 attempts/s)
+  latency      p50 16.77 ms | p95 340.73 ms | p99 938.63 ms | max 2656.13 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 12 of 100, 2026-10-01 22:28:10 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2111 ms (23689 attempts/s)
+  latency      p50 37.92 ms | p95 51.26 ms | p99 106.31 ms | max 367.80 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9184 ms (1089 attempts/s)
+  latency      p50 17.59 ms | p95 321.72 ms | p99 905.15 ms | max 2883.24 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 13 of 100, 2026-10-01 22:28:26 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2200 ms (22727 attempts/s)
+  latency      p50 39.30 ms | p95 61.41 ms | p99 118.17 ms | max 416.70 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9223 ms (1084 attempts/s)
+  latency      p50 16.33 ms | p95 320.77 ms | p99 939.21 ms | max 3348.53 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 14 of 100, 2026-10-01 22:28:40 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2342 ms (21345 attempts/s)
+  latency      p50 39.63 ms | p95 60.50 ms | p99 122.99 ms | max 430.44 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9026 ms (1108 attempts/s)
+  latency      p50 16.16 ms | p95 305.90 ms | p99 1012.47 ms | max 2834.50 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 15 of 100, 2026-10-01 22:28:56 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2223 ms (22489 attempts/s)
+  latency      p50 35.17 ms | p95 64.56 ms | p99 83.62 ms | max 355.82 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8663 ms (1154 attempts/s)
+  latency      p50 14.79 ms | p95 311.75 ms | p99 900.62 ms | max 2716.59 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 16 of 100, 2026-10-01 22:29:09 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2224 ms (22483 attempts/s)
+  latency      p50 40.26 ms | p95 53.85 ms | p99 82.20 ms | max 340.70 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8892 ms (1125 attempts/s)
+  latency      p50 17.18 ms | p95 311.47 ms | p99 891.60 ms | max 2865.74 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 17 of 100, 2026-10-01 22:29:23 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2745 ms (18216 attempts/s)
+  latency      p50 48.18 ms | p95 85.45 ms | p99 116.35 ms | max 459.59 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9163 ms (1091 attempts/s)
+  latency      p50 16.17 ms | p95 317.25 ms | p99 986.72 ms | max 2423.27 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 18 of 100, 2026-10-01 22:29:40 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2507 ms (19942 attempts/s)
+  latency      p50 43.29 ms | p95 76.58 ms | p99 107.76 ms | max 397.09 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8879 ms (1126 attempts/s)
+  latency      p50 16.77 ms | p95 307.81 ms | p99 906.50 ms | max 4266.72 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 19 of 100, 2026-10-01 22:29:54 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2346 ms (21314 attempts/s)
+  latency      p50 37.18 ms | p95 64.44 ms | p99 136.03 ms | max 388.14 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9090 ms (1100 attempts/s)
+  latency      p50 16.62 ms | p95 304.21 ms | p99 944.56 ms | max 2730.58 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 20 of 100, 2026-10-01 22:30:10 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2725 ms (18350 attempts/s)
+  latency      p50 47.58 ms | p95 83.43 ms | p99 136.10 ms | max 505.14 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9950 ms (1005 attempts/s)
+  latency      p50 17.63 ms | p95 357.77 ms | p99 1032.92 ms | max 3105.75 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 21 of 100, 2026-10-01 22:30:26 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2498 ms (20014 attempts/s)
+  latency      p50 41.70 ms | p95 64.88 ms | p99 126.30 ms | max 504.31 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8712 ms (1148 attempts/s)
+  latency      p50 16.30 ms | p95 300.99 ms | p99 865.34 ms | max 2547.85 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 22 of 100, 2026-10-01 22:30:42 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2364 ms (21153 attempts/s)
+  latency      p50 40.14 ms | p95 58.72 ms | p99 113.91 ms | max 475.96 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8731 ms (1145 attempts/s)
+  latency      p50 14.75 ms | p95 321.24 ms | p99 919.70 ms | max 2777.03 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 23 of 100, 2026-10-01 22:30:56 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2915 ms (17150 attempts/s)
+  latency      p50 48.26 ms | p95 90.35 ms | p99 117.61 ms | max 526.79 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8621 ms (1160 attempts/s)
+  latency      p50 16.15 ms | p95 287.81 ms | p99 844.62 ms | max 2893.51 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 24 of 100, 2026-10-01 22:31:11 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2491 ms (20075 attempts/s)
+  latency      p50 43.66 ms | p95 60.85 ms | p99 132.78 ms | max 512.59 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9354 ms (1069 attempts/s)
+  latency      p50 16.05 ms | p95 335.90 ms | p99 948.37 ms | max 3728.00 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 25 of 100, 2026-10-01 22:31:26 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2377 ms (21033 attempts/s)
+  latency      p50 42.75 ms | p95 59.70 ms | p99 89.28 ms | max 389.28 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8892 ms (1125 attempts/s)
+  latency      p50 16.92 ms | p95 290.43 ms | p99 908.76 ms | max 3121.80 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 26 of 100, 2026-10-01 22:31:42 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2300 ms (21739 attempts/s)
+  latency      p50 37.31 ms | p95 67.33 ms | p99 105.91 ms | max 417.60 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8962 ms (1116 attempts/s)
+  latency      p50 16.98 ms | p95 320.38 ms | p99 891.09 ms | max 2703.41 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 27 of 100, 2026-10-01 22:31:56 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2462 ms (20313 attempts/s)
+  latency      p50 42.18 ms | p95 76.33 ms | p99 103.53 ms | max 426.39 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9011 ms (1110 attempts/s)
+  latency      p50 17.34 ms | p95 308.26 ms | p99 901.10 ms | max 2662.20 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 28 of 100, 2026-10-01 22:32:12 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2705 ms (18487 attempts/s)
+  latency      p50 47.84 ms | p95 67.93 ms | p99 123.27 ms | max 596.05 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9640 ms (1037 attempts/s)
+  latency      p50 15.79 ms | p95 331.07 ms | p99 1015.69 ms | max 3205.44 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 29 of 100, 2026-10-01 22:32:27 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2276 ms (21967 attempts/s)
+  latency      p50 40.24 ms | p95 59.93 ms | p99 130.04 ms | max 434.17 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9073 ms (1102 attempts/s)
+  latency      p50 16.32 ms | p95 309.70 ms | p99 948.07 ms | max 3609.99 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 30 of 100, 2026-10-01 22:32:43 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2326 ms (21500 attempts/s)
+  latency      p50 39.00 ms | p95 60.18 ms | p99 141.06 ms | max 365.93 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9190 ms (1088 attempts/s)
+  latency      p50 18.05 ms | p95 331.78 ms | p99 902.74 ms | max 2327.76 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 31 of 100, 2026-10-01 22:32:57 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      3761 ms (13295 attempts/s)
+  latency      p50 63.79 ms | p95 119.40 ms | p99 212.81 ms | max 709.43 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      10625 ms (941 attempts/s)
+  latency      p50 20.90 ms | p95 336.82 ms | p99 1089.91 ms | max 4074.52 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 32 of 100, 2026-10-01 22:33:16 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      3124 ms (16005 attempts/s)
+  latency      p50 52.39 ms | p95 88.23 ms | p99 137.14 ms | max 646.10 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      10586 ms (945 attempts/s)
+  latency      p50 19.95 ms | p95 356.33 ms | p99 1040.79 ms | max 4162.47 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 33 of 100, 2026-10-01 22:33:33 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2648 ms (18881 attempts/s)
+  latency      p50 48.24 ms | p95 64.60 ms | p99 128.24 ms | max 481.57 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      11096 ms (901 attempts/s)
+  latency      p50 19.49 ms | p95 390.47 ms | p99 1153.15 ms | max 3272.05 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 34 of 100, 2026-10-01 22:33:51 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2613 ms (19138 attempts/s)
+  latency      p50 47.02 ms | p95 68.01 ms | p99 112.63 ms | max 456.61 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8814 ms (1134 attempts/s)
+  latency      p50 15.84 ms | p95 301.38 ms | p99 886.31 ms | max 2501.80 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 35 of 100, 2026-10-01 22:34:06 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2377 ms (21033 attempts/s)
+  latency      p50 39.48 ms | p95 82.22 ms | p99 101.73 ms | max 349.81 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9581 ms (1044 attempts/s)
+  latency      p50 16.22 ms | p95 329.08 ms | p99 1051.75 ms | max 3637.12 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 36 of 100, 2026-10-01 22:34:22 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2606 ms (19183 attempts/s)
+  latency      p50 47.21 ms | p95 64.67 ms | p99 154.13 ms | max 502.59 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9057 ms (1104 attempts/s)
+  latency      p50 15.47 ms | p95 314.27 ms | p99 971.62 ms | max 2894.30 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 37 of 100, 2026-10-01 22:34:37 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2508 ms (19940 attempts/s)
+  latency      p50 42.02 ms | p95 69.16 ms | p99 110.62 ms | max 598.66 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8811 ms (1135 attempts/s)
+  latency      p50 17.46 ms | p95 284.38 ms | p99 889.54 ms | max 2789.84 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 38 of 100, 2026-10-01 22:34:52 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2279 ms (21936 attempts/s)
+  latency      p50 39.12 ms | p95 59.50 ms | p99 124.55 ms | max 357.81 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8838 ms (1131 attempts/s)
+  latency      p50 16.14 ms | p95 309.77 ms | p99 909.45 ms | max 3574.26 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 39 of 100, 2026-10-01 22:35:06 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2624 ms (19056 attempts/s)
+  latency      p50 43.61 ms | p95 96.54 ms | p99 129.81 ms | max 327.63 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9669 ms (1034 attempts/s)
+  latency      p50 17.48 ms | p95 350.88 ms | p99 963.68 ms | max 2343.04 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 40 of 100, 2026-10-01 22:35:23 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2293 ms (21803 attempts/s)
+  latency      p50 41.23 ms | p95 57.32 ms | p99 139.09 ms | max 430.22 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8990 ms (1112 attempts/s)
+  latency      p50 15.27 ms | p95 316.45 ms | p99 953.37 ms | max 2612.15 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 41 of 100, 2026-10-01 22:35:37 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2717 ms (18402 attempts/s)
+  latency      p50 46.41 ms | p95 76.02 ms | p99 181.12 ms | max 556.72 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8640 ms (1157 attempts/s)
+  latency      p50 15.87 ms | p95 285.16 ms | p99 865.37 ms | max 2873.55 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 42 of 100, 2026-10-01 22:35:53 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2265 ms (22071 attempts/s)
+  latency      p50 41.38 ms | p95 57.12 ms | p99 125.58 ms | max 383.00 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9866 ms (1014 attempts/s)
+  latency      p50 22.53 ms | p95 310.87 ms | p99 876.12 ms | max 2939.06 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 43 of 100, 2026-10-01 22:36:07 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2685 ms (18620 attempts/s)
+  latency      p50 48.24 ms | p95 75.41 ms | p99 119.89 ms | max 470.98 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8977 ms (1114 attempts/s)
+  latency      p50 16.12 ms | p95 323.00 ms | p99 908.35 ms | max 2974.43 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 44 of 100, 2026-10-01 22:36:24 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2862 ms (17472 attempts/s)
+  latency      p50 48.57 ms | p95 85.25 ms | p99 172.13 ms | max 446.57 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8758 ms (1142 attempts/s)
+  latency      p50 14.89 ms | p95 301.17 ms | p99 901.20 ms | max 2766.60 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 45 of 100, 2026-10-01 22:36:38 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2271 ms (22017 attempts/s)
+  latency      p50 41.01 ms | p95 64.54 ms | p99 88.87 ms | max 441.94 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8970 ms (1115 attempts/s)
+  latency      p50 16.30 ms | p95 319.14 ms | p99 906.41 ms | max 3020.06 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 46 of 100, 2026-10-01 22:36:54 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2276 ms (21965 attempts/s)
+  latency      p50 36.35 ms | p95 64.17 ms | p99 108.28 ms | max 344.63 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8803 ms (1136 attempts/s)
+  latency      p50 14.93 ms | p95 324.59 ms | p99 933.29 ms | max 2798.90 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 47 of 100, 2026-10-01 22:37:07 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2604 ms (19200 attempts/s)
+  latency      p50 44.09 ms | p95 69.72 ms | p99 154.82 ms | max 500.33 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8848 ms (1130 attempts/s)
+  latency      p50 16.95 ms | p95 313.65 ms | p99 876.95 ms | max 2415.40 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 48 of 100, 2026-10-01 22:37:23 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2033 ms (24598 attempts/s)
+  latency      p50 36.64 ms | p95 51.44 ms | p99 100.53 ms | max 396.64 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9179 ms (1089 attempts/s)
+  latency      p50 16.22 ms | p95 324.37 ms | p99 962.60 ms | max 2723.77 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 49 of 100, 2026-10-01 22:37:37 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2522 ms (19822 attempts/s)
+  latency      p50 44.60 ms | p95 75.16 ms | p99 111.86 ms | max 425.99 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9144 ms (1094 attempts/s)
+  latency      p50 18.03 ms | p95 309.62 ms | p99 875.70 ms | max 2692.14 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 50 of 100, 2026-10-01 22:37:53 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2160 ms (23145 attempts/s)
+  latency      p50 38.84 ms | p95 50.61 ms | p99 101.40 ms | max 423.21 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9466 ms (1056 attempts/s)
+  latency      p50 17.56 ms | p95 341.75 ms | p99 960.96 ms | max 3029.19 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 51 of 100, 2026-10-01 22:38:08 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2340 ms (21371 attempts/s)
+  latency      p50 40.91 ms | p95 64.03 ms | p99 105.78 ms | max 436.92 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9000 ms (1111 attempts/s)
+  latency      p50 16.68 ms | p95 301.52 ms | p99 927.05 ms | max 3530.42 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 52 of 100, 2026-10-01 22:38:22 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      3790 ms (13192 attempts/s)
+  latency      p50 64.46 ms | p95 112.69 ms | p99 172.91 ms | max 771.82 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      10467 ms (955 attempts/s)
+  latency      p50 19.07 ms | p95 363.39 ms | p99 1049.54 ms | max 3328.55 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 53 of 100, 2026-10-01 22:38:41 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2457 ms (20350 attempts/s)
+  latency      p50 42.67 ms | p95 73.09 ms | p99 108.92 ms | max 432.60 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9420 ms (1062 attempts/s)
+  latency      p50 16.72 ms | p95 352.17 ms | p99 948.12 ms | max 2356.49 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 54 of 100, 2026-10-01 22:38:58 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2370 ms (21099 attempts/s)
+  latency      p50 41.01 ms | p95 77.69 ms | p99 115.55 ms | max 410.97 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8874 ms (1127 attempts/s)
+  latency      p50 16.32 ms | p95 310.39 ms | p99 874.82 ms | max 2545.18 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 55 of 100, 2026-10-01 22:39:11 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2283 ms (21902 attempts/s)
+  latency      p50 40.24 ms | p95 53.55 ms | p99 114.40 ms | max 453.50 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9492 ms (1054 attempts/s)
+  latency      p50 20.04 ms | p95 313.82 ms | p99 891.57 ms | max 2779.65 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 56 of 100, 2026-10-01 22:39:28 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2743 ms (18231 attempts/s)
+  latency      p50 42.00 ms | p95 101.67 ms | p99 136.84 ms | max 446.25 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9115 ms (1097 attempts/s)
+  latency      p50 17.50 ms | p95 307.67 ms | p99 874.54 ms | max 3150.22 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 57 of 100, 2026-10-01 22:39:42 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2262 ms (22103 attempts/s)
+  latency      p50 38.22 ms | p95 60.21 ms | p99 108.83 ms | max 457.22 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8832 ms (1132 attempts/s)
+  latency      p50 15.64 ms | p95 308.46 ms | p99 910.99 ms | max 3997.34 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 58 of 100, 2026-10-01 22:39:56 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2501 ms (19990 attempts/s)
+  latency      p50 43.69 ms | p95 80.54 ms | p99 137.41 ms | max 304.52 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8968 ms (1115 attempts/s)
+  latency      p50 16.27 ms | p95 319.67 ms | p99 908.02 ms | max 2707.94 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 59 of 100, 2026-10-01 22:40:12 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2327 ms (21489 attempts/s)
+  latency      p50 37.22 ms | p95 67.88 ms | p99 109.21 ms | max 395.00 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8814 ms (1135 attempts/s)
+  latency      p50 16.18 ms | p95 316.75 ms | p99 868.68 ms | max 2675.59 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 60 of 100, 2026-10-01 22:40:26 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2538 ms (19704 attempts/s)
+  latency      p50 45.56 ms | p95 74.65 ms | p99 103.14 ms | max 415.03 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9235 ms (1083 attempts/s)
+  latency      p50 17.07 ms | p95 317.10 ms | p99 895.44 ms | max 3272.58 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 61 of 100, 2026-10-01 22:40:42 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2387 ms (20944 attempts/s)
+  latency      p50 41.59 ms | p95 63.73 ms | p99 111.42 ms | max 371.62 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8904 ms (1123 attempts/s)
+  latency      p50 16.00 ms | p95 317.74 ms | p99 895.46 ms | max 2542.44 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 62 of 100, 2026-10-01 22:40:56 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2447 ms (20436 attempts/s)
+  latency      p50 42.25 ms | p95 73.82 ms | p99 94.99 ms | max 381.78 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9103 ms (1098 attempts/s)
+  latency      p50 16.24 ms | p95 313.10 ms | p99 950.92 ms | max 3117.89 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 63 of 100, 2026-10-01 22:41:12 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2297 ms (21769 attempts/s)
+  latency      p50 40.72 ms | p95 58.35 ms | p99 105.67 ms | max 376.41 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8787 ms (1138 attempts/s)
+  latency      p50 15.87 ms | p95 303.92 ms | p99 916.94 ms | max 2985.69 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 64 of 100, 2026-10-01 22:41:25 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2520 ms (19844 attempts/s)
+  latency      p50 42.83 ms | p95 81.84 ms | p99 101.23 ms | max 342.22 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9076 ms (1102 attempts/s)
+  latency      p50 16.54 ms | p95 307.03 ms | p99 932.25 ms | max 2615.65 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 65 of 100, 2026-10-01 22:41:41 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2223 ms (22493 attempts/s)
+  latency      p50 39.67 ms | p95 56.47 ms | p99 106.10 ms | max 365.57 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8760 ms (1142 attempts/s)
+  latency      p50 15.82 ms | p95 310.89 ms | p99 895.84 ms | max 3739.67 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 66 of 100, 2026-10-01 22:41:55 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2026 ms (24676 attempts/s)
+  latency      p50 32.83 ms | p95 53.07 ms | p99 117.20 ms | max 350.21 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8591 ms (1164 attempts/s)
+  latency      p50 15.24 ms | p95 307.95 ms | p99 920.38 ms | max 3227.77 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 67 of 100, 2026-10-01 22:42:10 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2291 ms (21829 attempts/s)
+  latency      p50 40.36 ms | p95 57.05 ms | p99 109.66 ms | max 432.66 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9229 ms (1084 attempts/s)
+  latency      p50 18.13 ms | p95 308.98 ms | p99 876.87 ms | max 2704.41 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 68 of 100, 2026-10-01 22:42:24 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2076 ms (24080 attempts/s)
+  latency      p50 34.43 ms | p95 53.86 ms | p99 87.56 ms | max 362.74 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9474 ms (1056 attempts/s)
+  latency      p50 15.65 ms | p95 324.78 ms | p99 1033.71 ms | max 2992.40 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 69 of 100, 2026-10-01 22:42:40 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2420 ms (20657 attempts/s)
+  latency      p50 43.63 ms | p95 62.95 ms | p99 113.38 ms | max 434.43 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8798 ms (1137 attempts/s)
+  latency      p50 15.73 ms | p95 310.70 ms | p99 871.30 ms | max 2799.35 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 70 of 100, 2026-10-01 22:42:54 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2020 ms (24749 attempts/s)
+  latency      p50 35.77 ms | p95 49.72 ms | p99 113.35 ms | max 386.03 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9376 ms (1067 attempts/s)
+  latency      p50 15.90 ms | p95 327.76 ms | p99 956.58 ms | max 2614.61 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 71 of 100, 2026-10-01 22:43:09 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2763 ms (18099 attempts/s)
+  latency      p50 49.09 ms | p95 67.36 ms | p99 119.12 ms | max 501.15 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9934 ms (1007 attempts/s)
+  latency      p50 19.33 ms | p95 342.72 ms | p99 1023.59 ms | max 4974.44 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 72 of 100, 2026-10-01 22:43:27 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2350 ms (21275 attempts/s)
+  latency      p50 39.45 ms | p95 78.16 ms | p99 101.84 ms | max 313.21 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9011 ms (1110 attempts/s)
+  latency      p50 16.91 ms | p95 309.53 ms | p99 905.53 ms | max 2678.13 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 73 of 100, 2026-10-01 22:43:42 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2319 ms (21563 attempts/s)
+  latency      p50 40.35 ms | p95 58.37 ms | p99 111.59 ms | max 399.19 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8954 ms (1117 attempts/s)
+  latency      p50 16.66 ms | p95 300.49 ms | p99 915.12 ms | max 3909.29 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 74 of 100, 2026-10-01 22:43:56 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2326 ms (21499 attempts/s)
+  latency      p50 39.03 ms | p95 71.35 ms | p99 97.21 ms | max 357.28 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8690 ms (1151 attempts/s)
+  latency      p50 16.27 ms | p95 297.67 ms | p99 880.00 ms | max 2686.57 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 75 of 100, 2026-10-01 22:44:09 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2224 ms (22484 attempts/s)
+  latency      p50 39.85 ms | p95 62.68 ms | p99 122.77 ms | max 384.89 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8779 ms (1139 attempts/s)
+  latency      p50 15.82 ms | p95 306.76 ms | p99 916.99 ms | max 2169.93 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 76 of 100, 2026-10-01 22:44:25 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2159 ms (23156 attempts/s)
+  latency      p50 38.06 ms | p95 51.30 ms | p99 107.24 ms | max 488.09 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8686 ms (1151 attempts/s)
+  latency      p50 14.59 ms | p95 313.01 ms | p99 909.72 ms | max 3419.62 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 77 of 100, 2026-10-01 22:44:39 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2622 ms (19071 attempts/s)
+  latency      p50 46.18 ms | p95 70.28 ms | p99 142.94 ms | max 523.94 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      10003 ms (1000 attempts/s)
+  latency      p50 17.61 ms | p95 360.55 ms | p99 1036.70 ms | max 3769.62 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 78 of 100, 2026-10-01 22:44:56 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2359 ms (21195 attempts/s)
+  latency      p50 39.40 ms | p95 71.33 ms | p99 114.17 ms | max 426.23 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8691 ms (1151 attempts/s)
+  latency      p50 16.25 ms | p95 299.96 ms | p99 869.97 ms | max 3498.78 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 79 of 100, 2026-10-01 22:45:10 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2341 ms (21362 attempts/s)
+  latency      p50 40.54 ms | p95 60.98 ms | p99 98.29 ms | max 421.42 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8789 ms (1138 attempts/s)
+  latency      p50 16.30 ms | p95 300.24 ms | p99 922.15 ms | max 2253.71 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 80 of 100, 2026-10-01 22:45:26 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2131 ms (23461 attempts/s)
+  latency      p50 37.85 ms | p95 57.41 ms | p99 74.13 ms | max 349.68 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9912 ms (1009 attempts/s)
+  latency      p50 15.46 ms | p95 344.75 ms | p99 1044.16 ms | max 4845.86 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 81 of 100, 2026-10-01 22:45:40 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2080 ms (24042 attempts/s)
+  latency      p50 38.34 ms | p95 53.02 ms | p99 93.75 ms | max 347.92 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8738 ms (1144 attempts/s)
+  latency      p50 16.44 ms | p95 306.73 ms | p99 864.04 ms | max 3121.80 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 82 of 100, 2026-10-01 22:45:56 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2269 ms (22038 attempts/s)
+  latency      p50 38.10 ms | p95 56.41 ms | p99 116.78 ms | max 470.43 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8675 ms (1153 attempts/s)
+  latency      p50 15.34 ms | p95 299.96 ms | p99 921.14 ms | max 3039.95 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 83 of 100, 2026-10-01 22:46:09 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2200 ms (22726 attempts/s)
+  latency      p50 39.15 ms | p95 56.87 ms | p99 101.49 ms | max 405.05 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8630 ms (1159 attempts/s)
+  latency      p50 15.16 ms | p95 297.28 ms | p99 918.98 ms | max 2656.23 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 84 of 100, 2026-10-01 22:46:25 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2110 ms (23694 attempts/s)
+  latency      p50 35.10 ms | p95 55.31 ms | p99 107.39 ms | max 331.48 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8868 ms (1128 attempts/s)
+  latency      p50 14.46 ms | p95 317.06 ms | p99 928.99 ms | max 2711.47 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 85 of 100, 2026-10-01 22:46:39 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2179 ms (22943 attempts/s)
+  latency      p50 39.27 ms | p95 58.45 ms | p99 96.16 ms | max 411.79 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8711 ms (1148 attempts/s)
+  latency      p50 15.64 ms | p95 293.99 ms | p99 907.43 ms | max 2573.39 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 86 of 100, 2026-10-01 22:46:54 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2195 ms (22783 attempts/s)
+  latency      p50 34.79 ms | p95 60.81 ms | p99 101.93 ms | max 349.83 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8776 ms (1139 attempts/s)
+  latency      p50 14.93 ms | p95 310.08 ms | p99 929.64 ms | max 3011.32 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 87 of 100, 2026-10-01 22:47:08 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2323 ms (21525 attempts/s)
+  latency      p50 38.69 ms | p95 60.53 ms | p99 125.30 ms | max 453.75 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8561 ms (1168 attempts/s)
+  latency      p50 15.87 ms | p95 288.90 ms | p99 862.75 ms | max 2527.10 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 88 of 100, 2026-10-01 22:47:23 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2410 ms (20749 attempts/s)
+  latency      p50 40.03 ms | p95 59.65 ms | p99 156.11 ms | max 484.91 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9089 ms (1100 attempts/s)
+  latency      p50 16.34 ms | p95 332.10 ms | p99 931.31 ms | max 3189.14 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 89 of 100, 2026-10-01 22:47:37 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2470 ms (20242 attempts/s)
+  latency      p50 38.99 ms | p95 83.83 ms | p99 132.45 ms | max 398.54 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8578 ms (1166 attempts/s)
+  latency      p50 15.38 ms | p95 284.65 ms | p99 884.27 ms | max 2551.38 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 90 of 100, 2026-10-01 22:47:51 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2200 ms (22729 attempts/s)
+  latency      p50 37.86 ms | p95 55.96 ms | p99 116.59 ms | max 386.07 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9134 ms (1095 attempts/s)
+  latency      p50 15.41 ms | p95 334.90 ms | p99 944.10 ms | max 3382.54 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 91 of 100, 2026-10-01 22:48:07 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2872 ms (17410 attempts/s)
+  latency      p50 50.19 ms | p95 95.61 ms | p99 156.18 ms | max 421.51 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9773 ms (1023 attempts/s)
+  latency      p50 17.57 ms | p95 326.94 ms | p99 998.10 ms | max 5020.12 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 92 of 100, 2026-10-01 22:48:22 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2575 ms (19417 attempts/s)
+  latency      p50 43.60 ms | p95 70.73 ms | p99 145.09 ms | max 639.70 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8793 ms (1137 attempts/s)
+  latency      p50 15.17 ms | p95 309.02 ms | p99 905.51 ms | max 2771.37 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 93 of 100, 2026-10-01 22:48:38 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2528 ms (19778 attempts/s)
+  latency      p50 42.02 ms | p95 72.47 ms | p99 103.15 ms | max 438.17 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8596 ms (1163 attempts/s)
+  latency      p50 15.79 ms | p95 273.15 ms | p99 917.35 ms | max 2807.98 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 94 of 100, 2026-10-01 22:48:52 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2251 ms (22216 attempts/s)
+  latency      p50 37.58 ms | p95 59.70 ms | p99 104.00 ms | max 391.03 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8724 ms (1146 attempts/s)
+  latency      p50 15.55 ms | p95 321.94 ms | p99 855.04 ms | max 2194.90 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 95 of 100, 2026-10-01 22:49:07 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2550 ms (19606 attempts/s)
+  latency      p50 43.01 ms | p95 89.16 ms | p99 123.28 ms | max 390.44 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8696 ms (1150 attempts/s)
+  latency      p50 15.97 ms | p95 316.48 ms | p99 909.71 ms | max 2561.40 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 96 of 100, 2026-10-01 22:49:21 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2261 ms (22118 attempts/s)
+  latency      p50 40.92 ms | p95 56.85 ms | p99 98.64 ms | max 401.55 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9138 ms (1094 attempts/s)
+  latency      p50 18.83 ms | p95 302.16 ms | p99 942.10 ms | max 2889.05 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 97 of 100, 2026-10-01 22:49:37 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2324 ms (21519 attempts/s)
+  latency      p50 41.34 ms | p95 71.23 ms | p99 88.69 ms | max 333.60 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8795 ms (1137 attempts/s)
+  latency      p50 16.08 ms | p95 306.13 ms | p99 882.48 ms | max 2776.27 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 98 of 100, 2026-10-01 22:49:50 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2201 ms (22721 attempts/s)
+  latency      p50 39.94 ms | p95 56.25 ms | p99 119.60 ms | max 391.40 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8734 ms (1145 attempts/s)
+  latency      p50 15.57 ms | p95 312.45 ms | p99 920.95 ms | max 2452.09 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 99 of 100, 2026-10-01 22:50:06 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2184 ms (22896 attempts/s)
+  latency      p50 37.51 ms | p95 57.04 ms | p99 111.97 ms | max 381.89 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      8895 ms (1124 attempts/s)
+  latency      p50 15.30 ms | p95 328.50 ms | p99 917.67 ms | max 3580.85 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
+===== run 100 of 100, 2026-10-01 22:50:20 IST, exit 0 =====
+go run ./cmd/contention -mode all -valkey "localhost:6379" -dsn "postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable" -json e1-results.json
+
+E1 [holds] 50000 attempts -> 1000 units (qty 1, concurrency 1000)
+  held         1000
+  sold_out     49000
+  elapsed      2580 ms (19383 attempts/s)
+  latency      p50 46.08 ms | p95 62.93 ms | p99 134.18 ms | max 544.83 ms
+  [PASS] I1 holds granted == units available for sale (held 1000, expected 1000)
+  [PASS] I1 pool never negative and fully accounted (available 0 = capacity 1000 - held units 1000)
+  [PASS] I5 every granted hold is stored as HELD (1000 of 1000 readable)
+  [PASS] no infrastructure errors (none)
+
+E1 [guard] 10000 attempts -> 1000 units (qty 1, concurrency 64)
+  reserved     1000
+  sold_out     9000
+  elapsed      9417 ms (1062 attempts/s)
+  latency      p50 18.55 ms | p95 322.02 ms | p99 906.74 ms | max 3438.83 ms
+  [PASS] I1 reservations == units available for sale (reserved 1000, expected 1000)
+  [PASS] I1 sold never exceeds capacity (sold 1000 of 1000)
+  [PASS] ledger consistent (sum of purchases == sold) (purchases 1000, sold 1000)
+  [PASS] I4 per-user cap holds under concurrency (4 of 40 concurrent attempts by one user accepted (cap 4))
+  [PASS] no infrastructure errors (none)
+RESULT: PASS - no oversell, no lost units, caps enforced
