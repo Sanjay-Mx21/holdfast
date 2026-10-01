@@ -6,9 +6,11 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"time"
 
@@ -36,7 +38,12 @@ type config struct {
 	SweepInterval time.Duration `env:"SWEEP_INTERVAL" envDefault:"500ms"`
 	SweepBatch    int           `env:"SWEEP_BATCH" envDefault:"500"`
 
-	AdmissionPublicKeyFiles []string      `env:"ADMISSION_PUBLIC_KEY_FILES,required" envSeparator:","`
+	// Trusted admission-token keys: queue-svc's published key set
+	// (ADMISSION_JWKS_URL), key files, or both. At least one is required.
+	AdmissionPublicKeyFiles []string      `env:"ADMISSION_PUBLIC_KEY_FILES" envSeparator:","`
+	AdmissionJWKSURL        string        `env:"ADMISSION_JWKS_URL"`
+	JWKSRefreshInterval     time.Duration `env:"JWKS_REFRESH_INTERVAL" envDefault:"5m"`
+	JWKSMinRefreshInterval  time.Duration `env:"JWKS_MIN_REFRESH_INTERVAL" envDefault:"30s"`
 	TokenLeeway             time.Duration `env:"TOKEN_LEEWAY" envDefault:"5s"`
 	AdminToken              string        `env:"ADMIN_TOKEN,required,unset"`
 }
@@ -51,6 +58,17 @@ func (c *config) Validate() error {
 	}
 	if len(c.AdminToken) < 32 {
 		errs = append(errs, errors.New("ADMIN_TOKEN must be at least 32 characters"))
+	}
+	if len(c.AdmissionPublicKeyFiles) == 0 && c.AdmissionJWKSURL == "" {
+		errs = append(errs, errors.New("set ADMISSION_JWKS_URL, ADMISSION_PUBLIC_KEY_FILES, or both"))
+	}
+	if c.AdmissionJWKSURL != "" {
+		if u, err := url.Parse(c.AdmissionJWKSURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			errs = append(errs, errors.New("ADMISSION_JWKS_URL must be an http(s) URL"))
+		}
+	}
+	if c.JWKSMinRefreshInterval < time.Second || c.JWKSRefreshInterval < c.JWKSMinRefreshInterval {
+		errs = append(errs, errors.New("JWKS_MIN_REFRESH_INTERVAL must be at least 1s and no more than JWKS_REFRESH_INTERVAL"))
 	}
 	return errors.Join(errs...)
 }
@@ -83,11 +101,29 @@ func run(ctx context.Context) error {
 	}
 	defer func() { _ = rdb.Close() }()
 
-	keys, err := authn.LoadPublicKeys(cfg.AdmissionPublicKeyFiles)
-	if err != nil {
-		return err
+	var static map[string]ed25519.PublicKey
+	if len(cfg.AdmissionPublicKeyFiles) > 0 {
+		if static, err = authn.LoadPublicKeys(cfg.AdmissionPublicKeyFiles); err != nil {
+			return err
+		}
 	}
-	verifier := authn.NewVerifier(keys, cfg.TokenLeeway)
+	checks := []health.Check{valkey.Check(rdb)}
+	var background []app.Component
+	verifier := authn.NewVerifier(static, cfg.TokenLeeway)
+	if cfg.AdmissionJWKSURL != "" {
+		jwks := authn.NewJWKSClient(authn.JWKSOptions{
+			URL: cfg.AdmissionJWKSURL, Static: static,
+			RefreshEvery: cfg.JWKSRefreshInterval, MinRefresh: cfg.JWKSMinRefreshInterval,
+		}, reg, log)
+		// Not fatal: queue-svc may start later. Readiness stays false until
+		// some key is known, and the first token with a new kid fetches again.
+		if err := jwks.Refresh(ctx); err != nil {
+			log.Warn("jwks: initial fetch failed; will retry", "url", cfg.AdmissionJWKSURL, "err", err)
+		}
+		verifier = authn.NewVerifierWith(jwks.Lookup, cfg.TokenLeeway)
+		checks = append(checks, health.Check{Name: "admission-keys", Fn: jwks.Check})
+		background = append(background, jwks)
+	}
 
 	store := inventory.NewStore(rdb)
 	if err := store.LoadScripts(ctx); err != nil {
@@ -99,7 +135,7 @@ func run(ctx context.Context) error {
 		return err
 	}
 
-	hc := health.New(2*time.Second, valkey.Check(rdb))
+	hc := health.New(2*time.Second, checks...)
 	httpMetrics := httpx.NewHTTPMetrics(reg)
 	public := httpx.NewRouter(
 		httpx.RequestID(),
@@ -116,9 +152,10 @@ func run(ctx context.Context) error {
 		authn.RequireStaticToken(cfg.AdminToken),
 	)
 
-	return app.Run(ctx, log, hc, cfg.HTTP.DrainDelay,
+	components := append([]app.Component{
 		httpx.NewServer("public", cfg.HTTP.Addr, public, cfg.HTTP, log),
 		httpx.NewServer("admin", cfg.HTTP.AdminAddr, admin, cfg.HTTP, log, httpx.WithWriteTimeout(90*time.Second)),
 		inventory.NewSweeper(store, cfg.SweepInterval, cfg.SweepBatch, invMetrics, log),
-	)
+	}, background...)
+	return app.Run(ctx, log, hc, cfg.HTTP.DrainDelay, components...)
 }

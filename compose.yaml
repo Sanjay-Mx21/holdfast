@@ -58,16 +58,16 @@ services:
       ENVIRONMENT: development
       LOG_FORMAT: text
       VALKEY_ADDRS: valkey:6379
-      ADMISSION_PUBLIC_KEY_FILES: /keys/admission.pub
+      # Trust whatever queue-svc publishes: key rotation needs no restart here.
+      ADMISSION_JWKS_URL: http://queue:8080/.well-known/jwks.json
       ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-only-admin-token-change-me-0123456789}
-    volumes:
-      - ./.local/keys:/keys:ro
     ports:
       - "8081:8080" # public API
       - "9091:9090" # admin: metrics, health, pprof, operator API (never expose in production)
     depends_on:
       valkey: { condition: service_healthy }
       holdfastctl: { condition: service_completed_successfully }
+      queue: { condition: service_started }
     restart: unless-stopped
 
   queue:
