@@ -684,7 +684,7 @@ Every key for event E carries the hash tag `{E}`, so all keys a script touches l
 | `rl:SCOPE:ID` | hash | token-bucket state: tokens and last refill | auto-expiring |
 | `jti:ID` | string | spent one-time token IDs, for replay protection | token lifetime |
 
-- **Built so far.** The `inv:*` keys exist since Drop 1; `q:{E}:config` and `q:{E}:state` since task 2.1. `q:{E}:members`, `q:{E}:seq` and `rl:*` since task 2.2; `q:events` since task 2.3. `q:{E}:admitted`, `adm:{E}:epoch` and `adm:{E}:sessions` since task 2.5. `q:{E}:status` and `jti:*` arrive with the rest of Phase 2.
+- **Built so far.** The `inv:*` keys exist since Drop 1; `q:{E}:config` and `q:{E}:state` since task 2.1. `q:{E}:members`, `q:{E}:seq` and `rl:*` since task 2.2; `q:events` since task 2.3. `q:{E}:admitted`, `adm:{E}:epoch` and `adm:{E}:sessions` since task 2.5; `q:{E}:status` since task 2.6. `jti:*` arrives with task 2.8.
 - **A deliberate hot key.** One event's inventory lives on one shard. Admission control caps that traffic at a few hundred operations per second, so this is fine. Seat-map mode (Phase 7) shards by section with tags like `{E:S}`.
 - **Durability.** AOF with `appendfsync everysec`, plus a replica and Sentinel in Phase 5. A crash can lose roughly the last second of writes, which is exactly why PostgreSQL owns the final guard and why runbook RB-2 exists.
 - **Memory.** One million queue members at roughly 100 bytes each is about 100 MB. Compact user IDs (16 raw bytes instead of a 36-character UUID string) shrink that a lot.
@@ -1356,7 +1356,7 @@ Measure the **collapse ratio**: edge requests per second (`X-Cache-Status: HIT`)
 | `POST /v1/auth/refresh` | refresh cookie | Rotate the refresh token | 200; 401 and the whole family revoked if an old token is reused |
 | `GET /.well-known/jwks.json` | none | Public signing keys | 200, cacheable |
 | `GET /v1/events/{id}` | none | Event details | 200, cached 60 s |
-| `GET /v1/events/{id}/status` | none | The shared status document | 200, edge-cached 1 s |
+| `GET /v1/events/{id}/status` | none | The shared status document ✅ | 200, edge-cached 1 s (`public, max-age=1`); 404 `EVENT_NOT_FOUND` |
 | `GET /v1/queue/{id}/challenge` | access token | Proof-of-work challenge | 200 |
 | `POST /v1/queue/{id}/join` | access token + PoW solution (until Phase 4: the `X-Dev-User-Id` development header, no PoW) | Join the waiting room ✅ | 202; 403 outside your policy window (Phase 4); 404 `EVENT_NOT_FOUND`; 409 `QUEUE_CLOSED`; 429 `RATE_LIMITED` with Retry-After |
 | `GET /v1/queue/{id}/me` | access token (until Phase 4: the `X-Dev-User-Id` development header) | Your rank after T0 ✅ | 200 with `rank`, or `randomizingAt` before T0; 404 `NOT_IN_QUEUE`; 429 `RATE_LIMITED` |
@@ -1637,7 +1637,7 @@ holdfast/
 │   ├── inventory/                    ✅ inventory-svc (public :8080, admin :9090)
 │   ├── holdfastctl/                  ✅ operator CLI
 │   ├── contention/                   ✅ experiment E1 harness
-│   ├── queue/                        ✅ queue-svc: provisioning, joining, T0, positions, admission (2.1 to 2.5)    ⏳ rest of 2
+│   ├── queue/                        ✅ queue-svc: provisioning, joining, T0, positions, admission, status (2.1 to 2.6)    ⏳ rest of 2
 │   ├── booking/  payment/  mockpsp/  ⏳ 3
 │   ├── auth/                         ⏳ 4
 │   └── auditor/                      ⏳ 5
@@ -1646,7 +1646,7 @@ holdfast/
 │   │                                 ✅ ratelimit (2.2)    ⏳ kafka, otel, outbox, idempotency, grpcx (3)
 │   ├── inventory/                    ✅ Lua scripts (go:embed), store, service, sweeper, HTTP handler, metrics
 │   ├── booking/                      ✅ catalog, guard         ⏳ saga, deadline job (3)
-│   ├── queue/                        ✅ provisioning, lottery, joining, admission controller (2.1 to 2.5)    ⏳ status document (2)
+│   ├── queue/                        ✅ provisioning, lottery, joining, admission controller, status document (2.1 to 2.6)    ⏳ admission tokens (2)
 │   ├── payment/                      ⏳ intents, webhooks, ledger, PSP client (3); reconciler (5)
 │   ├── auth/                         ⏳ OTP, tokens, JWKS (4)
 │   ├── policy/                       ⏳ verified window, agent lockout, caps, freeze (4)
@@ -2048,7 +2048,7 @@ The dates are illustrative. The gates are not.
 - [x] 2.3 **The T0 transition.** The leader flips PRE to OPEN at the opening time; joins after T0 get FIFO scores. *Built without the leader: Valkey's clock decides T0, a join after T0 flips the state itself, and an idempotent opener in every replica flips it when nobody joins (see 9.1).*
 - [x] 2.4 **Your position.** `GET /v1/queue/{id}/me` returns your rank after T0, and `randomizingAt` before it.
 - [x] 2.5 **Admission controller.** One leader per event, elected with a PostgreSQL advisory lock. The fencing epoch `adm:{E}:epoch` is incremented on every leadership change, and `advance.lua` moves `admittedUpTo` only when the caller's epoch matches. The leader ticks every 250 ms and caps concurrency with Little's Law, using the session set `adm:{E}:sessions`.
-- [ ] 2.6 **Status document.** The leader writes `q:{E}:status` (state, `admittedUpTo`, queue size, `updatedAt`) on every tick. `GET /v1/events/{id}/status` serves it with `Cache-Control: public, max-age=1`.
+- [x] 2.6 **Status document.** The leader writes `q:{E}:status` (state, `admittedUpTo`, queue size, `updatedAt`) on every tick. `GET /v1/events/{id}/status` serves it with `Cache-Control: public, max-age=1`.
 - [ ] 2.7 **Admission tokens.** `POST /v1/queue/{id}/admit` issues the Ed25519 token (reusing `authn.Issuer`) when your rank is within `admittedUpTo`, and records your session. Publish `GET /.well-known/jwks.json`.
 - [ ] 2.8 **Close the inventory token gaps.** Decide whether one admission token allows one hold or a bounded number, and enforce it with `jti:*`. Decide between trusted key files and fetching JWKS with caching. Record both decisions in `docs/services/queue.md`.
 - [ ] 2.9 **NGINX.** Route `/v1/queue/` to queue-svc and hold paths to inventory-svc. Micro-cache `/v1/events/{id}/status` and `/availability` for one second, with `proxy_cache_lock on` and `proxy_cache_use_stale updating`.

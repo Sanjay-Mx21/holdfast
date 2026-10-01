@@ -41,7 +41,7 @@ func newFixture(t *testing.T) *fixture {
 	k := keysFor(eventID)
 	t.Cleanup(func() {
 		c := context.Background()
-		_ = rdb.Del(c, k.config(), k.state(), k.members(), k.seq()).Err()
+		_ = rdb.Del(c, k.config(), k.state(), k.members(), k.seq(), k.admitted(), k.epoch(), k.sessions(), k.status()).Err()
 		_ = rdb.SRem(c, eventsKey, eventID).Err()
 	})
 	return &fixture{svc: NewService(store), store: store, rdb: rdb, eventID: eventID}
@@ -381,7 +381,8 @@ func TestJoinBeforeT0LeavesTheQueueInPre(t *testing.T) {
 // Valkey stored, and every FIFO member got exactly one arrival number.
 func TestJoinsAcrossT0(t *testing.T) {
 	f := newFixture(t)
-	f.provisionAt(t, time.Now().Add(150*time.Millisecond))
+	start := time.Now() // with a monotonic reading, to detect a wall-clock step (D11)
+	f.provisionAt(t, start.Add(150*time.Millisecond).Round(0))
 	var lottery, fifo, opened atomic.Int64
 	var wg sync.WaitGroup
 	deadline := time.Now().Add(450 * time.Millisecond)
@@ -408,6 +409,9 @@ func TestJoinsAcrossT0(t *testing.T) {
 	}
 	wg.Wait()
 	if lottery.Load() == 0 || fifo.Load() == 0 {
+		if step := time.Now().Round(0).Sub(start.Round(0)) - time.Since(start); step > 50*time.Millisecond || step < -50*time.Millisecond {
+			t.Skipf("wall clock stepped by %s around T0, so the joins could not straddle it", step)
+		}
 		t.Fatalf("joins did not straddle T0: %d lottery, %d FIFO", lottery.Load(), fifo.Load())
 	}
 	mustEqual(t, "joins that opened the queue", opened.Load(), int64(1))
@@ -472,9 +476,15 @@ func TestProvisionRegistersEventForTheOpener(t *testing.T) {
 // TestOpenerOpensAtT0WithoutJoins runs a real opener. Another queue-svc on
 // the same Valkey may get there first, so the test checks when the queue
 // opened, not which opener did it.
+//
+// T0 is a wall-clock time and Valkey judges it by its wall clock, which WSL2
+// steps by about half a second when it resyncs with Windows. So "too early"
+// is judged by Valkey's own clock, and the promptness check is skipped (with
+// a log line) for a run in which the wall clock stepped (issue D11).
 func TestOpenerOpensAtT0WithoutJoins(t *testing.T) {
 	f := newFixture(t)
-	opensAt := time.Now().Add(300 * time.Millisecond)
+	start := time.Now() // with a monotonic reading
+	opensAt := start.Add(300 * time.Millisecond).Round(0)
 	cfg := validConfig()
 	cfg.OpensAt = opensAt
 	if _, err := f.svc.Provision(ctx, f.eventID, cfg); err != nil {
@@ -487,22 +497,44 @@ func TestOpenerOpensAtT0WithoutJoins(t *testing.T) {
 	go func() { done <- op.Run(runCtx) }()
 	defer func() { cancel(); <-done }()
 
-	for time.Now().Before(opensAt.Add(-50 * time.Millisecond)) {
-		if f.state(t) != string(StatePre) {
-			t.Fatal("queue opened before T0")
+	valkeyNow := func() time.Time {
+		t.Helper()
+		vt, err := f.rdb.Time(ctx).Result()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return vt
+	}
+	// Never open before T0 by Valkey's clock: read the state, then the clock.
+	for {
+		s := f.state(t)
+		now := valkeyNow()
+		if !now.Before(opensAt) {
+			break
+		}
+		if s != string(StatePre) {
+			t.Fatalf("queue %s while Valkey's clock is %s before T0", s, opensAt.Sub(now))
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+	deadline := time.Now().Add(3 * time.Second)
 	for f.state(t) == string(StatePre) {
-		if time.Since(opensAt) > 2*time.Second {
-			t.Fatal("queue still PRE 2s after T0")
+		if time.Now().After(deadline) {
+			t.Fatal("queue still PRE well after T0")
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	if late := time.Since(opensAt); late > 500*time.Millisecond {
+	mustEqual(t, "state", f.state(t), string(StateOpen))
+
+	// Promptness, unless the wall clock stepped during the test.
+	step := time.Now().Round(0).Sub(start.Round(0)) - time.Since(start)
+	if step > 50*time.Millisecond || step < -50*time.Millisecond {
+		t.Logf("wall clock stepped by %s during the test; skipping the promptness check", step)
+		return
+	}
+	if late := time.Now().Round(0).Sub(opensAt); late > 500*time.Millisecond {
 		t.Fatalf("queue opened %s after T0, want within a few opener intervals", late)
 	}
-	mustEqual(t, "state", f.state(t), string(StateOpen))
 }
 
 // --- position ---

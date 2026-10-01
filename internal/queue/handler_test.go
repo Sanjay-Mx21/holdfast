@@ -24,6 +24,7 @@ type fakeService struct {
 	provision func(ctx context.Context, eventID string, cfg EventConfig) (bool, error)
 	join      func(ctx context.Context, eventID, userID string) (JoinResult, error)
 	position  func(ctx context.Context, eventID, userID string) (Position, error)
+	status    func(ctx context.Context, eventID string) (Status, error)
 }
 
 func (f *fakeService) Provision(ctx context.Context, e string, c EventConfig) (bool, error) {
@@ -34,6 +35,9 @@ func (f *fakeService) Join(ctx context.Context, e, u string) (JoinResult, error)
 }
 func (f *fakeService) Position(ctx context.Context, e, u string) (Position, error) {
 	return f.position(ctx, e, u)
+}
+func (f *fakeService) Status(ctx context.Context, e string) (Status, error) {
+	return f.status(ctx, e)
 }
 
 // fakeLimiter allows everything unless a scope is listed in deny; it records
@@ -519,5 +523,65 @@ func TestPositionRequiresIdentityAndIsRateLimited(t *testing.T) {
 	// The per-user position bucket must not touch the join buckets.
 	if len(h.lim.calls) != 1 || h.lim.calls[0] != "position-user="+userID {
 		t.Fatalf("limiter calls %v", h.lim.calls)
+	}
+}
+
+// --- status document ---
+
+const statusPath = "/v1/events/" + eventID + "/status"
+
+func TestStatusIsPublicAndCacheable(t *testing.T) {
+	opens := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
+	updated := opens.Add(90 * time.Second)
+	h := newHarness(&fakeService{status: func(_ context.Context, e string) (Status, error) {
+		if e != eventID {
+			t.Errorf("service got event %q", e)
+		}
+		return Status{EventID: eventID, State: StateOpen, OpensAt: opens, AdmittedUpTo: 4200, QueueSize: 50000, UpdatedAt: updated}, nil
+	}})
+	rec := send(h.public, http.MethodGet, statusPath, "", "", nil, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d (body %s)", rec.Code, rec.Body)
+	}
+	want := `{"eventId":"` + eventID + `","state":"OPEN","opensAt":"2026-10-05T12:00:00Z","admittedUpTo":4200,"queueSize":50000,"updatedAt":"2026-10-05T12:01:30Z"}`
+	if got := strings.TrimSpace(rec.Body.String()); got != want {
+		t.Fatalf("body %s\nwant %s", got, want)
+	}
+	if cc := rec.Header().Get("Cache-Control"); cc != "public, max-age=1" {
+		t.Fatalf("Cache-Control %q, want public, max-age=1", cc)
+	}
+	if len(h.lim.calls) != 0 {
+		t.Fatalf("the status document must not be rate limited per client: %v", h.lim.calls)
+	}
+}
+
+func TestStatusFallbackHasNullUpdatedAt(t *testing.T) {
+	h := newHarness(&fakeService{status: func(context.Context, string) (Status, error) {
+		return Status{EventID: eventID, State: StatePre, OpensAt: time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)}, nil
+	}})
+	rec := send(h.public, http.MethodGet, statusPath, "", "", nil, "")
+	if !strings.Contains(rec.Body.String(), `"updatedAt":null`) {
+		t.Fatalf("fallback document should say updatedAt null, got %s", rec.Body)
+	}
+}
+
+func TestStatusErrors(t *testing.T) {
+	for _, tt := range []struct {
+		err    error
+		status int
+		code   string
+	}{
+		{ErrEventNotFound, http.StatusNotFound, "EVENT_NOT_FOUND"},
+		{fmt.Errorf("%w: eventId must be a UUID", ErrInvalidRequest), http.StatusBadRequest, "INVALID_REQUEST"},
+		{context.DeadlineExceeded, http.StatusServiceUnavailable, "UNAVAILABLE"},
+	} {
+		h := newHarness(&fakeService{status: func(context.Context, string) (Status, error) { return Status{}, tt.err }})
+		rec := send(h.public, http.MethodGet, statusPath, "", "", nil, "")
+		if rec.Code != tt.status || problemCode(t, rec) != tt.code {
+			t.Fatalf("status %d body %s, want %d %s", rec.Code, rec.Body, tt.status, tt.code)
+		}
+		if strings.Contains(rec.Header().Get("Cache-Control"), "public") {
+			t.Fatalf("an error response must not be publicly cacheable: %q", rec.Header().Get("Cache-Control"))
+		}
 	}
 }

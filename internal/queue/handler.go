@@ -24,6 +24,7 @@ type service interface {
 	Provision(ctx context.Context, eventID string, cfg EventConfig) (bool, error)
 	Join(ctx context.Context, eventID, userID string) (JoinResult, error)
 	Position(ctx context.Context, eventID, userID string) (Position, error)
+	Status(ctx context.Context, eventID string) (Status, error)
 }
 
 // limiter is what the HTTP layer needs from *ratelimit.Limiter.
@@ -67,6 +68,7 @@ func NewHandler(svc service, lim limiter, limits Limits, m *Metrics) *Handler {
 func (h *Handler) Register(public, internal *httpx.Router, identity, operator httpx.Middleware) {
 	public.Handle("POST /v1/queue/{eventID}/join", identity(http.HandlerFunc(h.join)))
 	public.Handle("GET /v1/queue/{eventID}/me", identity(http.HandlerFunc(h.position)))
+	public.Handle("GET /v1/events/{eventID}/status", http.HandlerFunc(h.status))
 	internal.Handle("PUT /internal/v1/events/{eventID}/queue", operator(http.HandlerFunc(h.provision)))
 }
 
@@ -139,6 +141,37 @@ func (h *Handler) position(w http.ResponseWriter, r *http.Request) {
 	}
 	// One user's place in line: never stored by a shared cache.
 	w.Header().Set("Cache-Control", "private, no-store")
+	httpx.WriteJSON(w, http.StatusOK, resp)
+}
+
+type statusResponse struct {
+	EventID      string     `json:"eventId"`
+	State        State      `json:"state"`
+	OpensAt      time.Time  `json:"opensAt"`
+	AdmittedUpTo int64      `json:"admittedUpTo"`
+	QueueSize    int64      `json:"queueSize"`
+	UpdatedAt    *time.Time `json:"updatedAt"`
+}
+
+// status serves the status document. It is identical for every client and
+// needs no identity, so a shared cache may keep it for one second: the edge
+// absorbs the waiting room's polling and the origin sees about one request
+// per second per cache node.
+func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
+	st, err := h.svc.Status(r.Context(), r.PathValue("eventID"))
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	resp := statusResponse{
+		EventID: st.EventID, State: st.State, OpensAt: st.OpensAt,
+		AdmittedUpTo: st.AdmittedUpTo, QueueSize: st.QueueSize,
+	}
+	if !st.UpdatedAt.IsZero() {
+		at := st.UpdatedAt
+		resp.UpdatedAt = &at
+	}
+	w.Header().Set("Cache-Control", "public, max-age=1")
 	httpx.WriteJSON(w, http.StatusOK, resp)
 }
 

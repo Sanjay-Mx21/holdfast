@@ -41,6 +41,10 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
   `maxSessions` (Little's Law). Only `OPEN` admits; `FROZEN` pauses. queue-svc
   now requires `POSTGRES_DSN` (elections only). Metrics for admissions, ticks,
   terms and the current leader.
+- **Status document** (task 2.6): `GET /v1/events/{id}/status` returns the
+  state, opening time, `admittedUpTo`, queue size and update time, rewritten by
+  the admission leader every tick and served with `public, max-age=1`; a
+  fallback with `updatedAt: null` until a leader has written it.
 
 ### Fixed
 

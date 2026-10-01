@@ -19,9 +19,11 @@
 //     closes, from T0 on their 1-based rank;
 //   - admission (task 2.5): one leader per event, elected with a PostgreSQL
 //     advisory lock and fenced by an epoch, admits people at the event's
-//     rate while capping concurrent sessions (Little's Law).
+//     rate while capping concurrent sessions (Little's Law);
+//   - the status document (task 2.6): the leader rewrites it every tick; it
+//     is the same for every client, so the edge can cache it for a second.
 //
-// The status document and admission tokens follow in tasks 2.6 and 2.7.
+// Admission tokens follow in task 2.7.
 //
 // Queue states:
 //

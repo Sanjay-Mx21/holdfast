@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
@@ -27,8 +28,9 @@ var (
 	openScript      = loadScript("open.lua")
 	positionScript  = loadScript("position.lua")
 	advanceScript   = loadScript("advance.lua")
+	statusScript    = loadScript("status.lua")
 
-	allScripts = []*redis.Script{provisionScript, joinScript, openScript, positionScript, advanceScript}
+	allScripts = []*redis.Script{provisionScript, joinScript, openScript, positionScript, advanceScript, statusScript}
 )
 
 // Store is the Valkey-backed state of the waiting room. It runs the atomic
@@ -171,7 +173,7 @@ func (s *Store) NewTerm(ctx context.Context, eventID string) (int64, error) {
 func (s *Store) Advance(ctx context.Context, eventID string, epoch int64, n int) (Advance, error) {
 	k := keysFor(eventID)
 	res, err := advanceScript.Run(ctx, s.rdb,
-		[]string{k.epoch(), k.state(), k.config(), k.members(), k.admitted(), k.sessions()},
+		[]string{k.epoch(), k.state(), k.config(), k.members(), k.admitted(), k.sessions(), k.status()},
 		epoch, n).Int64Slice()
 	if err != nil {
 		return Advance{}, fmt.Errorf("queue: advance: %w", err)
@@ -186,6 +188,36 @@ func (s *Store) Advance(ctx context.Context, eventID string, epoch int64, n int)
 		return Advance{}, ErrEventNotFound
 	}
 	return Advance{AdmittedUpTo: res[1], Admitted: res[2], ActiveSessions: res[3]}, nil
+}
+
+// Status reads the event's status document, or a fallback built from the
+// raw keys (with a zero UpdatedAt) if no admission leader has written one.
+func (s *Store) Status(ctx context.Context, eventID string) (Status, error) {
+	k := keysFor(eventID)
+	res, err := statusScript.Run(ctx, s.rdb,
+		[]string{k.status(), k.state(), k.config(), k.admitted(), k.members()}).Slice()
+	if err != nil {
+		return Status{}, fmt.Errorf("queue: status: %w", err)
+	}
+	if len(res) != 2 {
+		return Status{}, fmt.Errorf("queue: status: unexpected reply %v", res)
+	}
+	if code, _ := res[0].(int64); code == -2 {
+		return Status{}, ErrEventNotFound
+	}
+	raw, _ := res[1].(string)
+	var d statusDoc
+	if err := json.Unmarshal([]byte(raw), &d); err != nil {
+		return Status{}, fmt.Errorf("queue: status: bad document: %w", err)
+	}
+	st := Status{
+		EventID: eventID, State: d.State, OpensAt: time.UnixMilli(d.OpensAtMs).UTC(),
+		AdmittedUpTo: d.AdmittedUpTo, QueueSize: d.QueueSize,
+	}
+	if d.UpdatedAtMs > 0 {
+		st.UpdatedAt = time.UnixMilli(d.UpdatedAtMs).UTC()
+	}
+	return st, nil
 }
 
 // Events lists provisioned events (the opener's work list).

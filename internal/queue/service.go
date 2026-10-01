@@ -67,6 +67,15 @@ func (s *Service) Position(ctx context.Context, eventID, userID string) (Positio
 	return s.store.Position(ctx, ev, user)
 }
 
+// Status returns the event's status document.
+func (s *Service) Status(ctx context.Context, eventID string) (Status, error) {
+	ev, err := canonicalUUID("eventId", eventID)
+	if err != nil {
+		return Status{}, err
+	}
+	return s.store.Status(ctx, ev)
+}
+
 // canonicalUUID accepts only the 36-character hyphenated form and returns it
 // lower-cased. Keys are built from IDs, so one UUID must map to one key, and
 // characters such as '{' or '|' must never reach the keyspace.
