@@ -8,11 +8,13 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/app"
@@ -50,6 +52,14 @@ type config struct {
 
 	PositionUserBurst     int     `env:"POSITION_USER_BURST" envDefault:"10"`
 	PositionUserPerSecond float64 `env:"POSITION_USER_PER_SECOND" envDefault:"1"`
+	AdmitUserBurst        int     `env:"ADMIT_USER_BURST" envDefault:"5"`
+	AdmitUserPerSecond    float64 `env:"ADMIT_USER_PER_SECOND" envDefault:"1"`
+
+	// Admission tokens: signed with the private key; the JWKS publishes its
+	// public key plus any extra public keys (the old key during a rotation).
+	AdmissionPrivateKeyFile      string        `env:"ADMISSION_PRIVATE_KEY_FILE,required"`
+	AdmissionExtraPublicKeyFiles []string      `env:"ADMISSION_EXTRA_PUBLIC_KEY_FILES" envSeparator:","`
+	AdmissionTokenTTL            time.Duration `env:"ADMISSION_TOKEN_TTL" envDefault:"10m"`
 
 	// OpenCheckInterval is how often the opener looks for queues due to open
 	// at T0. Joins open a due queue themselves, so this only bounds how long
@@ -69,6 +79,7 @@ func (c *config) limits() queue.Limits {
 		JoinPerIP:       ratelimit.Rule{Capacity: c.JoinIPBurst, Rate: c.JoinIPPerSecond},
 		JoinPerUser:     ratelimit.Rule{Capacity: c.JoinUserBurst, Rate: c.JoinUserPerSecond},
 		PositionPerUser: ratelimit.Rule{Capacity: c.PositionUserBurst, Rate: c.PositionUserPerSecond},
+		AdmitPerUser:    ratelimit.Rule{Capacity: c.AdmitUserBurst, Rate: c.AdmitUserPerSecond},
 	}
 }
 
@@ -101,6 +112,12 @@ func (c *config) Validate() error {
 	}
 	if err := l.PositionPerUser.Validate(); err != nil {
 		errs = append(errs, fmt.Errorf("POSITION_USER_BURST / POSITION_USER_PER_SECOND: %w", err))
+	}
+	if err := l.AdmitPerUser.Validate(); err != nil {
+		errs = append(errs, fmt.Errorf("ADMIT_USER_BURST / ADMIT_USER_PER_SECOND: %w", err))
+	}
+	if c.AdmissionTokenTTL < time.Minute || c.AdmissionTokenTTL > time.Hour {
+		errs = append(errs, errors.New("ADMISSION_TOKEN_TTL must be between 1m and 1h"))
 	}
 	return errors.Join(errs...)
 }
@@ -164,13 +181,33 @@ func run(ctx context.Context) error {
 		httpx.Timeout(cfg.HTTP.RequestTimeout),
 	)
 	admin := httpx.NewAdminRouter(metrics.Handler(reg), hc)
+	raw, err := os.ReadFile(filepath.Clean(cfg.AdmissionPrivateKeyFile))
+	if err != nil {
+		return fmt.Errorf("read admission private key: %w", err)
+	}
+	signingKey, err := authn.ParsePrivateKeyPEM(raw)
+	if err != nil {
+		return err
+	}
+	published := []ed25519.PublicKey{signingKey.Public().(ed25519.PublicKey)}
+	if len(cfg.AdmissionExtraPublicKeyFiles) > 0 {
+		extra, err := authn.LoadPublicKeys(cfg.AdmissionExtraPublicKeyFiles)
+		if err != nil {
+			return err
+		}
+		for _, k := range extra {
+			published = append(published, k)
+		}
+	}
+	log.Info("signing admission tokens", "kid", authn.KeyID(published[0]), "published_keys", len(published))
+
 	identity := noIdentity
 	if cfg.DevIdentity {
 		log.Warn("DEV_IDENTITY is on: buyers are identified by the X-Dev-User-Id header, which anyone can set")
 		identity = authn.RequireDevIdentity()
 	}
 	qm := queue.NewMetrics(reg)
-	queue.NewHandler(svc, lim, cfg.limits(), qm).
+	queue.NewHandler(svc, lim, cfg.limits(), qm, authn.NewIssuer(signingKey, cfg.AdmissionTokenTTL), authn.NewJWKSet(published...)).
 		Register(public, admin, identity, authn.RequireStaticToken(cfg.AdminToken))
 
 	return app.Run(ctx, log, hc, cfg.HTTP.DrainDelay,

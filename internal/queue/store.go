@@ -29,8 +29,9 @@ var (
 	positionScript  = loadScript("position.lua")
 	advanceScript   = loadScript("advance.lua")
 	statusScript    = loadScript("status.lua")
+	admitScript     = loadScript("admit.lua")
 
-	allScripts = []*redis.Script{provisionScript, joinScript, openScript, positionScript, advanceScript, statusScript}
+	allScripts = []*redis.Script{provisionScript, joinScript, openScript, positionScript, advanceScript, statusScript, admitScript}
 )
 
 // Store is the Valkey-backed state of the waiting room. It runs the atomic
@@ -218,6 +219,32 @@ func (s *Store) Status(ctx context.Context, eventID string) (Status, error) {
 		st.UpdatedAt = time.UnixMilli(d.UpdatedAtMs).UTC()
 	}
 	return st, nil
+}
+
+// Admit checks whether userID may claim their turn: their rank is within
+// admittedUpTo and their session slot is alive.
+func (s *Store) Admit(ctx context.Context, eventID, userID string) (Turn, error) {
+	k := keysFor(eventID)
+	res, err := admitScript.Run(ctx, s.rdb, []string{k.state(), k.members(), k.admitted(), k.sessions()}, userID).Int64Slice()
+	if err != nil {
+		return Turn{}, fmt.Errorf("queue: admit: %w", err)
+	}
+	if len(res) != 3 {
+		return Turn{}, fmt.Errorf("queue: admit: unexpected reply %v", res)
+	}
+	switch res[0] {
+	case -1:
+		return Turn{}, ErrNotInQueue
+	case -2:
+		return Turn{}, ErrEventNotFound
+	case -3:
+		return Turn{}, ErrTurnExpired
+	case -4:
+		return Turn{}, ErrQueueClosed
+	case 0:
+		return Turn{}, &NotYourTurnError{Rank: res[1], AdmittedUpTo: res[2]}
+	}
+	return Turn{EventID: eventID, UserID: userID, Rank: res[1], SessionExpires: time.UnixMilli(res[2]).UTC()}, nil
 }
 
 // Events lists provisioned events (the opener's work list).
