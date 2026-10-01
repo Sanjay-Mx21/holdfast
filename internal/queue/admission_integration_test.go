@@ -43,7 +43,7 @@ func (f *fixture) openQueueWith(t *testing.T, n int, maxSessions int) {
 	}
 	f.setState(t, StateOpen)
 	t.Cleanup(func() {
-		_ = f.rdb.Del(context.Background(), k.admitted(), k.epoch(), k.sessions()).Err()
+		_ = f.rdb.Del(context.Background(), k.admitted(), k.epoch(), k.sessions(), k.status()).Err()
 	})
 }
 
@@ -234,4 +234,94 @@ func TestOneLeaderAndFailover(t *testing.T) {
 	// The dead leader's epoch is fenced off.
 	_, err := f.store.Advance(ctx, f.eventID, firstEpoch, 100)
 	mustErr(t, "advance with the old leader's epoch", err, ErrFenced)
+}
+
+// --- status document ---
+
+func TestAdvanceWritesTheStatusDocumentEveryTick(t *testing.T) {
+	f := newFixture(t)
+	f.openQueueWith(t, 30, 10_000)
+	epoch, _ := f.store.NewTerm(ctx, f.eventID)
+	before := time.Now()
+	if _, err := f.store.Advance(ctx, f.eventID, epoch, 7); err != nil {
+		t.Fatal(err)
+	}
+	st, err := f.svc.Status(ctx, f.eventID)
+	mustErr(t, "status", err, nil)
+	mustEqual(t, "state", st.State, StateOpen)
+	mustEqual(t, "admittedUpTo", st.AdmittedUpTo, int64(7))
+	mustEqual(t, "queueSize", st.QueueSize, int64(30))
+	if st.UpdatedAt.Before(before.Add(-time.Second)) || st.UpdatedAt.After(time.Now().Add(time.Second)) {
+		t.Fatalf("updatedAt %s not around now", st.UpdatedAt)
+	}
+
+	// Ticks that admit nobody still refresh it, in every state.
+	f.setState(t, StateFrozen)
+	time.Sleep(5 * time.Millisecond)
+	if _, err := f.store.Advance(ctx, f.eventID, epoch, 7); err != nil {
+		t.Fatal(err)
+	}
+	st2, _ := f.svc.Status(ctx, f.eventID)
+	mustEqual(t, "state while frozen", st2.State, StateFrozen)
+	mustEqual(t, "admittedUpTo while frozen", st2.AdmittedUpTo, int64(7))
+	if !st2.UpdatedAt.After(st.UpdatedAt) {
+		t.Fatalf("updatedAt not refreshed: %s then %s", st.UpdatedAt, st2.UpdatedAt)
+	}
+}
+
+func TestStaleLeaderCannotOverwriteTheStatusDocument(t *testing.T) {
+	f := newFixture(t)
+	f.openQueueWith(t, 30, 10_000)
+	old, _ := f.store.NewTerm(ctx, f.eventID)
+	if _, err := f.store.Advance(ctx, f.eventID, old, 3); err != nil {
+		t.Fatal(err)
+	}
+	newer, _ := f.store.NewTerm(ctx, f.eventID)
+	if _, err := f.store.Advance(ctx, f.eventID, newer, 2); err != nil {
+		t.Fatal(err)
+	}
+	doc, _ := f.rdb.Get(ctx, keysFor(f.eventID).status()).Result()
+	_, err := f.store.Advance(ctx, f.eventID, old, 10)
+	mustErr(t, "stale advance", err, ErrFenced)
+	after, _ := f.rdb.Get(ctx, keysFor(f.eventID).status()).Result()
+	mustEqual(t, "status document after a fenced tick", after, doc)
+}
+
+func TestStatusReportsPrePastT0AsOpen(t *testing.T) {
+	f := newFixture(t)
+	f.openQueueWith(t, 5, 10_000) // opens a minute ago
+	f.setState(t, StatePre)       // nobody has flipped it
+	epoch, _ := f.store.NewTerm(ctx, f.eventID)
+	if _, err := f.store.Advance(ctx, f.eventID, epoch, 5); err != nil {
+		t.Fatal(err)
+	}
+	st, _ := f.svc.Status(ctx, f.eventID)
+	mustEqual(t, "state shown", st.State, StateOpen)
+	mustEqual(t, "admitted (advance only admits when the stored state is OPEN)", st.AdmittedUpTo, int64(0))
+}
+
+func TestStatusFallbackBeforeAnyLeader(t *testing.T) {
+	f := newFixture(t)
+	opensAt := time.Now().Add(time.Hour).Truncate(time.Millisecond)
+	f.provisionAt(t, opensAt)
+	for range 3 {
+		if _, err := f.svc.Join(ctx, f.eventID, uuid.NewString()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	st, err := f.svc.Status(ctx, f.eventID)
+	mustErr(t, "status", err, nil)
+	mustEqual(t, "state", st.State, StatePre)
+	if !st.OpensAt.Equal(opensAt) {
+		t.Fatalf("opensAt %s, want %s", st.OpensAt, opensAt)
+	}
+	mustEqual(t, "queueSize", st.QueueSize, int64(3))
+	mustEqual(t, "admittedUpTo", st.AdmittedUpTo, int64(0))
+	mustEqual(t, "updatedAt is zero without a leader", st.UpdatedAt.IsZero(), true)
+}
+
+func TestStatusNotProvisioned(t *testing.T) {
+	f := newFixture(t)
+	_, err := f.svc.Status(ctx, f.eventID)
+	mustErr(t, "status", err, ErrEventNotFound)
 }

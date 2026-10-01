@@ -116,3 +116,26 @@ type Advance struct {
 	// ActiveSessions counts unexpired session slots after this tick.
 	ActiveSessions int64
 }
+
+// Status is an event's status document: the same for every client, so the
+// edge can cache it for a second and absorb the waiting room's polling.
+type Status struct {
+	EventID string
+	// State follows the T0 clock rule: PRE past T0 reads as OPEN.
+	State        State
+	OpensAt      time.Time
+	AdmittedUpTo int64
+	QueueSize    int64
+	// UpdatedAt is when the admission leader last wrote the document; zero
+	// when no leader has written it yet (a fallback built from the raw keys).
+	UpdatedAt time.Time
+}
+
+// statusDoc is the JSON stored in q:{E}:status by advance.lua.
+type statusDoc struct {
+	State        State `json:"state"`
+	OpensAtMs    int64 `json:"opensAtMs"`
+	AdmittedUpTo int64 `json:"admittedUpTo"`
+	QueueSize    int64 `json:"queueSize"`
+	UpdatedAtMs  int64 `json:"updatedAtMs"`
+}
