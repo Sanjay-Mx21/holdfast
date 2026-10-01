@@ -29,7 +29,7 @@ IDs match section 2.3 of the design doc.
 | Service | Status | Owns | Talks to |
 |---|---|---|---|
 | inventory-svc (`cmd/inventory`) | Built | Valkey keys `inv:*` | Valkey |
-| queue-svc (`cmd/queue`) | Phase 2 in progress: provisioning and joining built | Valkey keys `q:*`, `rl:*` | Valkey |
+| queue-svc (`cmd/queue`) | Phase 2 in progress: provisioning, joining and the T0 transition built | Valkey keys `q:*`, `rl:*` | Valkey |
 | booking final guard (`internal/booking`) | Built as a library | `booking` schema | PostgreSQL |
 | holdfastctl (`cmd/holdfastctl`) | Built | Nothing (operator tool) | PostgreSQL, Valkey |
 | booking, payment, auth | Planned | See design doc | |
@@ -81,6 +81,12 @@ The expiry sweeper runs in every replica, every `SWEEP_INTERVAL`, in batches
 of `SWEEP_BATCH`. `release.lua` re-checks state and expiry against the Valkey
 server clock, so racing sweepers are harmless and application clock skew can
 only delay a release, never cause an early one.
+
+The queue opener runs in every queue-svc replica, every `OPEN_CHECK_INTERVAL`.
+`open.lua` flips a queue from PRE to OPEN only once the Valkey server clock
+reaches its opening time, so racing openers are harmless. Joins apply the same
+rule themselves, so the opener's timing never affects who gets a lottery
+position.
 
 ## 8. Security
 

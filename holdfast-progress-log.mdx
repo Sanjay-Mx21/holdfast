@@ -32,13 +32,13 @@ All times are IST (UTC+05:30).
 | **Project** | A flash-sale booking engine that sells exactly the available units under extreme demand, never more |
 | **Plan version** | 2.0 (1 October 2026) |
 | **Milestones complete** | M0 Foundation, M1 Correctness core and M1.5 Bring-up and baseline |
-| **Current milestone** | M2 Fair waiting room: 2 of 14 tasks done (section 8); next task 2.3, [issue #7](https://github.com/Sanjay-Mx21/holdfast/issues/7) |
+| **Current milestone** | M2 Fair waiting room: 3 of 14 tasks done (section 8); next task 2.4, [issue #8](https://github.com/Sanjay-Mx21/holdfast/issues/8) |
 | **Progress to v1.0** | About 22% (11 of about 51 focused-work days, excluding Phase 7 stretch goals) |
 | **Repository** | [github.com/Sanjay-Mx21/holdfast](https://github.com/Sanjay-Mx21/holdfast), branch `main` |
 | **First commit** | `2173e50` "first commit", 2026-10-01 20:20, 82 files, 12,973 lines |
 | **Latest release** | [v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0), 2026-10-01 23:47, on `9dcd2f8` |
 | **CI** | Green since 2026-10-01 22:00; `main` is protected and every change needs a pull request with all 6 jobs passing |
-| **Issues so far** | 27 recorded: 22 resolved, 5 open (section 6) |
+| **Issues so far** | 30 recorded: 25 resolved, 5 open (section 6) |
 
 <Callout type="tip" title="v0.1.0 released, M1.5 complete (2026-10-01)">
 
@@ -95,7 +95,9 @@ Sources: the dates recorded in the ADRs and the plan, file modification times, a
 | 2026-10-02 00:33 | Status spreadsheet dropped from the plan (issue P10) | PR #56 |
 | 2026-10-02 00:49 | **Phase 2 started. Task 2.1 (queue provisioning) built and verified:** queue-svc with `PUT /internal/v1/events/{id}/queue` on its admin port and `holdfastctl event create` provisioning the queue; 6 unit and 5 integration tests pass; end to end on the local stack: 401 without a token, 201 created, 200 identical retry, 409 different settings, 400 bad input, state PRE in Valkey; Prometheus scrapes it | PR #57 (merged by the owner at 00:56), `c893308`; issue #5 closed |
 | 2026-10-02 ~01:00 | `images (queue)` added to the required checks on `main` (now 7) | Branch protection settings |
-| 2026-10-02 01:19 | **Task 2.2 (joining) built and verified:** `POST /v1/queue/{id}/join` with the lottery before T0 and arrival order after, a token-bucket rate limiter in Valkey (`internal/platform/ratelimit`), development identity (`X-Dev-User-Id`, refused in production) and a join metric; 25 queue tests, 8 rate-limiter tests and 2 identity tests pass; E1 still passes. End to end: 401 without identity, 202 `LOTTERY` before T0 and `FIFO` after, rejoin keeps the position, 404 unknown event, 409 closed, per-user limit 5 then 429 with `Retry-After`, per-IP limit 31 of 40 parallel joins accepted. Found and fixed a fairness bug in the plan's `join.lua` (issue P13) | Branch `feat/p2-joining`, issue #6 |
+| 2026-10-02 01:19 | **Task 2.2 (joining) built and verified:** `POST /v1/queue/{id}/join` with the lottery before T0 and arrival order after, a token-bucket rate limiter in Valkey (`internal/platform/ratelimit`), development identity (`X-Dev-User-Id`, refused in production) and a join metric; 25 queue tests, 8 rate-limiter tests and 2 identity tests pass; E1 still passes. End to end: 401 without identity, 202 `LOTTERY` before T0 and `FIFO` after, rejoin keeps the position, 404 unknown event, 409 closed, per-user limit 5 then 429 with `Retry-After`, per-IP limit 31 of 40 parallel joins accepted. Found and fixed a fairness bug in the plan's `join.lua` (issue P13) | PR #58 (merged by the owner at 01:26), `bc8c527`; issue #6 closed |
+| 2026-10-02 ~01:30 | The owner allowed the assistant to merge its own pull requests once every required check passes | Conversation; saved as a standing instruction |
+| 2026-10-02 01:41 | **Task 2.3 (the T0 transition) built and verified:** Valkey's clock decides T0; a join after T0 flips PRE to OPEN itself; an idempotent opener in every replica flips it when nobody joins. 11 new or changed tests; the full queue integration suite passed 100 runs with a live opener on the same Valkey; E1 still passes. End to end: a queue with no joins opened 63 ms after T0; a join after T0 got FIFO while the early joiner kept their lottery place; a join opened a queue whose T0 had passed unnoticed. Departs from the plan (issue P15) | Branch `feat/p2-t0-transition`, issue #7 |
 
 ## 3. What is complete, and what each piece contributes
 
@@ -172,10 +174,10 @@ Every problem met while bringing Drop 1 up and running the soak on 2026-10-01, i
 
 | Group | Recorded | Resolved | Open |
 |---|---|---|---|
-| P: defects in the repository | 14 | 9 | 5 |
+| P: defects in the repository | 16 | 11 | 5 |
 | E: machine and network | 6 | 6 | 0 |
-| D: diagnosis and process | 7 | 7 | 0 |
-| **Total** | **27** | **22** | **5** |
+| D: diagnosis and process | 8 | 8 | 0 |
+| **Total** | **30** | **25** | **5** |
 
 CI took **three runs** to go green:
 
@@ -201,8 +203,10 @@ CI took **three runs** to go green:
 | P10 | The plan (sections 17.2 and 17.3) tells readers to update `holdfast-build-status.xlsx` at every milestone, but no such file exists in the repository or the workspace | The milestone procedure points to a missing file | The spreadsheet was never created or never added | The owner chose to drop it (2026-10-02). The plan now points to the tracker in 17.1, the GitHub milestones and this log instead | ✅ PR #56 |
 | P11 | A running local stack does not pick up a changed `deploy/prometheus/prometheus.yml`: after task 2.1 added the `queue` scrape job, Prometheus kept scraping only `inventory` | The new service's metrics silently missing from Prometheus and Grafana | Prometheus reads its config at start-up, and `make up` does not recreate it when only a mounted file changes | `docker compose restart prometheus` loads it (verified: `queue` target up); the README now says so | ✅ Documented |
 | P12 | The admin routers (`httpx.NewAdminRouter`) apply no body-size limit, but `docs/services/inventory.md` lists `BODY_TOO_LARGE` among the errors without saying it applies to the public port only | Docs claim an error the inventory admin endpoint cannot return; operator endpoints accept bodies of any size (behind the operator token) | The admin router has its own middleware chain without `BodyLimit` | Not fixed. The queue doc omits the code. Options: add `BodyLimit` to the admin router, or correct the inventory doc | ⏳ Open |
-| P13 | The plan's `join.lua` (design doc 9.1, version 2.0) tested `state == 'OPEN'` and gave a lottery score to every other state, including `FROZEN`, which is only reachable after T0 | A buyer joining while the sale was frozen would get a score below 1 and jump ahead of everyone who joined after T0, breaking F1 (fairness) | The snippet treated "not OPEN" as "before T0" | Found while building task 2.2. The built script gives the lottery to `PRE` only; a regression test pins it; the plan's snippet and text are corrected | ✅ Branch `feat/p2-joining` |
+| P13 | The plan's `join.lua` (design doc 9.1, version 2.0) tested `state == 'OPEN'` and gave a lottery score to every other state, including `FROZEN`, which is only reachable after T0 | A buyer joining while the sale was frozen would get a score below 1 and jump ahead of everyone who joined after T0, breaking F1 (fairness) | The snippet treated "not OPEN" as "before T0" | Found while building task 2.2. The built script gives the lottery to `PRE` only; a regression test pins it; the plan's snippet and text are corrected | ✅ PR #58 |
 | P14 | The per-IP join limit sees the connection's address. Locally every request comes from the Docker gateway (`rl:join-ip:172.19.0.1`); behind NGINX every request would share NGINX's address | Until fixed, the per-IP bucket is one bucket for everybody behind the proxy, so it limits the whole site, not one machine | Forwarded-for headers are deliberately not trusted yet: trusting them without a known proxy lets any client choose its own IP | Planned in task 2.9 (NGINX), which must pass the client address and make queue-svc trust it only from NGINX | ⏳ Open |
+| P15 | The plan (task 2.3 and design doc 9.1) had the admission leader flip the queue from PRE to OPEN at T0 | The leader ticks every 250 ms and re-election waits 2 s, so joins arriving after T0 but before the flip would still get lottery positions: at the design's T0 rush of 17,000+ joins per second, hundreds to thousands of late arrivals jumping ahead. It also made T0 depend on task 2.5, which comes later | The flip time, not the clock, decided who counted as early | T0 is judged by Valkey's clock inside `join.lua`, which flips the state itself; an idempotent opener in every replica handles the no-join case; plan 9.1 and task 2.3 updated | ✅ Branch `feat/p2-t0-transition` |
+| P16 | The join integration tests merged in PR #58 provisioned queues with a fixed opening date, 2026-10-05 | Harmless while joins ignored the clock; once task 2.3 made joins read it, every "before T0" test would have started failing on 5 October 2026 | A literal date in a test fixture | Caught while building task 2.3, before it fired: join fixtures now open queues relative to the current time | ✅ Branch `feat/p2-t0-transition` |
 
 ### 6.3 Machine and network
 
@@ -226,6 +230,7 @@ CI took **three runs** to go green:
 | D5 | While the AC soak's run 1 was starting, the assistant ran Docker and WSL diagnostics on the same machine | Run 1 is the slowest of 100: hold p99 1,088 ms against a median of 114 ms | Left the machine alone for the other 99 runs; run 1 is kept and reported, and the results README gives figures with and without it | ✅ |
 | D6 | While adding queue provisioning to `holdfastctl`, the assistant's scripted edit put a real line break inside a Go string literal | The CLI did not compile; the first end-to-end run failed at every step | Caught by the local gates before any commit; fixed to `\n` and the full run repeated with every gate passing | ✅ |
 | D7 | The first end-to-end check of the per-IP limit sent 40 joins one by one, starting Python for each user ID; they took over a second, the 10-per-second refill kept up, and all 40 got 202 | The check proved nothing, though it looked like the limit was broken | Rerun with the IDs generated first and the joins sent in parallel (134 ms): 31 accepted (burst 30 plus about one refilled token), 9 refused, all 9 counted | ✅ |
+| D8 | The first version of the new T0 tests provisioned an event (which registers it on the opener's work list) and then removed it from the list. A running stack's opener on the same Valkey could open the event in that gap | `TestJoinAtT0OpensTheQueueItself` failed once in 40 runs: the join found the queue already open | The repeat runs were there to catch exactly this. The fixture now runs `provision.lua` directly and never registers the event; the full suite then passed 100 runs with the stack's opener running | ✅ |
 
 ### 6.5 Owner setup actions
 
@@ -263,8 +268,8 @@ Goal: everyone waits fairly, and buyers enter the purchase path at a controlled 
 | Task | Issue | Status |
 |---|---|---|
 | 2.1 Queue provisioning | [#5](https://github.com/Sanjay-Mx21/holdfast/issues/5) | ✅ 2026-10-02 (PR #57): queue-svc, `PUT /internal/v1/events/{id}/queue`, `holdfastctl event create` provisions the queue; unit and integration tests |
-| 2.2 Joining | [#6](https://github.com/Sanjay-Mx21/holdfast/issues/6) | ✅ 2026-10-02: `join.lua` (lottery in PRE only), `POST /v1/queue/{id}/join`, per-IP and per-user token buckets, development identity, join metric |
-| 2.3 The T0 transition | [#7](https://github.com/Sanjay-Mx21/holdfast/issues/7) | ⏳ |
+| 2.2 Joining | [#6](https://github.com/Sanjay-Mx21/holdfast/issues/6) | ✅ 2026-10-02 (PR #58): `join.lua` (lottery in PRE only), `POST /v1/queue/{id}/join`, per-IP and per-user token buckets, development identity, join metric |
+| 2.3 The T0 transition | [#7](https://github.com/Sanjay-Mx21/holdfast/issues/7) | ✅ 2026-10-02: T0 by Valkey's clock inside `join.lua`, `open.lua` and an opener in every replica, `q:events` work list, metrics |
 | 2.4 Your position | [#8](https://github.com/Sanjay-Mx21/holdfast/issues/8) | ⏳ |
 | 2.5 Admission controller | [#9](https://github.com/Sanjay-Mx21/holdfast/issues/9) | ⏳ |
 | 2.6 Status document | [#10](https://github.com/Sanjay-Mx21/holdfast/issues/10) | ⏳ |

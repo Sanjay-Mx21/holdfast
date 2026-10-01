@@ -16,8 +16,8 @@ sells exactly 1,000 (never 1,001) and stays up while doing it.
   whatever the fast path believes.
 - **queue-svc** (Phase 2, in progress) stores each event's waiting-room
   settings and lets buyers join: a random lottery position before the sale
-  opens, arrival order after, behind per-IP and per-user rate limits.
-  Admission comes next.
+  opens, arrival order after, behind per-IP and per-user rate limits. The
+  switch at the opening time follows Valkey's clock. Admission comes next.
 - **holdfastctl** runs migrations, generates dev keys and tokens, creates
   events, provisions their inventory and queue, and rebuilds inventory.
 - **Experiment E1** (`cmd/contention`) fires 50,000 concurrent buyers at 1,000

@@ -11,3 +11,7 @@ func (k keys) config() string  { return k.prefix() + "config" }
 func (k keys) state() string   { return k.prefix() + "state" }
 func (k keys) members() string { return k.prefix() + "members" }
 func (k keys) seq() string     { return k.prefix() + "seq" }
+
+// eventsKey is the set of provisioned events: the opener's work list. It is
+// one global key, never used inside multi-key scripts.
+const eventsKey = "q:events"

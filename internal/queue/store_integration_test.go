@@ -5,6 +5,8 @@ package queue
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/Sanjay-Mx21/holdfast/internal/testenv"
@@ -22,6 +25,7 @@ var ctx = context.Background()
 
 type fixture struct {
 	svc     *Service
+	store   *Store
 	rdb     redis.UniversalClient
 	eventID string
 }
@@ -35,8 +39,12 @@ func newFixture(t *testing.T) *fixture {
 	}
 	eventID := uuid.Must(uuid.NewV7()).String()
 	k := keysFor(eventID)
-	t.Cleanup(func() { _ = rdb.Del(context.Background(), k.config(), k.state()).Err() })
-	return &fixture{svc: NewService(store), rdb: rdb, eventID: eventID}
+	t.Cleanup(func() {
+		c := context.Background()
+		_ = rdb.Del(c, k.config(), k.state(), k.members(), k.seq()).Err()
+		_ = rdb.SRem(c, eventsKey, eventID).Err()
+	})
+	return &fixture{svc: NewService(store), store: store, rdb: rdb, eventID: eventID}
 }
 
 func (f *fixture) state(t *testing.T) string {
@@ -163,13 +171,27 @@ func TestProvisionRejectsInvalidInputBeforeTouchingValkey(t *testing.T) {
 
 // --- joining ---
 
-func (f *fixture) provision(t *testing.T) {
+// provision provisions the fixture's queue to open an hour from now, so
+// joins land before T0.
+func (f *fixture) provision(t *testing.T) { f.provisionAt(t, time.Now().Add(time.Hour)) }
+
+// provisionAt provisions the fixture's queue to open at opensAt by running
+// provision.lua directly, without registering the event on the opener's work
+// list. A queue-svc running against the same Valkey (make up) would otherwise
+// open it behind the test's back: registering and then removing the event
+// leaves a gap its opener can hit, which made TestJoinAtT0OpensTheQueueItself
+// fail about once in 40 runs. TestOpenerOpensAtT0WithoutJoins registers its
+// event through Service.Provision on purpose.
+func (f *fixture) provisionAt(t *testing.T, opensAt time.Time) {
 	t.Helper()
-	if _, err := f.svc.Provision(ctx, f.eventID, validConfig()); err != nil {
-		t.Fatal(err)
-	}
+	cfg := validConfig()
+	cfg.OpensAt = opensAt
 	k := keysFor(f.eventID)
-	t.Cleanup(func() { _ = f.rdb.Del(context.Background(), k.members(), k.seq()).Err() })
+	code, err := provisionScript.Run(ctx, f.rdb, []string{k.config(), k.state()},
+		cfg.OpensAt.UnixMilli(), cfg.AdmissionRate, cfg.MaxSessions, cfg.SessionTTL.Milliseconds()).Int64()
+	if err != nil || code != 1 {
+		t.Fatalf("provision: code %d, err %v", code, err)
+	}
 }
 
 func (f *fixture) setState(t *testing.T, s State) {
@@ -321,4 +343,164 @@ func TestConcurrentJoinsOneSlotPerUser(t *testing.T) {
 	mustEqual(t, "members", n, int64(users))
 	seq, _ := f.rdb.Get(ctx, keysFor(f.eventID).seq()).Int64()
 	mustEqual(t, "arrival counter (one number per new member)", seq, int64(users))
+}
+
+// --- the T0 transition ---
+
+func TestJoinAtT0OpensTheQueueItself(t *testing.T) {
+	f := newFixture(t)
+	f.provisionAt(t, time.Now().Add(-time.Second)) // T0 has passed; nobody has opened the queue
+	mustEqual(t, "state before the join", f.state(t), string(StatePre))
+
+	first := uuid.NewString()
+	res, err := f.svc.Join(ctx, f.eventID, first)
+	mustErr(t, "join", err, nil)
+	mustEqual(t, "ordering of a join after T0", res.Ordering, OrderingFIFO)
+	mustEqual(t, "join opened the queue", res.openedQueue, true)
+	mustEqual(t, "state after the join", f.state(t), string(StateOpen))
+	mustEqual(t, "first FIFO score", f.score(t, first), float64(2))
+
+	res, err = f.svc.Join(ctx, f.eventID, uuid.NewString())
+	mustErr(t, "second join", err, nil)
+	mustEqual(t, "second join opened the queue", res.openedQueue, false)
+	mustEqual(t, "second ordering", res.Ordering, OrderingFIFO)
+}
+
+func TestJoinBeforeT0LeavesTheQueueInPre(t *testing.T) {
+	f := newFixture(t)
+	f.provisionAt(t, time.Now().Add(time.Minute))
+	res, err := f.svc.Join(ctx, f.eventID, uuid.NewString())
+	mustErr(t, "join", err, nil)
+	mustEqual(t, "ordering", res.Ordering, OrderingLottery)
+	mustEqual(t, "opened", res.openedQueue, false)
+	mustEqual(t, "state", f.state(t), string(StatePre))
+}
+
+// TestJoinsAcrossT0 joins continuously while T0 passes. Whatever the timing,
+// exactly one join opens the queue, the lottery and FIFO counts match what
+// Valkey stored, and every FIFO member got exactly one arrival number.
+func TestJoinsAcrossT0(t *testing.T) {
+	f := newFixture(t)
+	f.provisionAt(t, time.Now().Add(150*time.Millisecond))
+	var lottery, fifo, opened atomic.Int64
+	var wg sync.WaitGroup
+	deadline := time.Now().Add(450 * time.Millisecond)
+	for range 20 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for time.Now().Before(deadline) {
+				res, err := f.svc.Join(ctx, f.eventID, uuid.NewString())
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				if res.Ordering == OrderingLottery {
+					lottery.Add(1)
+				} else {
+					fifo.Add(1)
+				}
+				if res.openedQueue {
+					opened.Add(1)
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	if lottery.Load() == 0 || fifo.Load() == 0 {
+		t.Fatalf("joins did not straddle T0: %d lottery, %d FIFO", lottery.Load(), fifo.Load())
+	}
+	mustEqual(t, "joins that opened the queue", opened.Load(), int64(1))
+	mustEqual(t, "state", f.state(t), string(StateOpen))
+	seq, _ := f.rdb.Get(ctx, keysFor(f.eventID).seq()).Int64()
+	mustEqual(t, "arrival numbers issued", seq, fifo.Load())
+	below, _ := f.rdb.ZCount(ctx, keysFor(f.eventID).members(), "-inf", "(1").Result()
+	mustEqual(t, "members with lottery scores", below, lottery.Load())
+}
+
+func TestOpenFlipsPreToOpenOnceDue(t *testing.T) {
+	due, notDue := newFixture(t), newFixture(t)
+	due.provisionAt(t, time.Now().Add(-200*time.Millisecond))
+	notDue.provisionAt(t, time.Now().Add(time.Hour))
+
+	opened, _, err := notDue.store.Open(ctx, notDue.eventID)
+	mustErr(t, "open before T0", err, nil)
+	mustEqual(t, "opened before T0", opened, false)
+	mustEqual(t, "state before T0", notDue.state(t), string(StatePre))
+
+	opened, late, err := due.store.Open(ctx, due.eventID)
+	mustErr(t, "open after T0", err, nil)
+	mustEqual(t, "opened after T0", opened, true)
+	if late < 200*time.Millisecond || late > 5*time.Second {
+		t.Fatalf("reported lateness %s, want about 200ms", late)
+	}
+	mustEqual(t, "state after T0", due.state(t), string(StateOpen))
+
+	opened, _, err = due.store.Open(ctx, due.eventID)
+	mustErr(t, "second open", err, nil)
+	mustEqual(t, "second open opened", opened, false)
+}
+
+func TestOpenNeverTouchesStatesPastPre(t *testing.T) {
+	f := newFixture(t)
+	f.provisionAt(t, time.Now().Add(-time.Second))
+	for _, s := range []State{StateFrozen, StateSoldOut, StateClosed, StateOpen} {
+		f.setState(t, s)
+		opened, _, err := f.store.Open(ctx, f.eventID)
+		mustErr(t, "open in "+string(s), err, nil)
+		mustEqual(t, "opened in "+string(s), opened, false)
+		mustEqual(t, "state", f.state(t), string(s))
+	}
+}
+
+func TestOpenUnprovisioned(t *testing.T) {
+	f := newFixture(t)
+	_, _, err := f.store.Open(ctx, f.eventID)
+	mustErr(t, "open unprovisioned", err, ErrEventNotFound)
+}
+
+func TestProvisionRegistersEventForTheOpener(t *testing.T) {
+	f := newFixture(t)
+	if _, err := f.svc.Provision(ctx, f.eventID, validConfig()); err != nil {
+		t.Fatal(err)
+	}
+	ok, err := f.rdb.SIsMember(ctx, eventsKey, f.eventID).Result()
+	mustErr(t, "sismember", err, nil)
+	mustEqual(t, "event on the opener's work list", ok, true)
+}
+
+// TestOpenerOpensAtT0WithoutJoins runs a real opener. Another queue-svc on
+// the same Valkey may get there first, so the test checks when the queue
+// opened, not which opener did it.
+func TestOpenerOpensAtT0WithoutJoins(t *testing.T) {
+	f := newFixture(t)
+	opensAt := time.Now().Add(300 * time.Millisecond)
+	cfg := validConfig()
+	cfg.OpensAt = opensAt
+	if _, err := f.svc.Provision(ctx, f.eventID, cfg); err != nil {
+		t.Fatal(err)
+	}
+	m := NewMetrics(prometheus.NewRegistry())
+	op := NewOpener(f.store, 25*time.Millisecond, m, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	runCtx, cancel := context.WithCancel(ctx)
+	done := make(chan error, 1)
+	go func() { done <- op.Run(runCtx) }()
+	defer func() { cancel(); <-done }()
+
+	for time.Now().Before(opensAt.Add(-50 * time.Millisecond)) {
+		if f.state(t) != string(StatePre) {
+			t.Fatal("queue opened before T0")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	for f.state(t) == string(StatePre) {
+		if time.Since(opensAt) > 2*time.Second {
+			t.Fatal("queue still PRE 2s after T0")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if late := time.Since(opensAt); late > 500*time.Millisecond {
+		t.Fatalf("queue opened %s after T0, want within a few opener intervals", late)
+	}
+	mustEqual(t, "state", f.state(t), string(StateOpen))
 }

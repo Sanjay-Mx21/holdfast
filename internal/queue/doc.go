@@ -11,10 +11,13 @@
 //     session lifetime) and the queue starts in state PRE;
 //   - joining (task 2.2): before T0 a joiner gets a random lottery position,
 //     after T0 a place in arrival order; joining is idempotent and passes
-//     per-IP and per-user token buckets first.
+//     per-IP and per-user token buckets first;
+//   - the T0 transition (task 2.3): PRE becomes OPEN when Valkey's clock
+//     reaches the opening time, done by the first join after T0 or by the
+//     Opener, whichever comes first.
 //
-// The T0 transition, ranks, the admission controller and the status
-// document follow in tasks 2.3 to 2.7.
+// Ranks, the admission controller and the status document follow in tasks
+// 2.4 to 2.7.
 //
 // Queue states:
 //

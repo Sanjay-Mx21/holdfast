@@ -44,6 +44,11 @@ type config struct {
 	JoinIPPerSecond   float64 `env:"JOIN_IP_PER_SECOND" envDefault:"10"`
 	JoinUserBurst     int     `env:"JOIN_USER_BURST" envDefault:"5"`
 	JoinUserPerSecond float64 `env:"JOIN_USER_PER_SECOND" envDefault:"1"`
+
+	// OpenCheckInterval is how often the opener looks for queues due to open
+	// at T0. Joins open a due queue themselves, so this only bounds how long
+	// the state can read PRE after T0 when nobody joins.
+	OpenCheckInterval time.Duration `env:"OPEN_CHECK_INTERVAL" envDefault:"250ms"`
 }
 
 func (c *config) joinLimits() queue.JoinLimits {
@@ -57,6 +62,9 @@ func (c *config) Validate() error {
 	errs := []error{cfgpkg.ValidateAll(c.Service, c.HTTP, c.Valkey)}
 	if len(c.AdminToken) < 32 {
 		errs = append(errs, errors.New("ADMIN_TOKEN must be at least 32 characters"))
+	}
+	if c.OpenCheckInterval < 10*time.Millisecond || c.OpenCheckInterval > 10*time.Second {
+		errs = append(errs, errors.New("OPEN_CHECK_INTERVAL must be between 10ms and 10s"))
 	}
 	if c.DevIdentity && c.Service.Environment == "production" {
 		errs = append(errs, errors.New("DEV_IDENTITY must not be enabled in production: anyone could claim any user ID"))
@@ -126,12 +134,14 @@ func run(ctx context.Context) error {
 		log.Warn("DEV_IDENTITY is on: buyers are identified by the X-Dev-User-Id header, which anyone can set")
 		identity = authn.RequireDevIdentity()
 	}
-	queue.NewHandler(svc, lim, cfg.joinLimits(), queue.NewMetrics(reg)).
+	qm := queue.NewMetrics(reg)
+	queue.NewHandler(svc, lim, cfg.joinLimits(), qm).
 		Register(public, admin, identity, authn.RequireStaticToken(cfg.AdminToken))
 
 	return app.Run(ctx, log, hc, cfg.HTTP.DrainDelay,
 		httpx.NewServer("public", cfg.HTTP.Addr, public, cfg.HTTP, log),
 		httpx.NewServer("admin", cfg.HTTP.AdminAddr, admin, cfg.HTTP, log, httpx.WithWriteTimeout(90*time.Second)),
+		queue.NewOpener(store, cfg.OpenCheckInterval, qm, log),
 	)
 }
 

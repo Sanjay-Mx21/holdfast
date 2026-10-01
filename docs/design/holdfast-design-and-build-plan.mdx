@@ -680,10 +680,11 @@ Every key for event E carries the hash tag `{E}`, so all keys a script touches l
 | `inv:{E}:hold:H` | hash | user, qty, state, expires_at, created_at, released_by | tombstone kept 1 hour after release |
 | `inv:{E}:expiry` | sorted set | hold-and-user member → expiry in ms (sweeper index) | event |
 | `inv:events` | set | provisioned events: the sweeper's work list (one global key, never used inside multi-key scripts) | permanent |
+| `q:events` | set | provisioned queues: the opener's work list (one global key, never used inside multi-key scripts) | permanent |
 | `rl:SCOPE:ID` | hash | token-bucket state: tokens and last refill | auto-expiring |
 | `jti:ID` | string | spent one-time token IDs, for replay protection | token lifetime |
 
-- **Built so far.** The `inv:*` keys exist since Drop 1; `q:{E}:config` and `q:{E}:state` since task 2.1. `q:{E}:members`, `q:{E}:seq` and `rl:*` since task 2.2. The other `q:*` keys and the `adm:*` and `jti:*` keys arrive with the rest of Phase 2.
+- **Built so far.** The `inv:*` keys exist since Drop 1; `q:{E}:config` and `q:{E}:state` since task 2.1. `q:{E}:members`, `q:{E}:seq` and `rl:*` since task 2.2; `q:events` since task 2.3. The other `q:*` keys and the `adm:*` and `jti:*` keys arrive with the rest of Phase 2.
 - **A deliberate hot key.** One event's inventory lives on one shard. Admission control caps that traffic at a few hundred operations per second, so this is fine. Seat-map mode (Phase 7) shards by section with tags like `{E:S}`.
 - **Durability.** AOF with `appendfsync everysec`, plus a replica and Sentinel in Phase 5. A crash can lose roughly the last second of writes, which is exactly why PostgreSQL owns the final guard and why runbook RB-2 exists.
 - **Memory.** One million queue members at roughly 100 bytes each is about 100 MB. Compact user IDs (16 raw bytes instead of a 36-character UUID string) shrink that a lot.
@@ -779,7 +780,7 @@ func lotteryScore() (string, error) {
 }
 ```
 
-- At T0 the admission leader flips `q:{E}:state` from PRE to OPEN. Because scripts are atomic, every join lands unambiguously before or after the flip.
+- T0 is decided by Valkey's clock (as built in task 2.3). `join.lua` also reads `opens_at_ms`: if the state is still PRE but the server time has reached T0, the join flips it to OPEN in the same atomic step and takes a FIFO place. An opener in every replica runs `open.lua`, the same conditional and idempotent flip, so the state turns OPEN at T0 even when nobody joins. Version 2.0 of this doc had the admission leader flip the state at T0; on a 250 ms tick, or during a leader failover, that leaves a window after T0 in which joins still get lottery positions.
 - Rank is `ZRANK q:{E}:members user` plus 1. Before T0 the API returns "randomizing at T0" instead of a rank.
 - Joins are still accepted while the sale is FROZEN, in arrival order; only admissions pause.
 
@@ -1634,7 +1635,7 @@ holdfast/
 │   ├── inventory/                    ✅ inventory-svc (public :8080, admin :9090)
 │   ├── holdfastctl/                  ✅ operator CLI
 │   ├── contention/                   ✅ experiment E1 harness
-│   ├── queue/                        ✅ queue-svc: provisioning, joining (2.1, 2.2)    ⏳ rest of 2
+│   ├── queue/                        ✅ queue-svc: provisioning, joining, T0 (2.1 to 2.3)    ⏳ rest of 2
 │   ├── booking/  payment/  mockpsp/  ⏳ 3
 │   ├── auth/                         ⏳ 4
 │   └── auditor/                      ⏳ 5
@@ -2042,7 +2043,7 @@ The dates are illustrative. The gates are not.
 
 - [x] 2.1 **Queue provisioning.** An operator endpoint on the queue admin port, `PUT /internal/v1/events/{id}/queue`, takes the sale opening time, admission rate, maximum sessions and session TTL, stores them in `q:{E}:config` and sets `q:{E}:state` to PRE. `holdfastctl event create` provisions the queue as well as inventory.
 - [x] 2.2 **Joining.** `join.lua` and `POST /v1/queue/{id}/join`. The lottery score comes from `crypto/rand` in Go; `ZADD NX` makes joining idempotent and stops re-rolls. Apply per-IP and per-user token buckets (`rl:*`). Until Phase 4, identity comes from a development header.
-- [ ] 2.3 **The T0 transition.** The leader flips PRE to OPEN at the opening time; joins after T0 get FIFO scores.
+- [x] 2.3 **The T0 transition.** The leader flips PRE to OPEN at the opening time; joins after T0 get FIFO scores. *Built without the leader: Valkey's clock decides T0, a join after T0 flips the state itself, and an idempotent opener in every replica flips it when nobody joins (see 9.1).*
 - [ ] 2.4 **Your position.** `GET /v1/queue/{id}/me` returns your rank after T0, and `randomizingAt` before it.
 - [ ] 2.5 **Admission controller.** One leader per event, elected with a PostgreSQL advisory lock. The fencing epoch `adm:{E}:epoch` is incremented on every leadership change, and `advance.lua` moves `admittedUpTo` only when the caller's epoch matches. The leader ticks every 250 ms and caps concurrency with Little's Law, using the session set `adm:{E}:sessions`.
 - [ ] 2.6 **Status document.** The leader writes `q:{E}:status` (state, `admittedUpTo`, queue size, `updatedAt`) on every tick. `GET /v1/events/{id}/status` serves it with `Cache-Control: public, max-age=1`.
