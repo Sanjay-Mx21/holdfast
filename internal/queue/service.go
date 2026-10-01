@@ -53,6 +53,20 @@ func (s *Service) Join(ctx context.Context, eventID, userID string) (JoinResult,
 	return JoinResult{EventID: ev, Joined: out.joined, Ordering: orderingOf(out.score), openedQueue: out.opened}, nil
 }
 
+// Position tells userID where they stand in the event's queue: when the
+// lottery closes, before T0, or their rank from T0 on.
+func (s *Service) Position(ctx context.Context, eventID, userID string) (Position, error) {
+	ev, err := canonicalUUID("eventId", eventID)
+	if err != nil {
+		return Position{}, err
+	}
+	user, err := canonicalUUID("userId", userID)
+	if err != nil {
+		return Position{}, err
+	}
+	return s.store.Position(ctx, ev, user)
+}
+
 // canonicalUUID accepts only the 36-character hyphenated form and returns it
 // lower-cased. Keys are built from IDs, so one UUID must map to one key, and
 // characters such as '{' or '|' must never reach the keyspace.

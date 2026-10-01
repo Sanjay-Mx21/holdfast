@@ -8,4 +8,5 @@ var (
 	ErrProvisionConflict = errors.New("queue: event already provisioned with different settings")
 	ErrEventNotFound     = errors.New("queue: event not provisioned")
 	ErrQueueClosed       = errors.New("queue: queue is closed")
+	ErrNotInQueue        = errors.New("queue: user has not joined this queue")
 )

@@ -25,8 +25,9 @@ var (
 	provisionScript = loadScript("provision.lua")
 	joinScript      = loadScript("join.lua")
 	openScript      = loadScript("open.lua")
+	positionScript  = loadScript("position.lua")
 
-	allScripts = []*redis.Script{provisionScript, joinScript, openScript}
+	allScripts = []*redis.Script{provisionScript, joinScript, openScript, positionScript}
 )
 
 // Store is the Valkey-backed state of the waiting room. It runs the atomic
@@ -125,6 +126,31 @@ func (s *Store) Open(ctx context.Context, eventID string) (bool, time.Duration, 
 		return true, time.Duration(res[1]) * time.Millisecond, nil
 	}
 	return false, 0, nil
+}
+
+// Position reads where userID stands: before T0 (by Valkey's clock) the
+// opening time, from T0 on the 1-based rank.
+func (s *Store) Position(ctx context.Context, eventID, userID string) (Position, error) {
+	k := keysFor(eventID)
+	res, err := positionScript.Run(ctx, s.rdb, []string{k.state(), k.config(), k.members()}, userID).Slice()
+	if err != nil {
+		return Position{}, fmt.Errorf("queue: position: %w", err)
+	}
+	if len(res) != 3 {
+		return Position{}, fmt.Errorf("queue: position: unexpected reply %v", res)
+	}
+	code, _ := res[0].(int64)
+	value, _ := res[1].(int64)
+	state, _ := res[2].(string)
+	switch code {
+	case -2:
+		return Position{}, ErrEventNotFound
+	case -1:
+		return Position{}, ErrNotInQueue
+	case 0:
+		return Position{EventID: eventID, State: State(state), RandomizingAt: time.UnixMilli(value).UTC()}, nil
+	}
+	return Position{EventID: eventID, State: State(state), Rank: value}, nil
 }
 
 // Events lists provisioned events (the opener's work list).

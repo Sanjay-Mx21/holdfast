@@ -23,6 +23,7 @@ import (
 type fakeService struct {
 	provision func(ctx context.Context, eventID string, cfg EventConfig) (bool, error)
 	join      func(ctx context.Context, eventID, userID string) (JoinResult, error)
+	position  func(ctx context.Context, eventID, userID string) (Position, error)
 }
 
 func (f *fakeService) Provision(ctx context.Context, e string, c EventConfig) (bool, error) {
@@ -30,6 +31,9 @@ func (f *fakeService) Provision(ctx context.Context, e string, c EventConfig) (b
 }
 func (f *fakeService) Join(ctx context.Context, e, u string) (JoinResult, error) {
 	return f.join(ctx, e, u)
+}
+func (f *fakeService) Position(ctx context.Context, e, u string) (Position, error) {
+	return f.position(ctx, e, u)
 }
 
 // fakeLimiter allows everything unless a scope is listed in deny; it records
@@ -51,9 +55,10 @@ func (f *fakeLimiter) Allow(_ context.Context, scope, id string, _ ratelimit.Rul
 	return ratelimit.Decision{Allowed: true}, nil
 }
 
-var testLimits = JoinLimits{
-	PerIP:   ratelimit.Rule{Capacity: 30, Rate: 10},
-	PerUser: ratelimit.Rule{Capacity: 5, Rate: 1},
+var testLimits = Limits{
+	JoinPerIP:       ratelimit.Rule{Capacity: 30, Rate: 10},
+	JoinPerUser:     ratelimit.Rule{Capacity: 5, Rate: 1},
+	PositionPerUser: ratelimit.Rule{Capacity: 10, Rate: 1},
 }
 
 type harness struct {
@@ -406,5 +411,113 @@ func TestJoinThatOpensTheQueueIsCounted(t *testing.T) {
 	}
 	if got := out.GetCounter().GetValue(); got != 1 {
 		t.Fatalf("holdfast_queue_opened_total{by=join} = %v, want 1", got)
+	}
+}
+
+// --- position ---
+
+const mePath = "/v1/queue/" + eventID + "/me"
+
+func positions(t *testing.T, m *Metrics, result string) float64 {
+	t.Helper()
+	var out dto.Metric
+	if err := m.positions.WithLabelValues(result).Write(&out); err != nil {
+		t.Fatal(err)
+	}
+	return out.GetCounter().GetValue()
+}
+
+func TestPositionRanked(t *testing.T) {
+	var gotEvent, gotUser string
+	h := newHarness(&fakeService{position: func(_ context.Context, e, u string) (Position, error) {
+		gotEvent, gotUser = e, u
+		return Position{EventID: eventID, State: StateOpen, Rank: 18204}, nil
+	}})
+	rec := send(h.public, http.MethodGet, mePath, "", "", map[string]string{"X-Test-User": userID}, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200 (body %s)", rec.Code, rec.Body)
+	}
+	if got := strings.TrimSpace(rec.Body.String()); got != `{"eventId":"`+eventID+`","state":"OPEN","rank":18204}` {
+		t.Fatalf("body %s", got)
+	}
+	if gotEvent != eventID || gotUser != userID {
+		t.Fatalf("service got event %q user %q", gotEvent, gotUser)
+	}
+	if cc := rec.Header().Get("Cache-Control"); cc != "private, no-store" {
+		t.Fatalf("Cache-Control %q: one user's place must never be shared-cached", cc)
+	}
+	if h.lim.calls[0] != "position-user="+userID {
+		t.Fatalf("limiter calls %v", h.lim.calls)
+	}
+	if positions(t, h.m, positionRanked) != 1 {
+		t.Fatal("ranked lookup not counted")
+	}
+}
+
+func TestPositionBeforeT0(t *testing.T) {
+	t0 := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
+	h := newHarness(&fakeService{position: func(context.Context, string, string) (Position, error) {
+		return Position{EventID: eventID, State: StatePre, RandomizingAt: t0}, nil
+	}})
+	rec := send(h.public, http.MethodGet, mePath, "", "", map[string]string{"X-Test-User": userID}, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200 (body %s)", rec.Code, rec.Body)
+	}
+	if got := strings.TrimSpace(rec.Body.String()); got != `{"eventId":"`+eventID+`","state":"PRE","randomizingAt":"2026-10-05T12:00:00Z"}` {
+		t.Fatalf("body %s: before T0 there must be no rank, only randomizingAt", got)
+	}
+	if positions(t, h.m, positionRandomizing) != 1 {
+		t.Fatal("randomizing lookup not counted")
+	}
+}
+
+func TestPositionErrors(t *testing.T) {
+	tests := []struct {
+		err    error
+		status int
+		code   string
+		metric string
+	}{
+		{ErrNotInQueue, http.StatusNotFound, "NOT_IN_QUEUE", positionNotInQueue},
+		{ErrEventNotFound, http.StatusNotFound, "EVENT_NOT_FOUND", positionNotFound},
+		{fmt.Errorf("%w: eventId must be a UUID", ErrInvalidRequest), http.StatusBadRequest, "INVALID_REQUEST", positionInvalid},
+		{context.DeadlineExceeded, http.StatusServiceUnavailable, "UNAVAILABLE", positionError},
+		{errors.New("boom"), http.StatusInternalServerError, "INTERNAL", positionError},
+	}
+	for _, tt := range tests {
+		t.Run(tt.code, func(t *testing.T) {
+			h := newHarness(&fakeService{position: func(context.Context, string, string) (Position, error) {
+				return Position{}, tt.err
+			}})
+			rec := send(h.public, http.MethodGet, mePath, "", "", map[string]string{"X-Test-User": userID}, "")
+			if rec.Code != tt.status || problemCode(t, rec) != tt.code {
+				t.Fatalf("status %d body %s, want %d %s", rec.Code, rec.Body, tt.status, tt.code)
+			}
+			if positions(t, h.m, tt.metric) != 1 {
+				t.Fatalf("metric %s not counted", tt.metric)
+			}
+		})
+	}
+}
+
+func TestPositionRequiresIdentityAndIsRateLimited(t *testing.T) {
+	h := newHarness(&fakeService{position: func(context.Context, string, string) (Position, error) {
+		t.Fatal("service called")
+		return Position{}, nil
+	}})
+	if rec := send(h.public, http.MethodGet, mePath, "", "", nil, ""); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("no identity: status %d, want 401", rec.Code)
+	}
+	h.lim.deny = map[string]time.Duration{scopePositionUser: 700 * time.Millisecond}
+	rec := send(h.public, http.MethodGet, mePath, "", "", map[string]string{"X-Test-User": userID}, "")
+	if rec.Code != http.StatusTooManyRequests || rec.Header().Get("Retry-After") != "1" {
+		t.Fatalf("status %d Retry-After %q, want 429 and 1", rec.Code, rec.Header().Get("Retry-After"))
+	}
+	if positions(t, h.m, positionRateLimited) != 1 {
+		t.Fatal("rate-limited lookup not counted")
+	}
+	// The per-user position bucket must not touch the join buckets.
+	if len(h.lim.calls) != 1 || h.lim.calls[0] != "position-user="+userID {
+		t.Fatalf("limiter calls %v", h.lim.calls)
 	}
 }

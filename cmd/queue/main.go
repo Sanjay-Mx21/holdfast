@@ -45,16 +45,20 @@ type config struct {
 	JoinUserBurst     int     `env:"JOIN_USER_BURST" envDefault:"5"`
 	JoinUserPerSecond float64 `env:"JOIN_USER_PER_SECOND" envDefault:"1"`
 
+	PositionUserBurst     int     `env:"POSITION_USER_BURST" envDefault:"10"`
+	PositionUserPerSecond float64 `env:"POSITION_USER_PER_SECOND" envDefault:"1"`
+
 	// OpenCheckInterval is how often the opener looks for queues due to open
 	// at T0. Joins open a due queue themselves, so this only bounds how long
 	// the state can read PRE after T0 when nobody joins.
 	OpenCheckInterval time.Duration `env:"OPEN_CHECK_INTERVAL" envDefault:"250ms"`
 }
 
-func (c *config) joinLimits() queue.JoinLimits {
-	return queue.JoinLimits{
-		PerIP:   ratelimit.Rule{Capacity: c.JoinIPBurst, Rate: c.JoinIPPerSecond},
-		PerUser: ratelimit.Rule{Capacity: c.JoinUserBurst, Rate: c.JoinUserPerSecond},
+func (c *config) limits() queue.Limits {
+	return queue.Limits{
+		JoinPerIP:       ratelimit.Rule{Capacity: c.JoinIPBurst, Rate: c.JoinIPPerSecond},
+		JoinPerUser:     ratelimit.Rule{Capacity: c.JoinUserBurst, Rate: c.JoinUserPerSecond},
+		PositionPerUser: ratelimit.Rule{Capacity: c.PositionUserBurst, Rate: c.PositionUserPerSecond},
 	}
 }
 
@@ -69,12 +73,15 @@ func (c *config) Validate() error {
 	if c.DevIdentity && c.Service.Environment == "production" {
 		errs = append(errs, errors.New("DEV_IDENTITY must not be enabled in production: anyone could claim any user ID"))
 	}
-	l := c.joinLimits()
-	if err := l.PerIP.Validate(); err != nil {
+	l := c.limits()
+	if err := l.JoinPerIP.Validate(); err != nil {
 		errs = append(errs, fmt.Errorf("JOIN_IP_BURST / JOIN_IP_PER_SECOND: %w", err))
 	}
-	if err := l.PerUser.Validate(); err != nil {
+	if err := l.JoinPerUser.Validate(); err != nil {
 		errs = append(errs, fmt.Errorf("JOIN_USER_BURST / JOIN_USER_PER_SECOND: %w", err))
+	}
+	if err := l.PositionPerUser.Validate(); err != nil {
+		errs = append(errs, fmt.Errorf("POSITION_USER_BURST / POSITION_USER_PER_SECOND: %w", err))
 	}
 	return errors.Join(errs...)
 }
@@ -135,7 +142,7 @@ func run(ctx context.Context) error {
 		identity = authn.RequireDevIdentity()
 	}
 	qm := queue.NewMetrics(reg)
-	queue.NewHandler(svc, lim, cfg.joinLimits(), qm).
+	queue.NewHandler(svc, lim, cfg.limits(), qm).
 		Register(public, admin, identity, authn.RequireStaticToken(cfg.AdminToken))
 
 	return app.Run(ctx, log, hc, cfg.HTTP.DrainDelay,
