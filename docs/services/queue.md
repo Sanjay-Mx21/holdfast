@@ -3,15 +3,15 @@
 The waiting room: decides who may enter the purchase path, in what order and
 how fast. Binary: `cmd/queue`. Code: `internal/queue`.
 
-**Status:** Phase 2 in progress. Built: provisioning (task 2.1) and joining
-(task 2.2). The T0 transition, ranks, the admission controller, the status
-document and admission tokens follow in tasks 2.3 to 2.8.
+**Status:** Phase 2 in progress. Built: provisioning (task 2.1), joining
+(task 2.2) and the T0 transition (task 2.3). Ranks, the admission controller,
+the status document and admission tokens follow in tasks 2.4 to 2.8.
 
 ## Responsibilities
 
 - Store each event's queue settings and open its waiting room in state PRE (built).
 - Accept joins: a random lottery position before T0, arrival order after (built).
-- Switch from PRE to OPEN at T0 (task 2.3) and tell buyers their rank (task 2.4).
+- Switch from PRE to OPEN at T0 (built) and tell buyers their rank (task 2.4).
 - Admit buyers at a controlled rate and issue admission tokens (tasks 2.5 to 2.7).
 - Publish the status document every client polls (task 2.6).
 
@@ -95,6 +95,26 @@ is already past `PRE` back to `PRE`.
 `--session-ttl` (default 10m); the opening time is the event's `--opens-at`.
 It validates these flags before writing anything to PostgreSQL.
 
+## The T0 transition
+
+T0 is the event's `opensAt`. It is decided by **Valkey's clock**, the same
+clock every replica sees, never by when some process gets round to flipping
+the state:
+
+- **A join opens the queue.** `join.lua` compares the server time with
+  `opens_at_ms`. If T0 has passed but the state still reads `PRE`, the join
+  flips it to `OPEN` in the same atomic step and takes a place in arrival
+  order. Nobody who joins at or after T0 can get a lottery position.
+- **The opener opens it otherwise.** Every queue-svc replica runs an opener
+  that, every `OPEN_CHECK_INTERVAL` (default 250 ms), runs `open.lua` for each
+  event in `q:events`. The flip is conditional (`PRE` only, and only from T0
+  on) and idempotent, so racing openers are harmless and no leader is needed.
+  The opener only decides how soon readers of the state see `OPEN` when nobody
+  joins; it never decides who gets a lottery position.
+
+Each opening is logged at INFO as `queue opened at T0` with `late_ms` (how long
+after T0 the opener got to it) and counted in `holdfast_queue_opened_total`.
+
 ## Error codes
 
 | Code | HTTP | Meaning |
@@ -120,8 +140,8 @@ PRE --T0--> OPEN --> SOLD_OUT --> CLOSED
             FROZEN
 ```
 
-Provisioning creates `PRE`. The T0 transition is task 2.3, the freeze switch
-task 4.3.
+Provisioning creates `PRE`; T0 turns it into `OPEN` (see above). The freeze
+switch is task 4.3; `SOLD_OUT` and `CLOSED` come with the admission controller.
 
 ## Keyspace
 
@@ -131,6 +151,7 @@ task 4.3.
 | `q:{E}:state` | string | `PRE`, `OPEN`, `FROZEN`, `SOLD_OUT` or `CLOSED` |
 | `q:{E}:members` | sorted set | user ID → score: lottery score in [0, 1) before T0, 1 plus the arrival number after |
 | `q:{E}:seq` | integer | Arrival counter for joins after T0 |
+| `q:events` | set | Provisioned events: the opener's work list (one global key, never used inside multi-key scripts) |
 | `rl:SCOPE:ID` | hash | Token bucket: `tokens`, `ts_ms`; expires once the bucket would be full again |
 
 The remaining keys in the design doc (section 8.2): `q:{E}:admitted`,
@@ -141,7 +162,8 @@ The remaining keys in the design doc (section 8.2): `q:{E}:admitted`,
 | Script | Replies |
 |---|---|
 | `provision.lua` | 1 created, 0 identical settings, -1 conflict |
-| `join.lua` | {1 joined, 0 already joined, -1 closed, -2 not provisioned} with the member's score |
+| `join.lua` | {1 joined, 0 already joined, -1 closed, -2 not provisioned, member's score, 1 if this join opened the queue at T0} |
+| `open.lua` | {1 opened, 0 nothing to do, -1 not provisioned; ms late after T0, or ms left until T0} |
 | `token_bucket.lua` (`internal/platform/ratelimit`) | {allowed 1 or 0, remaining tokens × 1000, retry after ms} |
 
 ## Configuration
@@ -157,6 +179,7 @@ are defined in `internal/platform/config`. Service settings:
 | `JOIN_IP_PER_SECOND` | `10` | Per-IP refill rate |
 | `JOIN_USER_BURST` | `5` | Per-user bucket size |
 | `JOIN_USER_PER_SECOND` | `1` | Per-user refill rate |
+| `OPEN_CHECK_INTERVAL` | `250ms` | How often the opener looks for queues due to open (10ms to 10s) |
 
 Locally, Compose maps the public port to 8082 and the admin port to 9092,
 and sets `DEV_IDENTITY=true`.
@@ -166,6 +189,9 @@ and sets `DEV_IDENTITY=true`.
 | Metric | Labels | Use |
 |---|---|---|
 | `holdfast_queue_joins_total` | `result` | Join outcomes: joined, already_joined, rate_limited_ip, rate_limited_user, closed, not_found, invalid, error |
+| `holdfast_queue_opened_total` | `by` | T0 transitions: `join` (a join got there first) or `opener` |
+| `holdfast_queue_opener_runs_total` | `result` | Opener passes: ok, error |
+| `holdfast_queue_opener_duration_seconds` | | One opener pass over all events |
 | `holdfast_http_requests_total` | `route`, `code` | RED metrics per route pattern |
 | `holdfast_http_request_duration_seconds` | `route` | Latency per route pattern |
 

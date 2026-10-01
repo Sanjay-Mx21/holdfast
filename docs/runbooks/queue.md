@@ -51,3 +51,21 @@ settings. Nothing was changed: the stored settings still apply.
    `JOIN_USER_BURST`.
 4. Buckets expire on their own once full. To clear one at once:
    `valkey-cli DEL "rl:join-ip:<ip>"` (IPv6: the /64 with `:` written as `_`).
+
+## RB-Q-4 The queue did not open at T0
+
+**Symptom:** after the opening time, `q:{<event id>}:state` still reads `PRE`,
+and `queue opened at T0` is missing from the logs.
+
+Fairness is not at risk: every join after T0 opens the queue itself and gets a
+place in arrival order. What is stale is the state other readers see.
+
+1. Check the opener: `holdfast_queue_opener_runs_total{result="error"}`
+   climbing, or `opener pass failed` in the logs, usually means Valkey trouble
+   (RB-Q-2).
+2. Check the event is on the work list:
+   `valkey-cli SISMEMBER q:events <event id>`. Provisioning adds it; if it is
+   missing, provision again with the same settings (idempotent) to re-register it.
+3. Check the opening time: `valkey-cli HGET "q:{<event id>}:config" opens_at_ms`
+   against `valkey-cli TIME` (seconds and microseconds). T0 is judged by
+   Valkey's clock, not the operator's.

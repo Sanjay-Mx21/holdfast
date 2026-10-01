@@ -25,9 +25,19 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
   refuses. Metric `holdfast_queue_joins_total{result}`.
 - `internal/platform/ratelimit`: a token bucket in Valkey, shared by every
   replica.
+- **The T0 transition** (task 2.3): the queue switches from lottery to arrival
+  order at the opening time, judged by Valkey's clock. The first join after T0
+  flips the state itself; an idempotent opener in every replica flips it when
+  nobody joins (`OPEN_CHECK_INTERVAL`, default 250ms). Metrics
+  `holdfast_queue_opened_total{by}`, `holdfast_queue_opener_runs_total{result}`
+  and `holdfast_queue_opener_duration_seconds`.
 
 ### Fixed
 
+- The design had the admission leader flip the queue to OPEN at T0. On a
+  250 ms tick, or during a leader failover, joins arriving after T0 but before
+  the flip would still have received lottery positions. T0 is now judged by
+  Valkey's clock inside every join.
 - The design doc's `join.lua` gave a lottery position to joins while the sale
   was `FROZEN`, which would have let them jump ahead of everyone who joined
   after T0. The built script, and the doc, give the lottery to `PRE` only.
