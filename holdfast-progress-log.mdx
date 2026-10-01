@@ -1,0 +1,155 @@
+---
+title: "HoldFast progress log"
+description: "Everything completed on HoldFast so far, with timestamps, what each piece contributes, and what is still open."
+author: "Sanjay M"
+project: "HoldFast (surge-proof booking engine)"
+updated: "2026-10-01"
+current_milestone: "M1.5 Bring-up and baseline"
+last_commit: "2173e50 (2026-10-01 20:20 IST)"
+---
+
+export const Callout = ({ type = 'note', title, children }) => {
+  const colors = { note: '#2563eb', tip: '#16a34a', warn: '#d97706', danger: '#dc2626' };
+  const c = colors[type] || colors.note;
+  return (
+    <div style={{ borderLeft: `4px solid ${c}`, padding: '0.6rem 1rem', margin: '1.25rem 0', background: 'rgba(127,127,127,0.08)', borderRadius: '0 8px 8px 0' }}>
+      {title ? <p style={{ margin: '0 0 0.4rem', fontWeight: 600 }}>{title}</p> : null}
+      <div>{children}</div>
+    </div>
+  );
+};
+
+# HoldFast progress log
+
+A record of what has been completed on HoldFast, when, and what each piece contributes to the project. The plan itself lives in [`docs/design/holdfast-design-and-build-plan.mdx`](docs/design/holdfast-design-and-build-plan.mdx); this file tracks progress against it.
+
+All times are IST (UTC+05:30).
+
+## 1. Status at a glance
+
+| | |
+|---|---|
+| **Project** | A flash-sale booking engine that sells exactly the available units under extreme demand, never more |
+| **Plan version** | 2.0 (1 October 2026) |
+| **Milestones complete** | M0 Foundation and M1 Correctness core (Drop 1, running locally) |
+| **Current milestone** | M1.5 Bring-up and baseline |
+| **Progress to v1.0** | About 20% (10 of about 51 focused-work days, excluding Phase 7 stretch goals) |
+| **Repository** | [github.com/Sanjay-Mx21/holdfast](https://github.com/Sanjay-Mx21/holdfast), branch `main` |
+| **Last commit** | `2173e50` "first commit", 2026-10-01 20:20, 82 files, 12,973 lines |
+
+<Callout type="tip" title="Running locally since 2026-10-01">
+
+Drop 1 now builds, passes every test and runs on this machine (WSL2 Ubuntu 24.04): `make test`, `make lint`, `make up`, the quickstart, `make itest` and one E1 run all pass. Still open for M1.5: the 100-run E1 soak, green CI on GitHub, and the v0.1.0 release (section 6).
+
+</Callout>
+
+## 2. Timeline
+
+Sources: the dates recorded in the ADRs and the plan, file modification times, and git history.
+
+| When | What was completed | Evidence |
+|---|---|---|
+| 2026-09-25 | Design and build plan v1.0 written | Plan front matter, `version: "1.0"` |
+| 2026-09-25 | ADRs 0001 to 0004 accepted: Go modular monorepo; holds in Valkey, truth in PostgreSQL; embedded migration runner; gRPC and tracing deferred to the first cross-service call | `docs/adr/`, `Date: 2026-09-25` |
+| 2026-09-30 17:51 | Plain-language explainer written for non-technical readers | `holdfast-explained-simply.mdx` |
+| 2026-10-01 16:52 | Drop 1 placed in the workspace: platform foundation, inventory-svc, final guard, `holdfastctl`, E1 harness, tests, docs, CI and local stack | File timestamps across `cmd/`, `internal/`, `db/`, `deploy/`, `docs/` |
+| 2026-10-01 19:47 | Design and build plan v2.0: milestone tracker, M1.5 added, Phases 0 and 1 marked built, doc reconciled with the Drop 1 code, invariant I5 added | Plan front matter, `version: "2.0"` |
+| 2026-10-01 20:16 | Git repository initialised | `.git/` created |
+| 2026-10-01 20:19 | `.gitignore` expanded: secrets and keys, build and profiling output, logs (keeping `loadtest/results/*.log`), Phase 4 web output, OS and editor files | `.gitignore` |
+| 2026-10-01 20:20 | First commit `2173e50` pushed to `origin/main` on GitHub | `git log` |
+| 2026-10-01 20:21 | Plan v2.0 moved to `docs/design/`, replacing v1.0, so the repo has one plan | `docs/design/holdfast-design-and-build-plan.mdx` |
+| 2026-10-01 20:22 | Invariant IDs aligned with the plan (I1 to I5 plus F1) in `docs/architecture.md`, `internal/inventory/doc.go` and the E1 check labels | Working tree, not yet committed |
+| 2026-10-01 20:45 | This progress log created | `holdfast-progress-log.mdx` |
+| 2026-10-01 ~21:00 | Toolchain installed (task 1.5.1): WSL2 Ubuntu 24.04, Go 1.27.1, make, gcc, golangci-lint v2.14.0, k6 v2.3.0, GitHub CLI, pre-commit; Docker Desktop integrated with Ubuntu | `go version`, `golangci-lint --version` in WSL |
+| 2026-10-01 ~21:10 | `go mod tidy` wrote `go.sum` (task 1.5.2); `.gitattributes` added to keep LF line endings; `scripts/check-migrations.sh` marked executable in git | Working tree, not yet committed |
+| 2026-10-01 ~21:15 | First compile and test (task 1.5.3): `make test` passes with the race detector; gofmt, `go vet` and golangci-lint clean (0 issues); migration check ok | `make test`, `make lint` |
+| 2026-10-01 21:23 | `make up` (task 1.5.4): PostgreSQL and Valkey healthy, migration `booking` v1 applied, inventory-svc `/readyz` ok, Prometheus and Grafana up | `docker compose ps` |
+| 2026-10-01 21:24 | Quickstart end to end (task 1.5.5): event created, hold 201 with 998 left, replay returns `Idempotent-Replayed: true`, no token returns 401 | `curl` against `localhost:8081` |
+| 2026-10-01 21:26 | `make itest` passes (task 1.5.6), with inventory-svc stopped (see section 6) | `make itest` |
+| 2026-10-01 21:26 | First E1 run passes: 50,000 buyers → 1,000 holds in 2.0 s (hold p50 34 ms, p95 61 ms, p99 142 ms); 10,000 guard confirmations → 1,000 sold; all invariant checks PASS | `make e1`, `RESULT: PASS` |
+
+## 3. What is complete, and what each piece contributes
+
+### 3.1 M0: Foundation (Phase 0)
+
+| Completed | Where | What it contributes |
+|---|---|---|
+| Typed configuration with validation | `internal/platform/config` | Every service reads its settings the same way and fails fast on bad values |
+| Structured JSON logging with request IDs | `internal/platform/logging` | Any request can be followed through the logs |
+| HTTP toolkit: router with route labels, middleware chain, RFC 9457 errors, strict JSON, graceful shutdown, admin router | `internal/platform/httpx` | Services share one safe HTTP stack; errors have stable codes; internal endpoints stay off the public port |
+| Health checks with draining (`/livez`, `/readyz`) | `internal/platform/health` | Pods stop receiving traffic before shutdown, so in-flight requests finish |
+| Prometheus metrics registry | `internal/platform/metrics` | The data behind dashboards, alerts and published numbers |
+| Ed25519 admission tokens with key rotation | `internal/platform/authn` | Only admitted buyers can hold seats; keys rotate without downtime |
+| PostgreSQL pool and embedded migration runner (advisory lock, checksums) | `internal/platform/postgres`, `db/migrations` | Schema changes are applied safely and applied migrations can't be edited |
+| Valkey client | `internal/platform/valkey` | Connection to the hot-path store, Sentinel-ready for Phase 5 |
+| Component lifecycle and build info | `internal/platform/app`, `buildinfo` | Clean start and stop for every service; every binary reports its version |
+| Makefile, `compose.yaml`, Dockerfile, GitHub Actions CI, golangci-lint, pre-commit hooks, migration check script | Repository root, `.github/`, `scripts/` | One-command local stack; every push is linted, tested and checked by E1 |
+| `README.md`, `AGENTS.md`, `CONTRIBUTING.md`, `docs/architecture.md`, ADRs 0001 and 0003 | Repository root, `docs/` | New contributors and AI agents know the rules and the system map |
+
+### 3.2 M1: Correctness core (Phase 1)
+
+| Completed | Where | What it contributes |
+|---|---|---|
+| Five atomic Lua scripts: `provision`, `hold`, `mark_paying`, `release`, `confirm` | `internal/inventory/scripts` | **I1 no oversell** on the hot path: check and decrement happen in one step, with no locks |
+| inventory-svc: store, service, HTTP handler, metrics | `cmd/inventory`, `internal/inventory` | Buyers can hold, read and cancel seats; retries are safe through `Idempotency-Key` |
+| Expiry sweeper, safe in every replica | `internal/inventory/sweeper.go` | **I5 no lost units:** expired holds always return to the pool |
+| Per-user counter inside `hold.lua` | `internal/inventory/scripts/hold.lua` | **I4 per-user cap** on the hot path |
+| Late-confirm handling | `internal/inventory/scripts/confirm.lua` | A payment that arrives after expiry still becomes a sale instead of being lost |
+| PostgreSQL final guard: conditional `UPDATE`, conditional upsert, `no_oversell` CHECK | `internal/booking/guard`, `db/migrations/booking/00001` | **I1 and I4** enforced by the source of truth, whatever the fast path believes |
+| Event catalog | `internal/booking/catalog` | Events exist in PostgreSQL, the system of record |
+| `holdfastctl`: migrate, keys, token mint, event create, inventory provision and status | `cmd/holdfastctl` | Operators can set up events and rebuild Valkey from PostgreSQL |
+| Experiment E1: 50,000 buyers for 1,000 units, plus 10,000 concurrent confirmations through the guard | `cmd/contention` | The no-oversell claim is tested on every CI run, and any regression fails the build |
+| 58 test functions, including a seeded, model-based randomized test of 1,500 operations | `*_test.go` | Logic, storage and concurrency are checked against a simple model of the rules |
+| Grafana inventory dashboard and Prometheus scrape config | `deploy/` | Live view of holds, availability and latency |
+| Service doc, runbooks RB-INV-1 to RB-INV-6, ADRs 0002 and 0004 | `docs/` | The API, error codes and failure handling are written down |
+
+### 3.3 Size of the work so far
+
+| Measure | Count |
+|---|---|
+| Files in the first commit | 82 |
+| Lines in the first commit | 12,973 |
+| Go code (including tests) | About 6,000 lines |
+| Go test code | About 2,000 lines |
+| Lua scripts | 5 (143 lines) |
+| Test functions | 58 |
+| ADRs | 4 |
+| Runbooks | 6 (RB-INV-1 to RB-INV-6) |
+| Public API endpoints | 4, plus 1 operator endpoint on the admin port |
+
+## 4. Invariants: where they stand
+
+| ID | Invariant | Status |
+|---|---|---|
+| I1 | No oversell | ✅ Enforced in Valkey and PostgreSQL, checked by E1 |
+| I2 | No double charge | ⏳ Phase 3 |
+| I3 | Money safety: every captured payment ends confirmed or refunded | ⏳ Phase 3, reconciler in Phase 5 |
+| I4 | Per-user cap | ✅ Enforced in Valkey and PostgreSQL, checked by E1 |
+| I5 | No lost units | ✅ Enforced by the sweeper and atomic scripts, checked by the randomized test |
+| F1 | Fairness | ⏳ Phase 2 |
+
+## 5. Contributors
+
+| Who | Role | Contribution |
+|---|---|---|
+| Sanjay M | Author and owner | Project idea, design and build plan (v1.0 and v2.0), Drop 1, the plain-language explainer, the GitHub repository and first commit |
+| Claude Code (AI assistant) | Assistant, 2026-10-01 session | Project review and progress check against the plan; expanded `.gitignore`; moved plan v2.0 into `docs/design/`; aligned invariant IDs; wrote this log; installed the toolchain; ran the M1.5 bring-up and diagnosed the flaky sweeper integration tests |
+
+## 6. Still open in M1.5
+
+| Task | Status |
+|---|---|
+| 1.5.1 Install Go 1.27, make, golangci-lint (and k6 for Phase 2) | ✅ In WSL2 Ubuntu 24.04 |
+| 1.5.2 Run `go mod tidy` and commit `go.sum` | ◐ `go.sum` generated; not yet committed |
+| 1.5.3 to 1.5.6 `make test`, `make lint`, `make up`, quickstart, `make itest` | ✅ All pass. `make itest` is flaky while the `make up` stack runs: the inventory-svc sweeper releases the test's short-lived holds first. Stop it with `docker compose stop inventory` before `make itest` until this is fixed |
+| 1.5.7 and 1.5.8 E1 soak (100 runs) and hold latency in `loadtest/results/` | ◐ One run passes (hold p99 142 ms on an i7-1250U, 16 GB); the 100-run soak and the results file are still to do |
+| 1.5.9 Push to GitHub with every CI job green | ◐ Pushed on 2026-10-01; CI is expected to fail until `go.sum` is committed |
+| 1.5.10 Branch protection, Dependabot, `LICENSE` | ⏳ |
+| 1.5.11 `CHANGELOG.md`, tag `v0.1.0`, GitHub release | ⏳ |
+| 1.5.12 GitHub milestones M2 to M6, one issue per task | ⏳ |
+
+After M1.5: Phase 2 (waiting room and admission control), starting with task 2.1.
+
+## 7. Keeping this log current
+
+Add a row to the timeline (section 2) whenever a task or milestone finishes, with the date, time and the evidence: a commit hash, a tag, or a file in `loadtest/results/`. Update section 1 and the milestone tables at the end of every phase, in the same pull request as the work.
