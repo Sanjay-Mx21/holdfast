@@ -37,7 +37,7 @@ All times are IST (UTC+05:30).
 | **Repository** | [github.com/Sanjay-Mx21/holdfast](https://github.com/Sanjay-Mx21/holdfast), branch `main` |
 | **First commit** | `2173e50` "first commit", 2026-10-01 20:20, 82 files, 12,973 lines |
 | **Last CI-verified commit** | `5da3051`, CI green on 2026-10-01 at 22:00 (all 6 jobs) |
-| **Issues so far** | 18 recorded: 15 resolved, 3 open; plus 2 setup actions waiting on the owner (section 6) |
+| **Issues so far** | 18 recorded: 15 resolved, 3 open (section 6) |
 
 <Callout type="tip" title="Running locally and green in CI since 2026-10-01">
 
@@ -75,6 +75,8 @@ Sources: the dates recorded in the ADRs and the plan, file modification times, a
 | 2026-10-01 21:33 | Bring-up fixes and docs pushed to GitHub (4 commits, `f3567bb` to `e684acc`). CI at 21:36: lint, unit, integration with E1, and both image builds pass; the security job fails on govulncheck (issue P6) | GitHub Actions run 36889052003 |
 | 2026-10-01 21:56 | Vulnerable modules upgraded (pgx v5.11.0, x/text v0.42.0, x/sys v0.48.0); govulncheck clean; test, lint, itest and E1 pass again; pushed | Commits `1101cc3`, `5da3051` |
 | 2026-10-01 22:00 | **CI green on `main`:** all 6 jobs pass (task 1.5.9) | GitHub Actions run 36892043588 |
+| 2026-10-01 22:14 | Issues section added to this log; CI green again | Commit `1ec8da1`, run 36894186349 |
+| 2026-10-01 after 22:14 | Owner set the Ubuntu password and logged the GitHub CLI in; both verified | `passwd -S`, `gh auth status` |
 
 ## 3. What is complete, and what each piece contributes
 
@@ -195,14 +197,16 @@ CI took **three runs** to go green:
 | D1 | The first explanation for P7 was wrong: clock skew between the WSL clock and Valkey's. A rough measurement through `docker compose exec` suggested 129 to 155 ms, but its round trip was 312 to 379 ms, too noisy to trust | A detour of a few minutes | A direct TCP measurement showed 0 to 1 ms of skew (both run in the same WSL2 VM), which ruled it out; the real cause was found next | ✅ |
 | D2 | `proxy.golang.org` looked blocked: Git Bash's curl failed with error 100 | False alarm | PowerShell reached the proxy and checksum database normally; the error was a quirk of that curl build | ✅ |
 | D3 | Command plumbing between Windows and WSL went wrong three times: PowerShell garbled WSL output, Git Bash rewrote `/mnt/c/...` paths, and `wsl.exe` expanded shell variables early so one image pre-pull loop ran 24 empty retries | Wasted attempts; no effect on the project | Ran commands from script files with `wsl.exe --exec` and `MSYS_NO_PATHCONV=1` | ✅ |
-| D4 | The CI result could not be checked at first: GitHub CLI was not installed | CI status was unknown after the first push | Read CI status from GitHub's public API; GitHub CLI installed in Ubuntu (login still pending, see below) | ✅ |
+| D4 | The CI result could not be checked at first: GitHub CLI was not installed | CI status was unknown after the first push | Read CI status from GitHub's public API; GitHub CLI installed in Ubuntu and logged in (6.5) | ✅ |
 
-### 6.5 Waiting on the owner
+### 6.5 Owner setup actions
 
-These need the owner to type a password or approve a browser login, so they can't be done for them:
+These needed the owner to type a password or approve a browser login. Both are done:
 
-1. Set the Ubuntu user's password, so `sudo` works: `wsl -u root passwd sanjay`.
-2. Log the GitHub CLI in: `gh auth login`, inside Ubuntu.
+| Action | Status |
+|---|---|
+| Set the Ubuntu user's password, so `sudo` works (`wsl -u root passwd sanjay`) | ✅ 2026-10-01, verified with `passwd -S` |
+| Log the GitHub CLI in (`gh auth login`, inside Ubuntu) | ✅ 2026-10-01, account Sanjay-Mx21, HTTPS, scopes include `repo` and `workflow`; `gh run list` works |
 
 ### 6.6 Observations to watch
 
