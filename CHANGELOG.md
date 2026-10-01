@@ -6,6 +6,11 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
 
 ## [Unreleased]
 
+### Changed
+
+- `prometheus/client_golang` upgraded from 1.23.2 to 1.24.1, proposed by
+  Dependabot (#1).
+
 ## [0.1.0] - 2026-10-01
 
 Drop 1: the foundation and the inventory correctness core (milestones M0 and

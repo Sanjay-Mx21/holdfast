@@ -3,8 +3,8 @@ title: "HoldFast: Surge-Proof Booking Engine"
 description: "Project 1 design doc and build blueprint: purpose, tech stack, architecture, runtime flows, and the milestone-by-milestone build plan"
 author: "Sanjay M"
 version: "2.0"
-status: "Drop 1 built (Phases 0 and 1); Phases 2 to 6 planned"
-last_updated: "2026-10-01"
+status: "Drop 1 released as v0.1.0 (M0, M1 and M1.5 complete); Phases 2 to 6 planned"
+last_updated: "2026-10-02"
 tags: [distributed-systems, go, postgresql, valkey, kafka, system-design, payments]
 ---
 
@@ -1845,10 +1845,10 @@ Durations are the original **focused-work-day** estimates, which assumed learnin
 
 | Milestone | Phase | Status | Git tag | Exit evidence |
 |---|---|---|---|---|
-| M0 Foundation | 0 | ✅ Built (Drop 1) | v0.1.0, tagged at M1.5 | Platform packages built; `gofmt`, `go vet` and golangci-lint clean; race tests pass |
-| M1 Correctness core | 1 | ✅ Built (Drop 1) | v0.1.0, tagged at M1.5 | E1: 50,000 buyers → exactly 1,000 holds; 10,000 confirmations → exactly 1,000 sold |
-| M1.5 Bring-up and baseline | none | ⏳ **Next** | v0.1.0 | CI green on `main`; E1 passes 100 of 100 runs on your hardware; hold p99 recorded |
-| M2 Fair waiting room | 2 | ⏳ Planned | v0.2.0 | E2 collapse ratio, E6 fairness, leader-failover test |
+| M0 Foundation | 0 | ✅ Built (Drop 1) | v0.1.0, released 2026-10-01 | Platform packages built; `gofmt`, `go vet` and golangci-lint clean; race tests pass |
+| M1 Correctness core | 1 | ✅ Built (Drop 1) | v0.1.0, released 2026-10-01 | E1: 50,000 buyers → exactly 1,000 holds; 10,000 confirmations → exactly 1,000 sold |
+| M1.5 Bring-up and baseline | none | ✅ Complete (2026-10-01) | v0.1.0, released 2026-10-01 | CI green on `main`; E1 passes 100 of 100 runs on your hardware; hold p99 recorded |
+| M2 Fair waiting room | 2 | ⏳ **Next** | v0.2.0 | E2 collapse ratio, E6 fairness, leader-failover test |
 | M3 MVP backend | 3 | ⏳ Planned | v0.3.0 | One trace across every service; a 1,000-purchase fault run keeps I1, I2 and I4 at 0 |
 | M4 Resume-ready product | 4 | ⏳ Planned | v0.4.0 | Buy a ticket by hand during a k6 rush; README v1 and demo video v1 |
 | M5 Hardened | 5 | ⏳ Planned | v0.5.0 | E3 and E4 pass with every invariant at 0; recovery times documented |
@@ -1939,10 +1939,9 @@ gantt
   section Built in Drop 1
   Phase 0 Foundation                     :done, p0, 2026-09-21, 4d
   Phase 1 Inventory core and E1          :done, p1, after p0, 6d
-  section Next
-  M1.5 Bring-up and baseline             :active, m15, after p1, 1d
+  M1.5 Bring-up and baseline             :done, m15, after p1, 1d
   section Correctness core
-  Phase 2 Waiting room and admission     :p2, after m15, 7d
+  Phase 2 Waiting room and admission     :active, p2, after m15, 7d
   Phase 3 Booking saga and payments      :p3, after p2, 11d
   section Product
   Phase 4 Frontend identity and policies :p4, after p3, 7d
@@ -1965,10 +1964,10 @@ The dates are illustrative. The gates are not.
 
 **Original exit criteria:**
 
-- [ ] `make up` works from a clean clone. *Written; first real run at M1.5.*
+- [ ] `make up` works from a clean clone. *Works on the working copy since M1.5 (2026-10-01); a run from a fresh clone is still to do.*
 - [ ] A request produces a trace in Jaeger. *Moved to Phase 3 (ADR 0004).*
 - [x] Metrics are exposed. *`/metrics` on the admin port, verified end to end.*
-- [ ] CI is green on `main`. *First run at M1.5.*
+- [x] CI is green on `main`. *Since 2026-10-01, on the third CI run.*
 
 **Deviations from version 1 of this plan:** no `cmd/hello` (inventory-svc was the first real service); OpenTelemetry, Kafka, Jaeger and Toxiproxy wait for the phases that use them; an embedded migration runner instead of goose (ADR 0003); a standard-library `flag` CLI instead of cobra; a root `compose.yaml` and `Dockerfile` instead of `deploy/compose/` and `deploy/docker/`.
 
@@ -1985,8 +1984,8 @@ The dates are illustrative. The gates are not.
 
 **Original exit criteria:**
 
-- [x] E1 grants exactly `capacity` holds on every run so far, race-detector clean. *The 100-run soak happens at M1.5.*
-- [ ] Hold p99 measured and recorded with hardware details. *M1.5, on your hardware.*
+- [x] E1 grants exactly `capacity` holds on every run so far, race-detector clean. *100 of 100 in the M1.5 soak.*
+- [x] Hold p99 measured and recorded with hardware details. *`loadtest/results/README.md` (stress figures; read its caveats).*
 - [x] ADR written (ADR 0002).
 
 **Deviations from version 1 of this plan:** gRPC for `MarkPaying` and `GetHold` moves to Phase 3 (ADR 0004); sqlc arrives with booking and payment in Phase 3 (ADR 0011); property tests use a seeded model-based test instead of rapid; integration tests use real dependencies configured by environment variables instead of testcontainers. Holds use event-scoped REST paths (`/v1/events/{id}/holds`), provisioning is idempotent through `inv:{E}:config`, `release.lua` and `confirm.lua` check the hold's owner, and a late confirm re-takes units instead of dropping the sale.
@@ -2001,28 +2000,28 @@ The dates are illustrative. The gates are not.
 | inventory has no sale-freeze check | Phase 4, task 4.3 |
 | The rebuild ignores units in pending bookings | Phase 5, task 5.3 |
 
-### 17.8 M1.5: Bring-up and baseline ⏳ next (about 1 day)
+### 17.8 M1.5: Bring-up and baseline ✅ (completed 2026-10-01)
 
 **Goal:** prove Drop 1 on your own machine and on GitHub before adding anything. Several pieces (Docker, Compose, CI, the Grafana dashboard) have never run in a real environment. Section 18 has every command.
 
-- [ ] 1.5.1 Install the toolchain: Go 1.27.x, Docker with Compose v2, make, git, golangci-lint v2.14.0 (`make tools`), and k6 v2.3 (needed in Phase 2).
-- [ ] 1.5.2 Run `go mod tidy` and commit `go.sum`.
-- [ ] 1.5.3 `make test` and `make lint` pass.
-- [ ] 1.5.4 `make up`: every container is healthy, the `holdfastctl` migration job exits 0, and `curl localhost:9091/readyz` returns ok.
-- [ ] 1.5.5 The README quickstart works end to end: event, token, hold, replay, availability.
-- [ ] 1.5.6 `make itest` passes.
-- [ ] 1.5.7 E1 soak: 100 consecutive passes. Save the log and a hardware note (CPU, cores, RAM, OS, Docker limits, Go version, commit SHA) in `loadtest/results/`.
-- [ ] 1.5.8 Record the hold latency (p50, p95, p99) from E1 in `loadtest/results/README.md`.
-- [ ] 1.5.9 Push to GitHub; every CI job passes (lint, unit, integration with E1, security, images).
-- [ ] 1.5.10 Repository hygiene: branch protection on `main` (require CI), Dependabot for Go modules, Docker and Actions, a description and topics, and a `LICENSE` (MIT is common for portfolios).
-- [ ] 1.5.11 Add `CHANGELOG.md`, tag `v0.1.0`, and publish a GitHub release with the E1 results.
-- [ ] 1.5.12 Create GitHub milestones M2 to M6, with one issue per task in Phases 2 to 6.
+- [x] 1.5.1 Install the toolchain: Go 1.27.x, Docker with Compose v2, make, git, golangci-lint v2.14.0 (`make tools`), and k6 v2.3 (needed in Phase 2).
+- [x] 1.5.2 Run `go mod tidy` and commit `go.sum`.
+- [x] 1.5.3 `make test` and `make lint` pass.
+- [x] 1.5.4 `make up`: every container is healthy, the `holdfastctl` migration job exits 0, and `curl localhost:9091/readyz` returns ok.
+- [x] 1.5.5 The README quickstart works end to end: event, token, hold, replay, availability.
+- [x] 1.5.6 `make itest` passes.
+- [x] 1.5.7 E1 soak: 100 consecutive passes. Save the log and a hardware note (CPU, cores, RAM, OS, Docker limits, Go version, commit SHA) in `loadtest/results/`.
+- [x] 1.5.8 Record the hold latency (p50, p95, p99) from E1 in `loadtest/results/README.md`.
+- [x] 1.5.9 Push to GitHub; every CI job passes (lint, unit, integration with E1, security, images).
+- [x] 1.5.10 Repository hygiene: branch protection on `main` (require CI), Dependabot for Go modules, Docker and Actions, a description and topics, and a `LICENSE` (MIT is common for portfolios).
+- [x] 1.5.11 Add `CHANGELOG.md`, tag `v0.1.0`, and publish a GitHub release with the E1 results.
+- [x] 1.5.12 Create GitHub milestones M2 to M6, with one issue per task in Phases 2 to 6.
 
 **Exit criteria:**
 
-- [ ] CI is green on `main`, including the E1 job.
-- [ ] 100 of 100 E1 runs pass, recorded with hardware details.
-- [ ] `v0.1.0` is tagged and released.
+- [x] CI is green on `main`, including the E1 job.
+- [x] 100 of 100 E1 runs pass, recorded with hardware details.
+- [x] `v0.1.0` is tagged and released.
 
 ### 17.9 Phase 2: Waiting room and admission control (7 days)
 
