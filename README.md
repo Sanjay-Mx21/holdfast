@@ -103,3 +103,7 @@ Errors are RFC 9457 problem documents with stable `code` values; see
 
 Dependencies are pinned in `go.mod`. `make deps-upgrade` moves to the latest
 releases; run `make test itest e1` afterwards.
+
+## License
+
+[MIT](LICENSE) © 2026 Sanjay M
