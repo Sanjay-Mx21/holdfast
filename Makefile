@@ -6,8 +6,8 @@ VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev
 COMMIT   ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 PKG      := github.com/Sanjay-Mx21/holdfast
 LDFLAGS  := -s -w -X $(PKG)/internal/platform/buildinfo.Version=$(VERSION) -X $(PKG)/internal/platform/buildinfo.Commit=$(COMMIT)
-BINARIES := inventory holdfastctl contention
-IMAGES   := inventory holdfastctl
+BINARIES := inventory queue holdfastctl contention
+IMAGES   := inventory queue holdfastctl
 GOLANGCI_LINT_VERSION := v2.14.0
 
 # Local dependencies started by `make infra` / `make up`.

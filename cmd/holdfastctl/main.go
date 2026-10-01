@@ -1,5 +1,5 @@
 // Command holdfastctl is the operator CLI: database migrations, development
-// keys and tokens, event creation and inventory provisioning. It reuses the
+// keys and tokens, event creation, and inventory and queue provisioning. It reuses the
 // services' own packages, so every rule has exactly one implementation.
 package main
 
@@ -30,6 +30,7 @@ import (
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/config"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/postgres"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/valkey"
+	"github.com/Sanjay-Mx21/holdfast/internal/queue"
 )
 
 type command struct {
@@ -43,7 +44,7 @@ func commands() []command {
 		{"migrate", "apply pending database migrations for every schema", cmdMigrate},
 		{"keys generate", "generate an Ed25519 key pair for admission tokens", cmdKeysGenerate},
 		{"token mint", "mint admission tokens (development and load tests only)", cmdTokenMint},
-		{"event create", "create an event in PostgreSQL and provision its inventory", cmdEventCreate},
+		{"event create", "create an event in PostgreSQL and provision its inventory and queue", cmdEventCreate},
 		{"inventory provision", "provision or rebuild an event's Valkey inventory from PostgreSQL", cmdInventoryProvision},
 		{"inventory status", "show an event's live availability", cmdInventoryStatus},
 	}
@@ -236,6 +237,9 @@ func cmdEventCreate(ctx context.Context, args []string) error {
 	perUser := fs.Int("per-user-limit", 4, "maximum units per user")
 	price := fs.Int64("price-paise", 250000, "unit price in paise")
 	opens := fs.String("opens-at", "", "sale opening time, RFC 3339 (default: now)")
+	rate := fs.Int("admission-rate", 83, "queue: buyers admitted per second")
+	sessions := fs.Int("max-sessions", 10_000, "queue: maximum concurrent checkout sessions")
+	sessionTTL := fs.Duration("session-ttl", 10*time.Minute, "queue: lifetime of an admitted buyer's session")
 	noProvision := fs.Bool("no-provision", false, "only write PostgreSQL; provision Valkey later")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -247,6 +251,12 @@ func cmdEventCreate(ctx context.Context, args []string) error {
 			return fmt.Errorf("--opens-at: %w", err)
 		}
 		opensAt = t
+	}
+	qcfg := queue.EventConfig{OpensAt: opensAt, AdmissionRate: *rate, MaxSessions: *sessions, SessionTTL: *sessionTTL}
+	// Check the queue settings before writing anything, so a bad flag never
+	// leaves an event in PostgreSQL that cannot be put on sale.
+	if err := qcfg.Validate(); err != nil {
+		return err
 	}
 	pool, err := openPool(ctx, *dsn)
 	if err != nil {
@@ -263,7 +273,10 @@ func cmdEventCreate(ctx context.Context, args []string) error {
 	if *noProvision {
 		return nil
 	}
-	return provision(ctx, *vk, id.String(), inventory.EventConfig{Capacity: *capacity, PerUserLimit: *perUser})
+	if err := provision(ctx, *vk, id.String(), inventory.EventConfig{Capacity: *capacity, PerUserLimit: *perUser}); err != nil {
+		return err
+	}
+	return provisionQueue(ctx, *vk, id.String(), qcfg)
 }
 
 func cmdInventoryProvision(ctx context.Context, args []string) error {
@@ -320,6 +333,25 @@ func provision(ctx context.Context, addrs, eventID string, cfg inventory.EventCo
 			cfg.InitialAvailable, cfg.Capacity, cfg.PerUserLimit)
 	} else {
 		fmt.Println("inventory already provisioned with the same settings; nothing to do")
+	}
+	return nil
+}
+
+func provisionQueue(ctx context.Context, addrs, eventID string, cfg queue.EventConfig) error {
+	rdb, err := openValkey(ctx, addrs)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rdb.Close() }()
+	created, err := queue.NewService(queue.NewStore(rdb)).Provision(ctx, eventID, cfg)
+	if err != nil {
+		return err
+	}
+	if created {
+		fmt.Printf("queue provisioned: opens %s, %d admissions/s, %d sessions of %s, state PRE\n",
+			cfg.OpensAt.UTC().Format(time.RFC3339), cfg.AdmissionRate, cfg.MaxSessions, cfg.SessionTTL)
+	} else {
+		fmt.Println("queue already provisioned with the same settings; nothing to do")
 	}
 	return nil
 }

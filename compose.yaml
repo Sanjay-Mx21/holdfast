@@ -1,6 +1,6 @@
 # Local development stack. `make up` generates dev keys first, then runs this.
-# Host ports: inventory API 8081, inventory admin 9091, Prometheus 9090,
-# Grafana 3000, PostgreSQL 5432, Valkey 6379.
+# Host ports: inventory API 8081, inventory admin 9091, queue API 8082,
+# queue admin 9092, Prometheus 9090, Grafana 3000, PostgreSQL 5432, Valkey 6379.
 name: holdfast
 
 services:
@@ -70,12 +70,28 @@ services:
       holdfastctl: { condition: service_completed_successfully }
     restart: unless-stopped
 
+  queue:
+    build:
+      context: .
+      args: { SERVICE: queue }
+    environment:
+      ENVIRONMENT: development
+      LOG_FORMAT: text
+      VALKEY_ADDRS: valkey:6379
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-only-admin-token-change-me-0123456789}
+    ports:
+      - "8082:8080" # public API
+      - "9092:9090" # admin: metrics, health, pprof, operator API (never expose in production)
+    depends_on:
+      valkey: { condition: service_healthy }
+    restart: unless-stopped
+
   prometheus:
     image: prom/prometheus:v3.15.0
     volumes:
       - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports: ["9090:9090"]
-    depends_on: [inventory]
+    depends_on: [inventory, queue]
     restart: unless-stopped
 
   grafana:
