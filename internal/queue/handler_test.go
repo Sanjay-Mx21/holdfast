@@ -388,3 +388,23 @@ func TestClientID(t *testing.T) {
 		t.Fatal("different /64 networks share a rate-limit bucket")
 	}
 }
+
+func TestJoinThatOpensTheQueueIsCounted(t *testing.T) {
+	h := newHarness(&fakeService{join: func(context.Context, string, string) (JoinResult, error) {
+		return JoinResult{EventID: eventID, Joined: true, Ordering: OrderingFIFO, openedQueue: true}, nil
+	}})
+	rec := send(h.public, http.MethodPost, joinPath, "", "", map[string]string{"X-Test-User": userID}, "")
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status %d, want 202", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "opened") {
+		t.Fatalf("internal T0 flag leaked into the response: %s", rec.Body)
+	}
+	var out dto.Metric
+	if err := h.m.opened.WithLabelValues(openedByJoin).Write(&out); err != nil {
+		t.Fatal(err)
+	}
+	if got := out.GetCounter().GetValue(); got != 1 {
+		t.Fatalf("holdfast_queue_opened_total{by=join} = %v, want 1", got)
+	}
+}

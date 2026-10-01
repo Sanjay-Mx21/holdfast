@@ -93,8 +93,11 @@ func (h *Handler) join(w http.ResponseWriter, r *http.Request) {
 	} else {
 		h.m.join(joinAlready)
 	}
+	if res.openedQueue {
+		h.m.transition(openedByJoin)
+	}
 	w.Header().Set("Cache-Control", "no-store")
-	httpx.WriteJSON(w, http.StatusAccepted, joinResponse(res))
+	httpx.WriteJSON(w, http.StatusAccepted, joinResponse{EventID: res.EventID, Joined: res.Joined, Ordering: res.Ordering})
 }
 
 // allow takes a token for (scope, id). When the bucket is empty it writes

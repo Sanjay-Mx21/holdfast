@@ -81,6 +81,9 @@ type JoinResult struct {
 	// position stands (no re-rolling the lottery).
 	Joined   bool
 	Ordering Ordering
+	// openedQueue is true when this join performed the T0 transition
+	// (counted in metrics; not part of the API).
+	openedQueue bool
 }
 
 // orderingOf derives the ordering from a member's score: lottery scores are

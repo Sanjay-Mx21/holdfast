@@ -46,11 +46,11 @@ func (s *Service) Join(ctx context.Context, eventID, userID string) (JoinResult,
 	if err != nil {
 		return JoinResult{}, fmt.Errorf("queue: lottery score: %w", err)
 	}
-	joined, got, err := s.store.Join(ctx, ev, user, score)
+	out, err := s.store.Join(ctx, ev, user, score)
 	if err != nil {
 		return JoinResult{}, err
 	}
-	return JoinResult{EventID: ev, Joined: joined, Ordering: orderingOf(got)}, nil
+	return JoinResult{EventID: ev, Joined: out.joined, Ordering: orderingOf(out.score), openedQueue: out.opened}, nil
 }
 
 // canonicalUUID accepts only the 36-character hyphenated form and returns it
