@@ -1,0 +1,12 @@
+# Keep LF line endings in the working tree on every OS. Shell scripts, the
+# Makefile and Lua scripts break with CRLF, and Windows checkouts with
+# core.autocrlf=true would otherwise convert them.
+* text=auto eol=lf
+
+# Binary files
+*.png  binary
+*.jpg  binary
+*.gif  binary
+*.ico  binary
+*.zip  binary
+*.xlsx binary
