@@ -14,6 +14,10 @@ type Metrics struct {
 	opened     *prometheus.CounterVec
 	openerRuns *prometheus.CounterVec
 	openerTime prometheus.Histogram
+	ticks      *prometheus.CounterVec
+	admitted   prometheus.Counter
+	terms      prometheus.Counter
+	leader     *prometheus.GaugeVec
 }
 
 // Join outcomes, the values of the result label.
@@ -45,6 +49,14 @@ const (
 	openedByOpener = "opener"
 )
 
+// Admission tick outcomes, the values of the result label.
+const (
+	tickAdvanced = "advanced"
+	tickIdle     = "idle"
+	tickFenced   = "fenced"
+	tickError    = "error"
+)
+
 // NewMetrics registers the queue metrics on reg.
 func NewMetrics(reg prometheus.Registerer) *Metrics {
 	m := &Metrics{
@@ -70,6 +82,22 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 		Help:    "Duration of one opener pass over all events.",
 		Buckets: prometheus.ExponentialBuckets(0.0005, 2, 12),
 	})
+	m.ticks = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "holdfast_queue_admission_ticks_total",
+		Help: "Admission ticks run by a leader, by outcome.",
+	}, []string{"result"})
+	m.admitted = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "holdfast_queue_admitted_total",
+		Help: "People admitted from the queue into the purchase path.",
+	})
+	m.terms = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "holdfast_queue_leader_terms_total",
+		Help: "Admission leadership terms won by this process.",
+	})
+	m.leader = promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+		Name: "holdfast_queue_admission_leader",
+		Help: "1 while this process leads the event's admission controller. Labelled by event ID: bounded by the number of provisioned events.",
+	}, []string{"event"})
 	// Export every series from the start, at zero.
 	for _, r := range []string{joinJoined, joinAlready, joinRateLimitedIP, joinRateLimitUser, joinClosed, joinNotFound, joinInvalid, joinError} {
 		m.joins.WithLabelValues(r)
@@ -83,9 +111,22 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 	for _, r := range []string{"ok", "error"} {
 		m.openerRuns.WithLabelValues(r)
 	}
+	for _, r := range []string{tickAdvanced, tickIdle, tickFenced, tickError} {
+		m.ticks.WithLabelValues(r)
+	}
 	return m
 }
 
 func (m *Metrics) join(result string)     { m.joins.WithLabelValues(result).Inc() }
 func (m *Metrics) position(result string) { m.positions.WithLabelValues(result).Inc() }
 func (m *Metrics) transition(by string)   { m.opened.WithLabelValues(by).Inc() }
+
+func (m *Metrics) tick(result string) { m.ticks.WithLabelValues(result).Inc() }
+
+func (m *Metrics) setLeader(eventID string, leading bool) {
+	v := 0.0
+	if leading {
+		v = 1
+	}
+	m.leader.WithLabelValues(eventID).Set(v)
+}

@@ -4,16 +4,16 @@ The waiting room: decides who may enter the purchase path, in what order and
 how fast. Binary: `cmd/queue`. Code: `internal/queue`.
 
 **Status:** Phase 2 in progress. Built: provisioning (task 2.1), joining
-(task 2.2), the T0 transition (task 2.3) and positions (task 2.4). The
-admission controller, the status document and admission tokens follow in
-tasks 2.5 to 2.8.
+(task 2.2), the T0 transition (task 2.3), positions (task 2.4) and the
+admission controller (task 2.5). The status document and admission tokens
+follow in tasks 2.6 to 2.8.
 
 ## Responsibilities
 
 - Store each event's queue settings and open its waiting room in state PRE (built).
 - Accept joins: a random lottery position before T0, arrival order after (built).
 - Switch from PRE to OPEN at T0 and tell buyers their rank (built).
-- Admit buyers at a controlled rate and issue admission tokens (tasks 2.5 to 2.7).
+- Admit buyers at a controlled rate (built) and issue admission tokens (task 2.7).
 - Publish the status document every client polls (task 2.6).
 
 ## API
@@ -150,6 +150,37 @@ the state:
 Each opening is logged at INFO as `queue opened at T0` with `late_ms` (how long
 after T0 the opener got to it) and counted in `holdfast_queue_opened_total`.
 
+## Admission
+
+Admission moves `admittedUpTo` (`q:{E}:admitted`), the highest rank allowed
+into the purchase path. Buyers will compare their rank with it through the
+status document (task 2.6) and exchange their turn for an admission token
+(task 2.7).
+
+- **One leader per event.** Every queue-svc replica runs a controller for every
+  event in `q:events`; they compete for a PostgreSQL advisory lock
+  (`pg_try_advisory_lock`, keyed by FNV-1a of the event ID) held on a dedicated
+  connection taken out of the pool. If the leader's process dies, the
+  connection drops, PostgreSQL releases the lock, and a standby takes over on
+  its next attempt (`LEADER_RETRY_INTERVAL`, 2 s).
+- **Fencing.** Each new term increments `adm:{E}:epoch`. `advance.lua` refuses
+  a caller whose epoch is not current, so a leader that paused and woke up
+  after a successor was elected cannot admit anyone; its term ends.
+- **Each tick** (`ADMISSION_TICK`, 250 ms) the leader asks `advance.lua` to admit
+  up to what its allowance holds: a token bucket at the event's admission rate,
+  capped at one second's worth, so a pause never becomes a burst. In one atomic
+  step the script removes expired session slots, caps admissions so active
+  slots never exceed `maxSessions` (Little's Law: L = λ × W), never passes the
+  last member, moves `admittedUpTo`, and gives each newly admitted rank a slot
+  in `adm:{E}:sessions` that lasts the session TTL.
+- **Only `OPEN` admits.** `FROZEN` pauses admission; slots keep expiring.
+- PostgreSQL is used only for elections. Readiness does not depend on it: if it
+  is down, admissions pause and joining and positions keep working.
+
+Not built yet: limiting admissions by the units left in inventory
+(oversubscription) and marking the queue `SOLD_OUT` (see the progress log,
+issue P17); adaptive admission (AIMD) is Phase 5.
+
 ## Error codes
 
 | Code | HTTP | Meaning |
@@ -187,11 +218,14 @@ switch is task 4.3; `SOLD_OUT` and `CLOSED` come with the admission controller.
 | `q:{E}:state` | string | `PRE`, `OPEN`, `FROZEN`, `SOLD_OUT` or `CLOSED` |
 | `q:{E}:members` | sorted set | user ID → score: lottery score in [0, 1) before T0, 1 plus the arrival number after |
 | `q:{E}:seq` | integer | Arrival counter for joins after T0 |
-| `q:events` | set | Provisioned events: the opener's work list (one global key, never used inside multi-key scripts) |
+| `q:{E}:admitted` | integer | `admittedUpTo`, the highest admitted rank |
+| `adm:{E}:epoch` | integer | Fencing token: incremented by every new admission leader |
+| `adm:{E}:sessions` | sorted set | Admitted rank → session expiry in ms; the concurrency budget |
+| `q:events` | set | Provisioned events: the opener's and the admission controllers' work list (one global key, never used inside multi-key scripts) |
 | `rl:SCOPE:ID` | hash | Token bucket: `tokens`, `ts_ms`; expires once the bucket would be full again |
 
-The remaining keys in the design doc (section 8.2): `q:{E}:admitted`,
-`q:{E}:status`, `adm:*` and `jti:*` arrive with tasks 2.5 to 2.8.
+The remaining keys in the design doc (section 8.2), `q:{E}:status` and
+`jti:*`, arrive with tasks 2.6 to 2.8.
 
 ## Scripts
 
@@ -201,12 +235,14 @@ The remaining keys in the design doc (section 8.2): `q:{E}:admitted`,
 | `join.lua` | {1 joined, 0 already joined, -1 closed, -2 not provisioned, member's score, 1 if this join opened the queue at T0} |
 | `open.lua` | {1 opened, 0 nothing to do, -1 not provisioned; ms late after T0, or ms left until T0} |
 | `position.lua` | {1 ranked, 0 before T0, -1 not in queue, -2 not provisioned; rank or opens_at_ms; state} |
+| `advance.lua` | {1 admitted some, 0 nothing to admit, -1 fenced, -2 not provisioned; admittedUpTo, admitted now, active sessions} |
 | `token_bucket.lua` (`internal/platform/ratelimit`) | {allowed 1 or 0, remaining tokens × 1000, retry after ms} |
 
 ## Configuration
 
-Shared settings (`ENVIRONMENT`, `LOG_*`, `HTTP_*`, `SHUTDOWN_*`, `VALKEY_*`)
-are defined in `internal/platform/config`. Service settings:
+Shared settings (`ENVIRONMENT`, `LOG_*`, `HTTP_*`, `SHUTDOWN_*`, `VALKEY_*`,
+`POSTGRES_*`) are defined in `internal/platform/config`; `POSTGRES_DSN` is
+required (admission leader election). Service settings:
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -219,6 +255,9 @@ are defined in `internal/platform/config`. Service settings:
 | `OPEN_CHECK_INTERVAL` | `250ms` | How often the opener looks for queues due to open (10ms to 10s) |
 | `POSITION_USER_BURST` | `10` | Per-user bucket size for position lookups |
 | `POSITION_USER_PER_SECOND` | `1` | Per-user refill rate for position lookups |
+| `ADMISSION_TICK` | `250ms` | How often a leader admits (10ms to 10s) |
+| `LEADER_RETRY_INTERVAL` | `2s` | How often a standby tries to become leader (100ms to 1m) |
+| `ADMISSION_RESCAN_INTERVAL` | `2s` | How often new events get a controller (100ms to 1m) |
 
 Locally, Compose maps the public port to 8082 and the admin port to 9092,
 and sets `DEV_IDENTITY=true`.
@@ -229,6 +268,10 @@ and sets `DEV_IDENTITY=true`.
 |---|---|---|
 | `holdfast_queue_joins_total` | `result` | Join outcomes: joined, already_joined, rate_limited_ip, rate_limited_user, closed, not_found, invalid, error |
 | `holdfast_queue_position_lookups_total` | `result` | Position lookups: ranked, randomizing, not_in_queue, not_found, rate_limited, invalid, error |
+| `holdfast_queue_admitted_total` | | People admitted into the purchase path |
+| `holdfast_queue_admission_ticks_total` | `result` | Leader ticks: advanced, idle, fenced, error |
+| `holdfast_queue_leader_terms_total` | | Admission leadership terms won by this process |
+| `holdfast_queue_admission_leader` | `event` | 1 while this process leads the event (bounded by the number of events) |
 | `holdfast_queue_opened_total` | `by` | T0 transitions: `join` (a join got there first) or `opener` |
 | `holdfast_queue_opener_runs_total` | `result` | Opener passes: ok, error |
 | `holdfast_queue_opener_duration_seconds` | | One opener pass over all events |

@@ -69,3 +69,27 @@ place in arrival order. What is stale is the state other readers see.
 3. Check the opening time: `valkey-cli HGET "q:{<event id>}:config" opens_at_ms`
    against `valkey-cli TIME` (seconds and microseconds). T0 is judged by
    Valkey's clock, not the operator's.
+
+## RB-Q-5 Admissions are not advancing
+
+**Symptom:** `q:{<event id>}:admitted` stays put while people wait;
+`holdfast_queue_admitted_total` is flat.
+
+1. Is anyone leading? `holdfast_queue_admission_leader{event="<event id>"}` is 1
+   on exactly one replica. If none: PostgreSQL may be unreachable (elections
+   need it); check `docker compose ps postgres` and the queue-svc logs for
+   `admission: leadership term ended`.
+2. Is the queue `OPEN`? `FROZEN`, `SOLD_OUT` and `CLOSED` admit nobody.
+3. Is the session budget full? Compare
+   `valkey-cli ZCARD "adm:{<event id>}:sessions"` with `max_sessions` in
+   `q:{<event id>}:config`. Slots free themselves after the session TTL.
+4. Repeated `fenced off by a newer leader` warnings mean two processes keep
+   taking over from each other; check that every replica reaches the same
+   PostgreSQL.
+
+## RB-Q-6 Moving leadership to another replica
+
+Restart the leading replica (`docker compose restart queue` locally). Its
+connection closes, PostgreSQL releases the advisory lock, and a standby takes
+over within `LEADER_RETRY_INTERVAL`. The new leader's epoch is higher, so
+anything the old one still tries is refused.

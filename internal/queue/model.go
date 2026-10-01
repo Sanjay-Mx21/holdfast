@@ -106,3 +106,13 @@ type Position struct {
 	// RandomizingAt is T0 while the lottery is still open; zero from T0 on.
 	RandomizingAt time.Time
 }
+
+// Advance is the outcome of one admission tick.
+type Advance struct {
+	// AdmittedUpTo is the highest admitted rank (q:{E}:admitted).
+	AdmittedUpTo int64
+	// Admitted is how many people this tick admitted.
+	Admitted int64
+	// ActiveSessions counts unexpired session slots after this tick.
+	ActiveSessions int64
+}
