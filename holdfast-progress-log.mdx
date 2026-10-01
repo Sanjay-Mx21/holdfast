@@ -36,12 +36,13 @@ All times are IST (UTC+05:30).
 | **Progress to v1.0** | About 20% (10 of about 51 focused-work days, excluding Phase 7 stretch goals) |
 | **Repository** | [github.com/Sanjay-Mx21/holdfast](https://github.com/Sanjay-Mx21/holdfast), branch `main` |
 | **First commit** | `2173e50` "first commit", 2026-10-01 20:20, 82 files, 12,973 lines |
-| **Last CI-verified commit** | `5da3051`, CI green on 2026-10-01 at 22:00 (all 6 jobs) |
+| **Latest release** | [v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0), 2026-10-01 23:47, on `9dcd2f8` |
+| **CI** | Green since 2026-10-01 22:00; `main` is protected and every change needs a pull request with all 6 jobs passing |
 | **Issues so far** | 20 recorded: 17 resolved, 3 open (section 6) |
 
 <Callout type="tip" title="Running locally and green in CI since 2026-10-01">
 
-Drop 1 builds, passes every test and runs on this machine (WSL2 Ubuntu 24.04): `make test`, `make lint`, `make up`, the quickstart, `make itest` and E1 all pass, and CI on GitHub is green. It took three CI runs to get there; section 6 records every issue met on the way. The 100-run E1 soak passed 100 of 100 (`loadtest/results/`). Still open for M1.5: repository hygiene and the v0.1.0 release (section 7).
+Drop 1 builds, passes every test and runs on this machine (WSL2 Ubuntu 24.04): `make test`, `make lint`, `make up`, the quickstart, `make itest` and E1 all pass, and CI on GitHub is green. It took three CI runs to get there; section 6 records every issue met on the way. The 100-run E1 soak passed 100 of 100 (`loadtest/results/`), and v0.1.0 is released. All three M1.5 exit criteria are met; only task 1.5.12 (GitHub milestones and issues for Phases 2 to 6) is left (section 7).
 
 </Callout>
 
@@ -84,6 +85,9 @@ Sources: the dates recorded in the ADRs and the plan, file modification times, a
 | 2026-10-01 ~23:30 | Dependabot configured: weekly update pull requests for Go modules, Docker images, Compose images and GitHub Actions; vulnerability alerts and automatic security-fix pull requests turned on | Commit `133bc61`; repository settings |
 | 2026-10-01 ~23:30 | Repository description and 11 topics set | GitHub repository page |
 | 2026-10-01 23:30 | **Branch protection on `main`** (task 1.5.10 complete): pull request required, all 6 CI jobs must pass, branch must be up to date, conversations resolved, applies to admins, no force pushes or deletion. From here on, every change reaches `main` through a pull request, starting with this log update | GitHub branch protection settings |
+| 2026-10-01 23:35 | First pull request merged through the protected route: the log update for task 1.5.10 (all 6 checks passed); a direct push to `main` was tested beforehand and rejected | PR #2, `5a91878` |
+| 2026-10-01 23:46 | `CHANGELOG.md` with the v0.1.0 entry merged | PR #3, `9dcd2f8` |
+| 2026-10-01 23:47 | **v0.1.0 tagged and released** (task 1.5.11), with the E1 soak log, summary and results README attached | [Release v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0), tag on `9dcd2f8` |
 
 ## 3. What is complete, and what each piece contributes
 
@@ -232,7 +236,7 @@ These needed the owner to type a password or approve a browser login. Both are d
 | 1.5.7 and 1.5.8 E1 soak (100 runs) and hold latency in `loadtest/results/` | ✅ 100 of 100 passed on 2026-10-01; results, hardware note and latency spread in `loadtest/results/README.md` |
 | 1.5.9 Push to GitHub with every CI job green | ✅ Green at `5da3051` on the third CI run (issues P1 and P6) |
 | 1.5.10 Branch protection, Dependabot, `LICENSE` | ✅ MIT license, Dependabot with security alerts, description and topics, and branch protection on `main` (2026-10-01) |
-| 1.5.11 `CHANGELOG.md`, tag `v0.1.0`, GitHub release | ⏳ |
+| 1.5.11 `CHANGELOG.md`, tag `v0.1.0`, GitHub release | ✅ Released 2026-10-01 23:47 with the soak evidence attached |
 | 1.5.12 GitHub milestones M2 to M6, one issue per task | ⏳ |
 
 After M1.5: Phase 2 (waiting room and admission control), starting with task 2.1.
