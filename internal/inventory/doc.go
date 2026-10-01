@@ -7,7 +7,7 @@
 //
 //   - I1 no oversell on the fast path: avail never drops below zero because
 //     the check and the decrement happen in one atomic step;
-//   - I3 no lost units: every hold is either confirmed or released, driven by
+//   - I5 no lost units: every hold is either confirmed or released, driven by
 //     an expiry index that the sweeper drains;
 //   - I4 per-user caps: a per-user counter is checked in the same step.
 //

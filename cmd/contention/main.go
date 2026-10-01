@@ -220,7 +220,7 @@ func runHolds(ctx context.Context, o options) (*Report, error) {
 		fmt.Sprintf("held %d, expected %d", r.Outcomes["held"], expected))
 	r.check("I1 pool never negative and fully accounted", avail.Available == o.capacity-r.Outcomes["held"]*o.qty && avail.Available >= 0,
 		fmt.Sprintf("available %d = capacity %d - held units %d", avail.Available, o.capacity, r.Outcomes["held"]*o.qty))
-	r.check("I3 every granted hold is stored as HELD", readable == len(held),
+	r.check("I5 every granted hold is stored as HELD", readable == len(held),
 		fmt.Sprintf("%d of %d readable", readable, len(held)))
 	r.check("no infrastructure errors", r.Outcomes["error"] == 0, errDetail(firstErr))
 	return r, nil

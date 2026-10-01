@@ -13,13 +13,16 @@ proves the no-oversell property on every CI run.
 
 ## 2. Invariants
 
+IDs match section 2.3 of the design doc.
+
 | ID | Invariant | Enforced by (Drop 1) |
 |---|---|---|
-| I1 | Never sell more units than exist | `hold.lua` (atomic check and decrement); the guard's conditional `UPDATE` plus the `no_oversell` CHECK |
-| I2 | Fair order of admission | Waiting room, Phase 2 |
-| I3 | No lost units: every hold ends SOLD or RELEASED | Expiry index plus sweeper; `release.lua` and `confirm.lua` |
-| I4 | Per-user cap | Per-user counter in `hold.lua`; conditional upsert in the guard |
-| I5 | Paid means booked, booked means paid | Booking and payment saga, Phase 3 |
+| I1 | No oversell: confirmed units never exceed capacity | `hold.lua` (atomic check and decrement); the guard's conditional `UPDATE` plus the `no_oversell` CHECK |
+| I2 | No double charge: at most one captured payment per booking | Payment intents and webhook dedup, Phase 3 |
+| I3 | Money safety: every captured payment ends CONFIRMED or REFUNDED | Booking and payment saga, Phase 3; reconciler, Phase 5 |
+| I4 | Per-user cap: held plus sold units per user per event never exceed the limit | Per-user counter in `hold.lua`; conditional upsert in the guard |
+| I5 | No lost units: every hold ends SOLD or RELEASED | Expiry index plus sweeper; `release.lua` and `confirm.lua` |
+| F1 | Fairness: random order before T0, FIFO after, one slot per identity | Waiting room, Phase 2 |
 
 ## 3. Services and ownership
 
