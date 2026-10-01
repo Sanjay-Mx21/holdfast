@@ -32,13 +32,13 @@ All times are IST (UTC+05:30).
 | **Project** | A flash-sale booking engine that sells exactly the available units under extreme demand, never more |
 | **Plan version** | 2.0 (1 October 2026) |
 | **Milestones complete** | M0 Foundation, M1 Correctness core and M1.5 Bring-up and baseline |
-| **Current milestone** | M2 Fair waiting room: next task 2.1, [issue #5](https://github.com/Sanjay-Mx21/holdfast/issues/5) |
+| **Current milestone** | M2 Fair waiting room: 1 of 14 tasks done (section 8); next task 2.2, [issue #6](https://github.com/Sanjay-Mx21/holdfast/issues/6) |
 | **Progress to v1.0** | About 22% (11 of about 51 focused-work days, excluding Phase 7 stretch goals) |
 | **Repository** | [github.com/Sanjay-Mx21/holdfast](https://github.com/Sanjay-Mx21/holdfast), branch `main` |
 | **First commit** | `2173e50` "first commit", 2026-10-01 20:20, 82 files, 12,973 lines |
 | **Latest release** | [v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0), 2026-10-01 23:47, on `9dcd2f8` |
 | **CI** | Green since 2026-10-01 22:00; `main` is protected and every change needs a pull request with all 6 jobs passing |
-| **Issues so far** | 21 recorded: 18 resolved, 3 open (section 6) |
+| **Issues so far** | 24 recorded: 20 resolved, 4 open (section 6) |
 
 <Callout type="tip" title="v0.1.0 released, M1.5 complete (2026-10-01)">
 
@@ -91,7 +91,9 @@ Sources: the dates recorded in the ADRs and the plan, file modification times, a
 | 2026-10-01 23:51 | Progress log updated for the release | PR #4, `57e88e4` |
 | 2026-10-02 00:07 | Dependabot's first pull request merged by the owner: `prometheus/client_golang` 1.23.2 to 1.24.1; all 6 CI jobs passed before and after the merge | PR #1, `1ea9ac9` |
 | 2026-10-02 00:15 | **GitHub milestones M2 to M6 and 50 task issues created** (task 1.5.12), one per task in Phases 2 to 6 (#5 to #54), each with the task text, phase goal, design references and definition of done; labels `phase-2` to `phase-6` | [Milestones](https://github.com/Sanjay-Mx21/holdfast/milestones) |
-| 2026-10-02 ~00:20 | **M1.5 complete.** Plan tracker, checkboxes and README status updated | This pull request |
+| 2026-10-02 ~00:20 | **M1.5 complete.** Plan tracker, checkboxes and README status updated | PR #55 |
+| 2026-10-02 00:33 | Status spreadsheet dropped from the plan (issue P10) | PR #56 |
+| 2026-10-02 00:49 | **Phase 2 started. Task 2.1 (queue provisioning) built and verified:** queue-svc with `PUT /internal/v1/events/{id}/queue` on its admin port and `holdfastctl event create` provisioning the queue; 6 unit and 5 integration tests pass; end to end on the local stack: 401 without a token, 201 created, 200 identical retry, 409 different settings, 400 bad input, state PRE in Valkey; Prometheus scrapes it | Branch `feat/p2-queue-provisioning`, issue #5 |
 
 ## 3. What is complete, and what each piece contributes
 
@@ -168,10 +170,10 @@ Every problem met while bringing Drop 1 up and running the soak on 2026-10-01, i
 
 | Group | Recorded | Resolved | Open |
 |---|---|---|---|
-| P: defects in the repository | 10 | 7 | 3 |
+| P: defects in the repository | 12 | 8 | 4 |
 | E: machine and network | 6 | 6 | 0 |
-| D: diagnosis and process | 5 | 5 | 0 |
-| **Total** | **21** | **18** | **3** |
+| D: diagnosis and process | 6 | 6 | 0 |
+| **Total** | **24** | **20** | **4** |
 
 CI took **three runs** to go green:
 
@@ -194,7 +196,9 @@ CI took **three runs** to go green:
 | P7 | `make itest` is flaky while the `make up` stack is running: `TestSweeperDrainsInBatches` and `TestSweeperReleasesOnlyExpiredHeldHolds` failed in 1 of 1 full runs and 2 of 10 targeted runs, each time releasing 0 holds | Local integration runs fail about 20% of the time; CI is not affected (it does not run inventory-svc) | Tests and the running inventory-svc share one Valkey. The service's sweeper releases expired holds of every event every 500 ms, so it sometimes releases the tests' 20 ms holds before the test's own sweep. With inventory-svc stopped: 80 of 80 runs passed | Workaround: `docker compose stop inventory` before `make itest`. Proper fix not yet chosen: stop the service in the `itest` target, or give tests their own Valkey | ⏳ Open |
 | P8 | `/buildz` of the Compose-built inventory-svc reports `version: dev` and `commit: unknown` | Running containers can't be traced to a commit | `compose.yaml` passes only `SERVICE` as a build argument, not `VERSION` and `COMMIT` | Not yet fixed | ⏳ Open |
 | P9 | `holdfast-explained-simply.mdx` still uses the old invariant numbering in its "five promises" table | The plain-language doc disagrees with the plan | Out of scope of P5; fixing it means rewriting five promises as six | Waiting for the owner's decision | ⏳ Open |
-| P10 | The plan (sections 17.2 and 17.3) tells readers to update `holdfast-build-status.xlsx` at every milestone, but no such file exists in the repository or the workspace | The milestone procedure points to a missing file | The spreadsheet was never created or never added | The owner chose to drop it (2026-10-02). The plan now points to the tracker in 17.1, the GitHub milestones and this log instead | ✅ This change |
+| P10 | The plan (sections 17.2 and 17.3) tells readers to update `holdfast-build-status.xlsx` at every milestone, but no such file exists in the repository or the workspace | The milestone procedure points to a missing file | The spreadsheet was never created or never added | The owner chose to drop it (2026-10-02). The plan now points to the tracker in 17.1, the GitHub milestones and this log instead | ✅ PR #56 |
+| P11 | A running local stack does not pick up a changed `deploy/prometheus/prometheus.yml`: after task 2.1 added the `queue` scrape job, Prometheus kept scraping only `inventory` | The new service's metrics silently missing from Prometheus and Grafana | Prometheus reads its config at start-up, and `make up` does not recreate it when only a mounted file changes | `docker compose restart prometheus` loads it (verified: `queue` target up); the README now says so | ✅ Documented |
+| P12 | The admin routers (`httpx.NewAdminRouter`) apply no body-size limit, but `docs/services/inventory.md` lists `BODY_TOO_LARGE` among the errors without saying it applies to the public port only | Docs claim an error the inventory admin endpoint cannot return; operator endpoints accept bodies of any size (behind the operator token) | The admin router has its own middleware chain without `BodyLimit` | Not fixed. The queue doc omits the code. Options: add `BodyLimit` to the admin router, or correct the inventory doc | ⏳ Open |
 
 ### 6.3 Machine and network
 
@@ -216,6 +220,7 @@ CI took **three runs** to go green:
 | D3 | Command plumbing between Windows and WSL went wrong three times: PowerShell garbled WSL output, Git Bash rewrote `/mnt/c/...` paths, and `wsl.exe` expanded shell variables early so one image pre-pull loop ran 24 empty retries | Wasted attempts; no effect on the project | Ran commands from script files with `wsl.exe --exec` and `MSYS_NO_PATHCONV=1` | ✅ |
 | D4 | The CI result could not be checked at first: GitHub CLI was not installed | CI status was unknown after the first push | Read CI status from GitHub's public API; GitHub CLI installed in Ubuntu and logged in (6.5) | ✅ |
 | D5 | While the AC soak's run 1 was starting, the assistant ran Docker and WSL diagnostics on the same machine | Run 1 is the slowest of 100: hold p99 1,088 ms against a median of 114 ms | Left the machine alone for the other 99 runs; run 1 is kept and reported, and the results README gives figures with and without it | ✅ |
+| D6 | While adding queue provisioning to `holdfastctl`, the assistant's scripted edit put a real line break inside a Go string literal | The CLI did not compile; the first end-to-end run failed at every step | Caught by the local gates before any commit; fixed to `\n` and the full run repeated with every gate passing | ✅ |
 
 ### 6.5 Owner setup actions
 
@@ -246,6 +251,27 @@ These needed the owner to type a password or approve a browser login. Both are d
 
 Next: Phase 2 (waiting room and admission control), starting with task 2.1, [issue #5](https://github.com/Sanjay-Mx21/holdfast/issues/5).
 
-## 8. Keeping this log current
+## 8. Phase 2 tasks (milestone M2)
+
+Goal: everyone waits fairly, and buyers enter the purchase path at a controlled rate carrying a signed admission token. Plan section 17.9; [milestone M2](https://github.com/Sanjay-Mx21/holdfast/milestone/1).
+
+| Task | Issue | Status |
+|---|---|---|
+| 2.1 Queue provisioning | [#5](https://github.com/Sanjay-Mx21/holdfast/issues/5) | ✅ 2026-10-02: queue-svc, `PUT /internal/v1/events/{id}/queue`, `holdfastctl event create` provisions the queue; unit and integration tests |
+| 2.2 Joining | [#6](https://github.com/Sanjay-Mx21/holdfast/issues/6) | ⏳ |
+| 2.3 The T0 transition | [#7](https://github.com/Sanjay-Mx21/holdfast/issues/7) | ⏳ |
+| 2.4 Your position | [#8](https://github.com/Sanjay-Mx21/holdfast/issues/8) | ⏳ |
+| 2.5 Admission controller | [#9](https://github.com/Sanjay-Mx21/holdfast/issues/9) | ⏳ |
+| 2.6 Status document | [#10](https://github.com/Sanjay-Mx21/holdfast/issues/10) | ⏳ |
+| 2.7 Admission tokens | [#11](https://github.com/Sanjay-Mx21/holdfast/issues/11) | ⏳ |
+| 2.8 Close the inventory token gaps | [#12](https://github.com/Sanjay-Mx21/holdfast/issues/12) | ⏳ |
+| 2.9 NGINX | [#13](https://github.com/Sanjay-Mx21/holdfast/issues/13) | ⏳ |
+| 2.10 Metrics and dashboard | [#14](https://github.com/Sanjay-Mx21/holdfast/issues/14) | ⏳ |
+| 2.11 Tests | [#15](https://github.com/Sanjay-Mx21/holdfast/issues/15) | ⏳ |
+| 2.12 Experiments | [#16](https://github.com/Sanjay-Mx21/holdfast/issues/16) | ⏳ |
+| 2.13 holdfastctl | [#17](https://github.com/Sanjay-Mx21/holdfast/issues/17) | ⏳ |
+| 2.14 Docs | [#18](https://github.com/Sanjay-Mx21/holdfast/issues/18) | ⏳ |
+
+## 9. Keeping this log current
 
 Add a row to the timeline (section 2) whenever a task or milestone finishes, with the date, time and the evidence: a commit hash, a tag, or a file in `loadtest/results/`. Record every issue in section 6 when it happens, including failed attempts and wrong diagnoses, and update its status when it is resolved; never delete a row. Update section 1 and the milestone tables at the end of every phase, in the same pull request as the work.

@@ -29,9 +29,10 @@ IDs match section 2.3 of the design doc.
 | Service | Status | Owns | Talks to |
 |---|---|---|---|
 | inventory-svc (`cmd/inventory`) | Built | Valkey keys `inv:*` | Valkey |
+| queue-svc (`cmd/queue`) | Phase 2 in progress: provisioning built | Valkey keys `q:*` | Valkey |
 | booking final guard (`internal/booking`) | Built as a library | `booking` schema | PostgreSQL |
 | holdfastctl (`cmd/holdfastctl`) | Built | Nothing (operator tool) | PostgreSQL, Valkey |
-| queue, booking, payment, auth | Planned | See design doc | |
+| booking, payment, auth | Planned | See design doc | |
 
 ## 4. Runtime topology
 
@@ -42,7 +43,7 @@ Each service listens on two ports:
   `/buildz`, `/debug/pprof/*` and operator APIs. Internal network only.
 
 Locally, `compose.yaml` runs PostgreSQL 18, Valkey 9.1, a one-shot migration
-job, inventory-svc, Prometheus and Grafana.
+job, inventory-svc, queue-svc, Prometheus and Grafana.
 
 ## 5. Request lifecycle: `POST /v1/events/{eventID}/holds`
 
@@ -63,7 +64,8 @@ job, inventory-svc, Prometheus and Grafana.
 ## 6. Data
 
 **Valkey** (hot, rebuildable). Every key of an event shares the hash tag
-`{eventID}`; see `docs/services/inventory.md` for the keyspace.
+`{eventID}`; see `docs/services/inventory.md` (`inv:*`) and
+`docs/services/queue.md` (`q:*`) for the keyspace.
 
 **PostgreSQL** (truth), schema `booking`:
 

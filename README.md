@@ -14,8 +14,10 @@ sells exactly 1,000 (never 1,001) and stays up while doing it.
   protection and late payment confirmations.
 - **The PostgreSQL final guard** makes overselling a constraint violation,
   whatever the fast path believes.
+- **queue-svc** (Phase 2, in progress) stores each event's waiting-room
+  settings and opens its queue in state PRE; joining and admission come next.
 - **holdfastctl** runs migrations, generates dev keys and tokens, creates
-  events, and provisions or rebuilds inventory.
+  events, provisions their inventory and queue, and rebuilds inventory.
 - **Experiment E1** (`cmd/contention`) fires 50,000 concurrent buyers at 1,000
   units and fails unless exactly 1,000 holds are granted. CI runs it on every push.
 
@@ -41,19 +43,24 @@ make e1                                          # contention experiment against
 
 Dashboards: Grafana at http://localhost:3000 (HoldFast / Inventory) and
 Prometheus at http://localhost:9090. The service's own metrics and health
-checks are on its admin port: http://localhost:9091/metrics and `/readyz`.
+checks are on its admin port: http://localhost:9091/metrics and `/readyz`
+(queue-svc: http://localhost:9092). Prometheus does not reload its config on
+its own: after `deploy/prometheus/prometheus.yml` changes, run
+`docker compose restart prometheus`.
 
 ## Repository layout
 
 ```
 cmd/
   inventory/           inventory-svc: public API on :8080, admin on :9090
+  queue/               queue-svc (waiting room): public API on :8080, admin on :9090
   holdfastctl/         operator CLI
   contention/          experiment E1
 internal/
   platform/            shared foundation: app lifecycle, authn, config, health,
                        httpx, logging, metrics, postgres, valkey, buildinfo
   inventory/           holds: Lua scripts, store, service, sweeper, HTTP handler
+  queue/               waiting room: Lua scripts, store, service, HTTP handler
   booking/catalog/     event catalog in PostgreSQL
   booking/guard/       final guard against oversell and per-user cap violations
   testenv/             wiring for integration tests
@@ -63,7 +70,7 @@ docs/                  architecture, service reference, runbooks, ADRs, design
 scripts/               repository checks
 ```
 
-Next drops, following the design doc: `queue` (Phase 2); `booking`, `payment`
+Next drops, following the design doc: the rest of `queue` (Phase 2); `booking`, `payment`
 and `mockpsp` with gRPC, the outbox and tracing (Phase 3); `auth` and the web
 client (Phase 4); then chaos drills, load tests and benchmarks (Phases 5-7).
 
@@ -90,6 +97,7 @@ failure with `HOLDFAST_TEST_SEED=<seed>`.
 | `DELETE /v1/events/{eventID}/holds/{holdID}` | Admission token | Release your hold |
 | `GET /v1/events/{eventID}/availability` | Public | Remaining units (cacheable for 1 s) |
 | `PUT /internal/v1/events/{eventID}/inventory` | Operator token, admin port only | Provision inventory |
+| `PUT /internal/v1/events/{eventID}/queue` | Operator token, queue-svc admin port only | Provision the queue |
 
 Errors are RFC 9457 problem documents with stable `code` values; see
 [`docs/services/inventory.md`](docs/services/inventory.md).
