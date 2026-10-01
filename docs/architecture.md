@@ -29,7 +29,7 @@ IDs match section 2.3 of the design doc.
 | Service | Status | Owns | Talks to |
 |---|---|---|---|
 | inventory-svc (`cmd/inventory`) | Built | Valkey keys `inv:*` | Valkey |
-| queue-svc (`cmd/queue`) | Phase 2 in progress: provisioning, joining, the T0 transition and positions built | Valkey keys `q:*`, `rl:*` | Valkey |
+| queue-svc (`cmd/queue`) | Phase 2 in progress: provisioning, joining, the T0 transition, positions and admission built | Valkey keys `q:*`, `adm:*`, `rl:*` | Valkey; PostgreSQL for leader election only |
 | booking final guard (`internal/booking`) | Built as a library | `booking` schema | PostgreSQL |
 | holdfastctl (`cmd/holdfastctl`) | Built | Nothing (operator tool) | PostgreSQL, Valkey |
 | booking, payment, auth | Planned | See design doc | |
@@ -87,6 +87,11 @@ The queue opener runs in every queue-svc replica, every `OPEN_CHECK_INTERVAL`.
 reaches its opening time, so racing openers are harmless. Joins apply the same
 rule themselves, so the opener's timing never affects who gets a lottery
 position.
+
+Admission controllers run for every event in every queue-svc replica. Exactly
+one per event leads, holding a PostgreSQL advisory lock on a dedicated
+connection; every 250 ms it runs `advance.lua`, which refuses a stale epoch
+(fencing) and caps concurrent sessions (Little's Law).
 
 ## 8. Security
 

@@ -35,6 +35,12 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
   before T0 and the 1-based rank from T0 on, judged by Valkey's clock. Per-user
   rate limit (`POSITION_USER_*`), 404 `NOT_IN_QUEUE`, `private, no-store`.
   Metric `holdfast_queue_position_lookups_total{result}`.
+- **Admission controller** (task 2.5): one leader per event, elected with a
+  PostgreSQL advisory lock and fenced by `adm:{E}:epoch`, admits people every
+  250 ms at the event's rate while capping concurrent sessions at
+  `maxSessions` (Little's Law). Only `OPEN` admits; `FROZEN` pauses. queue-svc
+  now requires `POSTGRES_DSN` (elections only). Metrics for admissions, ticks,
+  terms and the current leader.
 
 ### Fixed
 

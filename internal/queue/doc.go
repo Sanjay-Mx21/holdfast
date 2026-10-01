@@ -16,10 +16,12 @@
 //     reaches the opening time, done by the first join after T0 or by the
 //     Opener, whichever comes first;
 //   - positions (task 2.4): before T0 a member learns when the lottery
-//     closes, from T0 on their 1-based rank.
+//     closes, from T0 on their 1-based rank;
+//   - admission (task 2.5): one leader per event, elected with a PostgreSQL
+//     advisory lock and fenced by an epoch, admits people at the event's
+//     rate while capping concurrent sessions (Little's Law).
 //
-// The admission controller, the status document and admission tokens follow
-// in tasks 2.5 to 2.7.
+// The status document and admission tokens follow in tasks 2.6 and 2.7.
 //
 // Queue states:
 //
