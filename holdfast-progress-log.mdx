@@ -38,7 +38,7 @@ All times are IST (UTC+05:30).
 | **First commit** | `2173e50` "first commit", 2026-10-01 20:20, 82 files, 12,973 lines |
 | **Latest release** | [v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0), 2026-10-01 23:47, on `9dcd2f8` |
 | **CI** | Green since 2026-10-01 22:00; `main` is protected and every change needs a pull request with all 6 jobs passing |
-| **Issues so far** | 21 recorded: 17 resolved, 4 open (section 6) |
+| **Issues so far** | 21 recorded: 18 resolved, 3 open (section 6) |
 
 <Callout type="tip" title="v0.1.0 released, M1.5 complete (2026-10-01)">
 
@@ -168,10 +168,10 @@ Every problem met while bringing Drop 1 up and running the soak on 2026-10-01, i
 
 | Group | Recorded | Resolved | Open |
 |---|---|---|---|
-| P: defects in the repository | 10 | 6 | 4 |
+| P: defects in the repository | 10 | 7 | 3 |
 | E: machine and network | 6 | 6 | 0 |
 | D: diagnosis and process | 5 | 5 | 0 |
-| **Total** | **21** | **17** | **4** |
+| **Total** | **21** | **18** | **3** |
 
 CI took **three runs** to go green:
 
@@ -194,7 +194,7 @@ CI took **three runs** to go green:
 | P7 | `make itest` is flaky while the `make up` stack is running: `TestSweeperDrainsInBatches` and `TestSweeperReleasesOnlyExpiredHeldHolds` failed in 1 of 1 full runs and 2 of 10 targeted runs, each time releasing 0 holds | Local integration runs fail about 20% of the time; CI is not affected (it does not run inventory-svc) | Tests and the running inventory-svc share one Valkey. The service's sweeper releases expired holds of every event every 500 ms, so it sometimes releases the tests' 20 ms holds before the test's own sweep. With inventory-svc stopped: 80 of 80 runs passed | Workaround: `docker compose stop inventory` before `make itest`. Proper fix not yet chosen: stop the service in the `itest` target, or give tests their own Valkey | ⏳ Open |
 | P8 | `/buildz` of the Compose-built inventory-svc reports `version: dev` and `commit: unknown` | Running containers can't be traced to a commit | `compose.yaml` passes only `SERVICE` as a build argument, not `VERSION` and `COMMIT` | Not yet fixed | ⏳ Open |
 | P9 | `holdfast-explained-simply.mdx` still uses the old invariant numbering in its "five promises" table | The plain-language doc disagrees with the plan | Out of scope of P5; fixing it means rewriting five promises as six | Waiting for the owner's decision | ⏳ Open |
-| P10 | The plan (sections 17.2 and 17.3) tells readers to update `holdfast-build-status.xlsx` at every milestone, but no such file exists in the repository or the workspace | The milestone procedure points to a missing file | The spreadsheet was never created or never added | Waiting for the owner: add the spreadsheet, or drop it from the plan in favour of the tracker in 17.1 and the GitHub milestones | ⏳ Open |
+| P10 | The plan (sections 17.2 and 17.3) tells readers to update `holdfast-build-status.xlsx` at every milestone, but no such file exists in the repository or the workspace | The milestone procedure points to a missing file | The spreadsheet was never created or never added | The owner chose to drop it (2026-10-02). The plan now points to the tracker in 17.1, the GitHub milestones and this log instead | ✅ This change |
 
 ### 6.3 Machine and network
 

@@ -1875,7 +1875,7 @@ Update this table, and tick the task boxes in the phase sections below, **in the
 1. Run the exit checks and commit the evidence to `loadtest/results/`, with the git SHA, the date and a hardware note.
 2. Write the phase's ADRs (each phase section, and the ADR table in section 15, names them).
 3. Update `README.md` (status, layout, numbers), `docs/architecture.md`, the service docs and the runbooks.
-4. Update the tracker in 17.1 and the Roadmap tab of `holdfast-build-status.xlsx`.
+4. Update the tracker in 17.1 and close the phase's GitHub milestone.
 5. Add a `CHANGELOG.md` entry, tag `vX.Y.0`, and publish a GitHub release with the evidence attached.
 6. Record the phase's demo checkpoint (a screenshot or a short clip).
 7. Only now update your resume, and only with numbers from committed results.
@@ -1892,14 +1892,14 @@ Update this table, and tick the task boxes in the phase sections below, **in the
 | Logs | `docker compose logs -f <service>`, filtered by `request_id` (and by `trace_id` from Phase 3) | When debugging |
 | Traces | Jaeger at `localhost:16686` | From Phase 3 |
 | Kafka topics, lag and messages | Redpanda Console | From Phase 3 |
-| Progress at a glance | 17.1 in this doc; the Roadmap tab of `holdfast-build-status.xlsx` | Weekly, and at every milestone |
+| Progress at a glance | 17.1 in this doc; the GitHub milestones; `holdfast-progress-log.mdx` | Weekly, and at every milestone |
 
 **Where to update:**
 
 | What changed | File to update | When |
 |---|---|---|
 | A task finished | Its checkbox in this section; its GitHub issue | Same pull request |
-| A milestone finished | 17.1 tracker, the spreadsheet, `CHANGELOG.md`, a git tag and a GitHub release | End of the phase |
+| A milestone finished | 17.1 tracker, the GitHub milestone, `holdfast-progress-log.mdx`, `CHANGELOG.md`, a git tag and a GitHub release | End of the phase |
 | Status, quickstart or results | `README.md` | Every milestone |
 | Services, flows or invariants | `docs/architecture.md` | Same pull request as the change |
 | An API, key, config value, metric or error code | `docs/services/<service>.md`, one file per service | Same pull request as the change |
@@ -1927,7 +1927,7 @@ Where this doc and the code disagree, the code and the service docs win. Fix thi
 - [ ] Every exit criterion passes, with the evidence committed.
 - [ ] E1 still passes.
 - [ ] The phase's ADRs are written; README, architecture, service docs and runbooks are current.
-- [ ] Tracker and spreadsheet updated, `CHANGELOG.md` entry added, tag pushed, release published.
+- [ ] Tracker, GitHub milestone and progress log updated, `CHANGELOG.md` entry added, tag pushed, release published.
 
 ### 17.5 Timeline
 
