@@ -6,6 +6,17 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
 
 ## [Unreleased]
 
+### Added
+
+- **queue-svc** (`cmd/queue`), the waiting-room service (Phase 2). Task 2.1:
+  `PUT /internal/v1/events/{id}/queue` on the admin port stores an event's
+  opening time, admission rate, maximum sessions and session TTL, and opens
+  its queue in state PRE. Idempotent; different settings return 409
+  `PROVISION_CONFLICT`. Service doc `docs/services/queue.md`, runbook
+  `docs/runbooks/queue.md`.
+- `holdfastctl event create` provisions the queue as well as inventory
+  (`--admission-rate`, `--max-sessions`, `--session-ttl`).
+
 ### Changed
 
 - `prometheus/client_golang` upgraded from 1.23.2 to 1.24.1, proposed by

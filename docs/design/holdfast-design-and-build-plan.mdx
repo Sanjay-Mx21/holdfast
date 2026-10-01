@@ -666,6 +666,7 @@ Every key for event E carries the hash tag `{E}`, so all keys a script touches l
 
 | Key | Type | Purpose | Lifetime |
 |---|---|---|---|
+| `q:{E}:config` | hash | `opens_at_ms`, `admission_rate`, `max_sessions`, `session_ttl_ms`; written once by the queue's `provision.lua` | event |
 | `q:{E}:state` | string | PRE, OPEN, FROZEN, SOLD_OUT or CLOSED | event |
 | `q:{E}:members` | sorted set | user → score: a random value between 0 and 1 before T0, then 1 plus a sequence number | event |
 | `q:{E}:seq` | integer | post-T0 arrival counter | event |
@@ -682,7 +683,7 @@ Every key for event E carries the hash tag `{E}`, so all keys a script touches l
 | `rl:SCOPE:ID` | hash | token-bucket state: tokens and last refill | auto-expiring |
 | `jti:ID` | string | spent one-time token IDs, for replay protection | token lifetime |
 
-- **Built so far.** The `inv:*` keys exist since Drop 1. The `q:*`, `adm:*`, `rl:*` and `jti:*` keys arrive in Phase 2.
+- **Built so far.** The `inv:*` keys exist since Drop 1; `q:{E}:config` and `q:{E}:state` since task 2.1. The other `q:*` keys and the `adm:*`, `rl:*` and `jti:*` keys arrive with the rest of Phase 2.
 - **A deliberate hot key.** One event's inventory lives on one shard. Admission control caps that traffic at a few hundred operations per second, so this is fine. Seat-map mode (Phase 7) shards by section with tags like `{E:S}`.
 - **Durability.** AOF with `appendfsync everysec`, plus a replica and Sentinel in Phase 5. A crash can lose roughly the last second of writes, which is exactly why PostgreSQL owns the final guard and why runbook RB-2 exists.
 - **Memory.** One million queue members at roughly 100 bytes each is about 100 MB. Compact user IDs (16 raw bytes instead of a 36-character UUID string) shrink that a lot.
@@ -1363,8 +1364,9 @@ Measure the **collapse ratio**: edge requests per second (`X-Cache-Status: HIT`)
 | `POST /v1/webhooks/psp` | HMAC signature | PSP callbacks | 200 quickly; 401 on a bad signature |
 | `POST /internal/v1/events/{id}/freeze` (admin port) | operator token | Kill switch: pause admissions (Phase 4) | 204 |
 | `PUT /internal/v1/events/{id}/inventory` (admin port) | operator token | Provision inventory ✅ | 201 created; 200 unchanged; 409 `PROVISION_CONFLICT` |
+| `PUT /internal/v1/events/{id}/queue` (queue-svc admin port) | operator token | Provision the queue: opening time, admission rate, maximum sessions, session TTL; state PRE ✅ | 201 created; 200 unchanged; 409 `PROVISION_CONFLICT` |
 
-✅ marks endpoints built in Drop 1. Operator endpoints live on each service's admin port, never on the public port.
+✅ marks endpoints built so far (Drop 1 and Phase 2). Operator endpoints live on each service's admin port, never on the public port.
 
 Errors follow RFC 9457 Problem Details (`application/problem+json`) with a stable, machine-readable `code`:
 
@@ -1629,7 +1631,7 @@ holdfast/
 │   ├── inventory/                    ✅ inventory-svc (public :8080, admin :9090)
 │   ├── holdfastctl/                  ✅ operator CLI
 │   ├── contention/                   ✅ experiment E1 harness
-│   ├── queue/                        ⏳ 2
+│   ├── queue/                        ✅ queue-svc: provisioning (2.1)    ⏳ rest of 2
 │   ├── booking/  payment/  mockpsp/  ⏳ 3
 │   ├── auth/                         ⏳ 4
 │   └── auditor/                      ⏳ 5
@@ -1638,7 +1640,7 @@ holdfast/
 │   │                                 ⏳ ratelimit (2); kafka, otel, outbox, idempotency, grpcx (3)
 │   ├── inventory/                    ✅ Lua scripts (go:embed), store, service, sweeper, HTTP handler, metrics
 │   ├── booking/                      ✅ catalog, guard         ⏳ saga, deadline job (3)
-│   ├── queue/                        ⏳ lottery, admission controller, status document (2)
+│   ├── queue/                        ✅ provisioning (2.1)    ⏳ lottery, admission controller, status document (2)
 │   ├── payment/                      ⏳ intents, webhooks, ledger, PSP client (3); reconciler (5)
 │   ├── auth/                         ⏳ OTP, tokens, JWKS (4)
 │   ├── policy/                       ⏳ verified window, agent lockout, caps, freeze (4)
@@ -2035,7 +2037,7 @@ The dates are illustrative. The gates are not.
 
 **Tasks, in order:**
 
-- [ ] 2.1 **Queue provisioning.** An operator endpoint on the queue admin port, `PUT /internal/v1/events/{id}/queue`, takes the sale opening time, admission rate, maximum sessions and session TTL, stores them in `q:{E}:config` and sets `q:{E}:state` to PRE. `holdfastctl event create` provisions the queue as well as inventory.
+- [x] 2.1 **Queue provisioning.** An operator endpoint on the queue admin port, `PUT /internal/v1/events/{id}/queue`, takes the sale opening time, admission rate, maximum sessions and session TTL, stores them in `q:{E}:config` and sets `q:{E}:state` to PRE. `holdfastctl event create` provisions the queue as well as inventory.
 - [ ] 2.2 **Joining.** `join.lua` and `POST /v1/queue/{id}/join`. The lottery score comes from `crypto/rand` in Go; `ZADD NX` makes joining idempotent and stops re-rolls. Apply per-IP and per-user token buckets (`rl:*`). Until Phase 4, identity comes from a development header.
 - [ ] 2.3 **The T0 transition.** The leader flips PRE to OPEN at the opening time; joins after T0 get FIFO scores.
 - [ ] 2.4 **Your position.** `GET /v1/queue/{id}/me` returns your rank after T0, and `randomizingAt` before it.
