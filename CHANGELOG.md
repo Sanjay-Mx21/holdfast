@@ -16,6 +16,12 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
   whose events carry CloudEvents headers, and a consumer-group helper with
   manual commits, retries with backoff and dead-lettering. Metric
   `holdfast_kafka_consumed_total{topic,result}`.
+- **Tracing** (task 3.2): `internal/platform/otel` with W3C trace-context
+  propagation and OTLP export; server spans per request, named after the
+  route; `traceparent` through Kafka, with consumers continuing the
+  producer's trace; Valkey spans inside traces; `trace_id` and `span_id` on
+  log lines. inventory-svc and queue-svc are traced. Compose adds the
+  OpenTelemetry Collector and Jaeger (http://localhost:16686).
 
 ## [0.2.0] - 2026-10-02
 

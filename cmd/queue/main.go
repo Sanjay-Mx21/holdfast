@@ -27,6 +27,7 @@ import (
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/httpx"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/logging"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/metrics"
+	hfotel "github.com/Sanjay-Mx21/holdfast/internal/platform/otel"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/postgres"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/ratelimit"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/valkey"
@@ -163,6 +164,17 @@ func run(ctx context.Context) error {
 	bi := buildinfo.Get()
 	log.Info("starting", "commit", bi.Commit, "go_version", bi.GoVersion)
 
+	shutdownTracing, exporting, err := hfotel.Setup(ctx, serviceName, bi.Version, cfg.Service.Environment)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = shutdownTracing(sctx) // flush buffered spans
+	}()
+	log.Info("tracing", "exporting", exporting)
+
 	reg := metrics.NewRegistry(serviceName)
 
 	rdb, err := valkey.New(ctx, cfg.Valkey, serviceName)
@@ -193,6 +205,7 @@ func run(ctx context.Context) error {
 	hc := health.New(2*time.Second, valkey.Check(rdb))
 	httpMetrics := httpx.NewHTTPMetrics(reg)
 	public := httpx.NewRouter(
+		httpx.Trace(), // outermost: the span covers the whole request
 		httpx.RequestID(),
 		httpx.AccessLog(log, cfg.HTTP.AccessLogSuccess),
 		httpMetrics.Middleware(),

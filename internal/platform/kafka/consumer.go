@@ -12,6 +12,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/twmb/franz-go/pkg/kgo"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/config"
 )
@@ -148,10 +150,12 @@ func (c *Consumer) Run(ctx context.Context) error {
 // process hands one record to the handler until it succeeds, retrying with
 // backoff, and dead-letters it after MaxAttempts or a permanent error. A nil
 // return means the record may be committed.
-func (c *Consumer) process(ctx context.Context, r *kgo.Record) error {
+func (c *Consumer) process(ctx context.Context, r *kgo.Record) (perr error) {
+	sctx, span := startProcess(ctx, r, c.cfg.Group)
+	defer func() { endSpan(span, perr) }()
 	var err error
 	for attempt := 1; attempt <= c.cfg.MaxAttempts; attempt++ {
-		err = c.handle(ctx, messageOf(r, attempt))
+		err = c.handle(sctx, messageOf(r, attempt))
 		if err == nil {
 			c.m.inc(r.Topic, resultOK)
 			return nil
@@ -163,7 +167,8 @@ func (c *Consumer) process(ctx context.Context, r *kgo.Record) error {
 			break
 		}
 		c.m.inc(r.Topic, resultRetried)
-		c.log.Warn("kafka: handler failed; retrying", "topic", r.Topic, "partition", r.Partition,
+		span.AddEvent("handler failed; retrying", trace.WithAttributes(attribute.Int("attempt", attempt), attribute.String("error", err.Error())))
+		c.log.WarnContext(sctx, "kafka: handler failed; retrying", "topic", r.Topic, "partition", r.Partition,
 			"offset", r.Offset, "attempt", attempt, "err", err)
 		select {
 		case <-ctx.Done():
@@ -171,7 +176,8 @@ func (c *Consumer) process(ctx context.Context, r *kgo.Record) error {
 		case <-time.After(c.backoff(attempt)):
 		}
 	}
-	return c.deadLetter(ctx, r, err)
+	span.AddEvent("dead-lettered", trace.WithAttributes(attribute.String("error", err.Error())))
+	return c.deadLetter(sctx, r, err)
 }
 
 // deadLetter copies the record to its topic's dead-letter topic, with the
@@ -190,7 +196,7 @@ func (c *Consumer) deadLetter(ctx context.Context, r *kgo.Record, cause error) e
 		return fmt.Errorf("kafka: dead-letter %s/%d@%d: %w", r.Topic, r.Partition, r.Offset, err)
 	}
 	c.m.inc(r.Topic, resultDeadLettered)
-	c.log.Error("kafka: message dead-lettered", "topic", r.Topic, "partition", r.Partition,
+	c.log.ErrorContext(ctx, "kafka: message dead-lettered", "topic", r.Topic, "partition", r.Partition,
 		"offset", r.Offset, "dlq", dlq.Topic, "err", cause)
 	return nil
 }

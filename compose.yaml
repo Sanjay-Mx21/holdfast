@@ -1,7 +1,8 @@
 # Local development stack. `make up` generates dev keys first, then runs this.
 # Host ports: the edge (NGINX, the buyers' front door) 8088 (EDGE_PORT), inventory API 8081,
 # inventory admin 9091, queue API 8082, queue admin 9092, Prometheus 9090,
-# Grafana 3000, PostgreSQL 5432, Valkey 6379, Kafka 29092, Redpanda Console 8089.
+# Grafana 3000, PostgreSQL 5432, Valkey 6379, Kafka 29092, Redpanda Console 8089,
+# Jaeger 16686, OTLP 4317 (gRPC) and 4318 (HTTP).
 # The 808x API ports bypass the edge and are for debugging only.
 name: holdfast
 
@@ -104,6 +105,20 @@ services:
       kafka: { condition: service_healthy }
     restart: unless-stopped
 
+  # Traces: services send OTLP to the collector, which forwards to Jaeger.
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.161.0
+    volumes: ["./deploy/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro"]
+    ports: ["4317:4317", "4318:4318"] # OTLP gRPC and HTTP, for services run on the host
+    depends_on: [jaeger]
+    restart: unless-stopped
+
+  # Jaeger UI: http://localhost:16686
+  jaeger:
+    image: jaegertracing/jaeger:2.21.0
+    ports: ["16686:16686"]
+    restart: unless-stopped
+
   inventory:
     build:
       context: .
@@ -114,6 +129,7 @@ services:
       VALKEY_ADDRS: valkey:6379
       # Trust whatever queue-svc publishes: key rotation needs no restart here.
       ADMISSION_JWKS_URL: http://queue:8080/.well-known/jwks.json
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-only-admin-token-change-me-0123456789}
     networks: [default, edge]
     ports:
@@ -137,6 +153,7 @@ services:
       POSTGRES_DSN: postgres://holdfast:holdfast@postgres:5432/holdfast?sslmode=disable # admission leader election
       ADMISSION_PRIVATE_KEY_FILE: /keys/admission.key # signs admission tokens (dev key from make keys)
       TRUSTED_PROXIES: 10.250.0.10/32 # only the edge's X-Forwarded-For is believed
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-only-admin-token-change-me-0123456789}
     networks: [default, edge]
     ports:

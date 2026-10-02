@@ -35,7 +35,7 @@ sells exactly 1,000 (never 1,001) and stays up while doing it.
 Requirements: Go 1.27+, Docker with Compose v2, make.
 
 ```bash
-make up                                          # dev keys, PostgreSQL, Valkey, Kafka and its topics, migrations, inventory-svc, queue-svc, the NGINX edge, Prometheus, Grafana
+make up                                          # dev keys, PostgreSQL, Valkey, Kafka and its topics, migrations, inventory-svc, queue-svc, the NGINX edge, Prometheus, Grafana, OTel Collector, Jaeger
 make event NAME="Coldplay Mumbai" CAPACITY=1000  # the event, its inventory and its waiting room (opens now); prints the event ID
 export EVENT=<event id>
 export ME=$(cat /proc/sys/kernel/random/uuid)    # your buyer ID (development identity until Phase 4)
@@ -70,6 +70,10 @@ changed scrape config or a new dashboard loads.
 Kafka (from Phase 3): the broker is on `localhost:29092`, and Redpanda Console
 at http://localhost:8089 shows topics, messages and consumer groups.
 `make topics` creates the topics (`make up` does it too).
+
+Traces: Jaeger at http://localhost:16686. Every request through the services
+is traced (the span is named after the route), and log lines carry its
+`trace_id`, so a log line leads to its trace.
 
 ## Repository layout
 
