@@ -268,6 +268,46 @@ func (s *Store) StatusUpdatedAt(ctx context.Context, eventID string) (time.Time,
 	return time.UnixMilli(d.UpdatedAtMs), true, nil
 }
 
+// Overview reads an event's settings, stored state, leader epoch, live
+// sessions and work-list membership for operators. It is not one atomic
+// snapshot (the leader may tick in between), which is fine for a status view;
+// the Status part is left for the caller.
+func (s *Store) Overview(ctx context.Context, eventID string) (Overview, error) {
+	k := keysFor(eventID)
+	pipe := s.rdb.Pipeline()
+	cfgCmd := pipe.HMGet(ctx, k.config(), "opens_at_ms", "admission_rate", "max_sessions", "session_ttl_ms")
+	stateCmd := pipe.Get(ctx, k.state())
+	epochCmd := pipe.Get(ctx, k.epoch())
+	listedCmd := pipe.SIsMember(ctx, eventsKey, eventID)
+	timeCmd := pipe.Time(ctx)
+	if _, err := pipe.Exec(ctx); err != nil && !errors.Is(err, redis.Nil) {
+		return Overview{}, fmt.Errorf("queue: overview: %w", err)
+	}
+	vals := cfgCmd.Val()
+	num := func(i int) int64 {
+		v, _ := vals[i].(string)
+		n, _ := strconv.ParseInt(v, 10, 64)
+		return n
+	}
+	if vals[0] == nil || stateCmd.Val() == "" {
+		return Overview{}, ErrEventNotFound
+	}
+	now := timeCmd.Val()
+	live, err := s.rdb.ZCount(ctx, k.sessions(), "("+strconv.FormatInt(now.UnixMilli(), 10), "+inf").Result()
+	if err != nil {
+		return Overview{}, fmt.Errorf("queue: overview: %w", err)
+	}
+	epoch, _ := strconv.ParseInt(epochCmd.Val(), 10, 64)
+	return Overview{
+		Config: EventConfig{
+			OpensAt: time.UnixMilli(num(0)).UTC(), AdmissionRate: int(num(1)),
+			MaxSessions: int(num(2)), SessionTTL: time.Duration(num(3)) * time.Millisecond,
+		},
+		StoredState: State(stateCmd.Val()), LeaderEpoch: epoch, ActiveSessions: live,
+		OnWorkList: listedCmd.Val(), Now: now.UTC(),
+	}, nil
+}
+
 // Purge deletes every key of an event and takes it off the work list, so
 // every replica's opener and admission controller let it go. For tests and
 // tooling only: never run it against an event that is on sale.
