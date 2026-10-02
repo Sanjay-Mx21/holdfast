@@ -186,14 +186,16 @@ func TestOneLeaderAndFailover(t *testing.T) {
 
 	type runner struct {
 		m      *Metrics
+		reg    *prometheus.Registry
 		cancel context.CancelFunc
 		done   chan struct{}
 	}
 	start := func() *runner {
-		m := NewMetrics(prometheus.NewRegistry())
+		reg := prometheus.NewRegistry()
+		m := NewMetrics(reg)
 		c := NewController(f.store, pool, f.eventID, cfg, m, quiet)
 		runCtx, cancel := context.WithCancel(ctx)
-		r := &runner{m: m, cancel: cancel, done: make(chan struct{})}
+		r := &runner{m: m, reg: reg, cancel: cancel, done: make(chan struct{})}
 		go func() { defer close(r.done); c.Run(runCtx) }()
 		return r
 	}
@@ -235,6 +237,65 @@ func TestOneLeaderAndFailover(t *testing.T) {
 	// The dead leader's epoch is fenced off.
 	_, err := f.store.Advance(ctx, f.eventID, firstEpoch, 100)
 	mustErr(t, "advance with the old leader's epoch", err, ErrFenced)
+
+	// Only the current leader reports the per-event gauges.
+	waitFor("the new leader's gauges", func() bool { return eventGauge(t, standby.reg, "holdfast_queue_size", f.eventID) == 10_000 })
+	mustEqual(t, "leader epoch gauge", eventGauge(t, standby.reg, "holdfast_queue_leader_epoch", f.eventID), float64(secondEpoch))
+	mustEqual(t, "max sessions gauge", eventGauge(t, standby.reg, "holdfast_queue_max_sessions", f.eventID), float64(10_000))
+	if v := eventGauge(t, standby.reg, "holdfast_queue_admitted_up_to", f.eventID); v < 1 {
+		t.Fatalf("admittedUpTo gauge %v, want >= 1", v)
+	}
+	for _, name := range []string{"holdfast_queue_size", "holdfast_queue_admitted_up_to", "holdfast_queue_leader_epoch"} {
+		if v := eventGauge(t, leader.reg, name, f.eventID); v != -1 {
+			t.Fatalf("the former leader still exports %s = %v", name, v)
+		}
+	}
+	mustEqual(t, "former leader's leader gauge", gauge(t, leader.m, f.eventID), float64(0))
+}
+
+// eventGauge returns the value of name{event=eventID} in reg, or -1 if the
+// series does not exist.
+func eventGauge(t *testing.T, reg *prometheus.Registry, name, eventID string) float64 {
+	t.Helper()
+	families, err := reg.Gather()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, mf := range families {
+		if mf.GetName() != name {
+			continue
+		}
+		for _, m := range mf.GetMetric() {
+			for _, l := range m.GetLabel() {
+				if l.GetName() == "event" && l.GetValue() == eventID {
+					return m.GetGauge().GetValue()
+				}
+			}
+		}
+	}
+	return -1
+}
+
+func TestOpenerExportsStatusAge(t *testing.T) {
+	f := newFixture(t)
+	f.openQueueWith(t, 5, 10_000)
+	reg := prometheus.NewRegistry()
+	m := NewMetrics(reg)
+	op := NewOpener(f.store, time.Second, m, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	op.observeStatusAge(ctx, f.eventID)
+	mustEqual(t, "age before any leader wrote the document", eventGauge(t, reg, "holdfast_queue_status_age_seconds", f.eventID), float64(-1))
+
+	epoch, _ := f.store.NewTerm(ctx, f.eventID)
+	if _, err := f.store.Advance(ctx, f.eventID, epoch, 1); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	op.observeStatusAge(ctx, f.eventID)
+	age := eventGauge(t, reg, "holdfast_queue_status_age_seconds", f.eventID)
+	if age < 0.25 || age > 5 {
+		t.Fatalf("status age %v s, want about 0.3", age)
+	}
 }
 
 // --- status document ---

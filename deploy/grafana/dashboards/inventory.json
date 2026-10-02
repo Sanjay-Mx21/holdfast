@@ -122,7 +122,7 @@
     {
       "id": 4,
       "type": "timeseries",
-      "title": "HTTP p99 latency by route",
+      "title": "HTTP p99 latency by route (inventory-svc)",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -146,7 +146,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.99, sum by (le, route) (rate(holdfast_http_request_duration_seconds_bucket[1m])))",
+          "expr": "histogram_quantile(0.99, sum by (le, route) (rate(holdfast_http_request_duration_seconds_bucket{job=\"inventory\"}[1m])))",
           "legendFormat": "{{route}}"
         }
       ]
@@ -154,7 +154,7 @@
     {
       "id": 5,
       "type": "timeseries",
-      "title": "HTTP responses by status (per second)",
+      "title": "HTTP responses by status (inventory-svc, per second)",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -178,7 +178,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (code) (rate(holdfast_http_requests_total[1m]))",
+          "expr": "sum by (code) (rate(holdfast_http_requests_total{job=\"inventory\"}[1m]))",
           "legendFormat": "{{code}}"
         }
       ]

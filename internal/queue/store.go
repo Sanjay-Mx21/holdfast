@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -179,7 +180,7 @@ func (s *Store) Advance(ctx context.Context, eventID string, epoch int64, n int)
 	if err != nil {
 		return Advance{}, fmt.Errorf("queue: advance: %w", err)
 	}
-	if len(res) != 4 {
+	if len(res) != 5 {
 		return Advance{}, fmt.Errorf("queue: advance: unexpected reply %v", res)
 	}
 	switch res[0] {
@@ -188,7 +189,7 @@ func (s *Store) Advance(ctx context.Context, eventID string, epoch int64, n int)
 	case -2:
 		return Advance{}, ErrEventNotFound
 	}
-	return Advance{AdmittedUpTo: res[1], Admitted: res[2], ActiveSessions: res[3]}, nil
+	return Advance{AdmittedUpTo: res[1], Admitted: res[2], ActiveSessions: res[3], QueueSize: res[4]}, nil
 }
 
 // Status reads the event's status document, or a fallback built from the
@@ -245,6 +246,26 @@ func (s *Store) Admit(ctx context.Context, eventID, userID string) (Turn, error)
 		return Turn{}, &NotYourTurnError{Rank: res[1], AdmittedUpTo: res[2]}
 	}
 	return Turn{EventID: eventID, UserID: userID, Rank: res[1], SessionExpires: time.UnixMilli(res[2]).UTC()}, nil
+}
+
+// StatusUpdatedAt returns when the admission leader last wrote the event's
+// status document; ok is false if no leader has written one.
+func (s *Store) StatusUpdatedAt(ctx context.Context, eventID string) (time.Time, bool, error) {
+	raw, err := s.rdb.Get(ctx, keysFor(eventID).status()).Result()
+	if errors.Is(err, redis.Nil) {
+		return time.Time{}, false, nil
+	}
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("queue: read status: %w", err)
+	}
+	var d statusDoc
+	if err := json.Unmarshal([]byte(raw), &d); err != nil {
+		return time.Time{}, false, fmt.Errorf("queue: bad status document: %w", err)
+	}
+	if d.UpdatedAtMs == 0 {
+		return time.Time{}, false, errors.New("queue: status document has no update time")
+	}
+	return time.UnixMilli(d.UpdatedAtMs), true, nil
 }
 
 // Events lists provisioned events (the opener's work list).

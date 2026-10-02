@@ -57,12 +57,12 @@ make e1                                          # contention experiment against
 `make -s token EVENT=$EVENT` still mints a token directly, bypassing the waiting
 room, for development and load tests.
 
-Dashboards: Grafana at http://localhost:3000 (HoldFast / Inventory) and
-Prometheus at http://localhost:9090. The service's own metrics and health
-checks are on its admin port: http://localhost:9091/metrics and `/readyz`
-(queue-svc: http://localhost:9092). Prometheus does not reload its config on
-its own: after `deploy/prometheus/prometheus.yml` changes, run
-`docker compose restart prometheus`.
+Dashboards: Grafana at http://localhost:3000 (HoldFast / Inventory and
+HoldFast / Queue) and Prometheus at http://localhost:9090. The service's own
+metrics and health checks are on its admin port: http://localhost:9091/metrics
+and `/readyz` (queue-svc: http://localhost:9092). Prometheus and Grafana read
+their config and dashboards only at start-up; `make up` restarts both, so a
+changed scrape config or a new dashboard loads.
 
 ## Repository layout
 

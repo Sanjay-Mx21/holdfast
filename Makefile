@@ -60,6 +60,9 @@ infra: ## Start only PostgreSQL and Valkey
 
 up: keys ## Start the whole local stack (migrations run automatically)
 	docker compose up -d --build
+	@# Prometheus and Grafana read their mounted config and dashboards at start-up
+	@# only; restart them so a changed scrape config or a new dashboard loads.
+	docker compose restart prometheus grafana
 
 down: ## Stop the stack (keeps data volumes)
 	docker compose down

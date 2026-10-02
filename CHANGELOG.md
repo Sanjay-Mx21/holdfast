@@ -62,8 +62,20 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
   client, and passes the client's address. queue-svc believes
   `X-Forwarded-For` only from `TRUSTED_PROXIES`. The README quickstart now
   walks the buyer journey through the edge.
+- **Queue metrics and dashboard** (task 2.10): per-event gauges
+  `holdfast_queue_size`, `_admitted_up_to`, `_active_sessions`,
+  `_max_sessions` and `_leader_epoch` from the admission leader, and
+  `holdfast_queue_status_age_seconds` from every replica;
+  `holdfast_queue_admitted_total` is labelled by event. Grafana dashboard
+  HoldFast / Queue.
 
 ### Fixed
+
+- The inventory dashboard's HTTP panels counted queue-svc's requests too;
+  they now filter on `job="inventory"`.
+- `make up` restarts Prometheus and Grafana, which read their config and
+  dashboards only at start-up; a new dashboard or scrape target stayed
+  invisible on a running stack.
 
 - The design had the admission leader flip the queue to OPEN at T0. On a
   250 ms tick, or during a leader failover, joins arriving after T0 but before

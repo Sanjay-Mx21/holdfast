@@ -144,14 +144,14 @@ func (c *Controller) term(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	rate, err := c.store.admissionRate(ctx, c.eventID)
+	rate, maxSessions, err := c.store.termConfig(ctx, c.eventID)
 	if err != nil {
 		return err
 	}
 	c.m.terms.Inc()
-	c.m.setLeader(c.eventID, true)
-	defer c.m.setLeader(c.eventID, false)
-	c.log.Info("admission: became leader", "epoch", epoch, "rate_per_second", rate)
+	c.m.leaderTerm(c.eventID, epoch, maxSessions, true)
+	defer c.m.leaderTerm(c.eventID, epoch, maxSessions, false)
+	c.log.Info("admission: became leader", "epoch", epoch, "rate_per_second", rate, "max_sessions", maxSessions)
 
 	bucket := newAllowance(float64(rate), time.Now())
 	t := time.NewTicker(c.cfg.Tick)
@@ -176,9 +176,10 @@ func (c *Controller) term(ctx context.Context) error {
 				continue
 			}
 			bucket.take(adv.Admitted)
+			c.m.leaderTick(c.eventID, adv)
 			if adv.Admitted > 0 {
 				c.m.tick(tickAdvanced)
-				c.m.admitted.Add(float64(adv.Admitted))
+				c.m.admitted.WithLabelValues(c.eventID).Add(float64(adv.Admitted))
 			} else {
 				c.m.tick(tickIdle)
 			}
@@ -221,15 +222,21 @@ func (a *allowance) available(now time.Time) int {
 // by the session budget keeps its unused allowance (up to one second's worth).
 func (a *allowance) take(n int64) { a.tokens = math.Max(0, a.tokens-float64(n)) }
 
-// admissionRate reads the event's admission rate from q:{E}:config.
-func (s *Store) admissionRate(ctx context.Context, eventID string) (int, error) {
-	raw, err := s.rdb.HGet(ctx, keysFor(eventID).config(), "admission_rate").Result()
+// termConfig reads the event's admission rate and session budget from
+// q:{E}:config; they are fixed once provisioned.
+func (s *Store) termConfig(ctx context.Context, eventID string) (rate, maxSessions int, err error) {
+	vals, err := s.rdb.HMGet(ctx, keysFor(eventID).config(), "admission_rate", "max_sessions").Result()
 	if err != nil {
-		return 0, fmt.Errorf("queue: read admission rate: %w", err)
+		return 0, 0, fmt.Errorf("queue: read admission settings: %w", err)
 	}
-	rate, err := strconv.Atoi(raw)
-	if err != nil || rate < 1 {
-		return 0, fmt.Errorf("queue: bad admission rate %q", raw)
+	parse := func(v any) int {
+		s, _ := v.(string)
+		n, _ := strconv.Atoi(s)
+		return n
 	}
-	return rate, nil
+	rate, maxSessions = parse(vals[0]), parse(vals[1])
+	if rate < 1 || maxSessions < 1 {
+		return 0, 0, fmt.Errorf("queue: bad admission settings %v", vals)
+	}
+	return rate, maxSessions, nil
 }

@@ -16,9 +16,20 @@ type Metrics struct {
 	openerRuns *prometheus.CounterVec
 	openerTime prometheus.Histogram
 	ticks      *prometheus.CounterVec
-	admitted   prometheus.Counter
+	admitted   *prometheus.CounterVec
 	terms      prometheus.Counter
 	leader     *prometheus.GaugeVec
+
+	// Per-event gauges, set by the event's admission leader every tick and
+	// removed when its term ends, so only the current leader reports them.
+	size         *prometheus.GaugeVec
+	admittedUpTo *prometheus.GaugeVec
+	sessions     *prometheus.GaugeVec
+	maxSessions  *prometheus.GaugeVec
+	epoch        *prometheus.GaugeVec
+
+	// statusAge is set by the opener in every replica: what clients see.
+	statusAge *prometheus.GaugeVec
 }
 
 // Join outcomes, the values of the result label.
@@ -104,10 +115,19 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 		Name: "holdfast_queue_admission_ticks_total",
 		Help: "Admission ticks run by a leader, by outcome.",
 	}, []string{"result"})
-	m.admitted = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+	m.admitted = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "holdfast_queue_admitted_total",
-		Help: "People admitted from the queue into the purchase path.",
-	})
+		Help: "People admitted from the queue into the purchase path. Labelled by event ID: bounded by the number of provisioned events.",
+	}, []string{"event"})
+	perEvent := func(name, help string) *prometheus.GaugeVec {
+		return promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{Name: name, Help: help + " Labelled by event ID: bounded by the number of provisioned events."}, []string{"event"})
+	}
+	m.size = perEvent("holdfast_queue_size", "People in the queue (joined, admitted or not).")
+	m.admittedUpTo = perEvent("holdfast_queue_admitted_up_to", "admittedUpTo: the highest admitted rank.")
+	m.sessions = perEvent("holdfast_queue_active_sessions", "Unexpired session slots: the concurrency in use.")
+	m.maxSessions = perEvent("holdfast_queue_max_sessions", "The session budget (Little's Law L).")
+	m.epoch = perEvent("holdfast_queue_leader_epoch", "Fencing epoch of the current admission leader.")
+	m.statusAge = perEvent("holdfast_queue_status_age_seconds", "Age of the status document clients are served; grows while no leader writes it.")
 	m.terms = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "holdfast_queue_leader_terms_total",
 		Help: "Admission leadership terms won by this process.",
@@ -153,3 +173,25 @@ func (m *Metrics) setLeader(eventID string, leading bool) {
 }
 
 func (m *Metrics) admit(result string) { m.admits.WithLabelValues(result).Inc() }
+
+// leaderTick records what the leader saw on one tick.
+func (m *Metrics) leaderTick(eventID string, a Advance) {
+	m.size.WithLabelValues(eventID).Set(float64(a.QueueSize))
+	m.admittedUpTo.WithLabelValues(eventID).Set(float64(a.AdmittedUpTo))
+	m.sessions.WithLabelValues(eventID).Set(float64(a.ActiveSessions))
+}
+
+// leaderTerm starts or ends this process's view of an event's leadership.
+// Ending it removes the per-event gauges, so a former leader does not keep
+// exporting stale values next to the new leader's.
+func (m *Metrics) leaderTerm(eventID string, epoch int64, maxSessions int, leading bool) {
+	m.setLeader(eventID, leading)
+	if leading {
+		m.epoch.WithLabelValues(eventID).Set(float64(epoch))
+		m.maxSessions.WithLabelValues(eventID).Set(float64(maxSessions))
+		return
+	}
+	for _, g := range []*prometheus.GaugeVec{m.size, m.admittedUpTo, m.sessions, m.maxSessions, m.epoch} {
+		g.DeleteLabelValues(eventID)
+	}
+}

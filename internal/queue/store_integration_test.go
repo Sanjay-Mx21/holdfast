@@ -594,12 +594,18 @@ func TestPositionAfterT0IsRankInLine(t *testing.T) {
 // already has final lottery ranks: T0 is the clock's call.
 func TestPositionPreButPastT0ReadsAsOpen(t *testing.T) {
 	f := newFixture(t)
-	f.provisionAt(t, time.Now().Add(150*time.Millisecond))
+	f.provision(t) // T0 an hour away: the join below is certainly before it
 	user := uuid.NewString()
 	if _, err := f.svc.Join(ctx, f.eventID, user); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(200 * time.Millisecond)
+	// Now move T0 into the past without anyone flipping the state. (Waiting
+	// for a T0 150 ms away was flaky: a WSL2 clock step during the join made
+	// the join itself open the queue; E7.)
+	past := strconv.FormatInt(time.Now().Add(-time.Second).UnixMilli(), 10)
+	if err := f.rdb.HSet(ctx, keysFor(f.eventID).config(), "opens_at_ms", past).Err(); err != nil {
+		t.Fatal(err)
+	}
 	mustEqual(t, "stored state", f.state(t), string(StatePre))
 	pos, err := f.svc.Position(ctx, f.eventID, user)
 	mustErr(t, "position", err, nil)

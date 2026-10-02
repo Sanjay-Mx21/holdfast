@@ -377,16 +377,32 @@ and sets `DEV_IDENTITY=true`.
 |---|---|---|
 | `holdfast_queue_joins_total` | `result` | Join outcomes: joined, already_joined, rate_limited_ip, rate_limited_user, closed, not_found, invalid, error |
 | `holdfast_queue_position_lookups_total` | `result` | Position lookups: ranked, randomizing, not_in_queue, not_found, rate_limited, invalid, error |
-| `holdfast_queue_admitted_total` | | People admitted into the purchase path |
+| `holdfast_queue_admitted_total` | `event` | People admitted into the purchase path |
 | `holdfast_queue_admits_total` | `result` | Turn claims: issued, not_your_turn, expired, not_in_queue, closed, not_found, rate_limited, invalid, error |
 | `holdfast_queue_admission_ticks_total` | `result` | Leader ticks: advanced, idle, fenced, error |
 | `holdfast_queue_leader_terms_total` | | Admission leadership terms won by this process |
 | `holdfast_queue_admission_leader` | `event` | 1 while this process leads the event (bounded by the number of events) |
+| `holdfast_queue_leader_epoch` | `event` | Fencing epoch of this process's term; exported by the leader only |
+| `holdfast_queue_size` | `event` | People in the queue, admitted or not; set by the leader on every tick |
+| `holdfast_queue_admitted_up_to` | `event` | `admittedUpTo`, the highest admitted rank; set by the leader on every tick |
+| `holdfast_queue_active_sessions` | `event` | Unexpired session slots; set by the leader on every tick |
+| `holdfast_queue_max_sessions` | `event` | The session budget (Little's Law L); set when a term starts |
+| `holdfast_queue_status_age_seconds` | `event` | Age of the status document, measured by the opener in every replica; absent until a leader has written one |
 | `holdfast_queue_opened_total` | `by` | T0 transitions: `join` (a join got there first) or `opener` |
 | `holdfast_queue_opener_runs_total` | `result` | Opener passes: ok, error |
 | `holdfast_queue_opener_duration_seconds` | | One opener pass over all events |
 | `holdfast_http_requests_total` | `route`, `code` | RED metrics per route pattern |
 | `holdfast_http_request_duration_seconds` | `route` | Latency per route pattern |
 
-Queue size, `admittedUpTo`, sessions, admission rate and leader epoch arrive
-with task 2.10.
+Every `event` label is a server-side event ID, so the label set is bounded by
+the number of provisioned events. The leader-only gauges belong to the
+current term: a replica deletes its series when its term ends, so after a
+failover only the new leader exports them. The admission rate is
+`rate(holdfast_queue_admitted_total[1m])`.
+
+The Grafana dashboard **HoldFast / Queue**
+(`deploy/grafana/dashboards/queue.json`) charts these per event: queue
+size, `admittedUpTo`, sessions against the budget, admission rate, status
+age, leaders and epochs, and the join, claim, tick and HTTP counters. A
+status age above a few seconds while the queue is `OPEN` means no leader is
+writing (RB-Q-5).
