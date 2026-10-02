@@ -44,10 +44,14 @@ jobs:
           else
             echo "main has no contracts yet: nothing to compare against"
           fi
-      - name: "Contracts: generated code is current"
+      - uses: sqlc-dev/setup-sqlc@v5
+        with:
+          sqlc-version: 1.31.1
+      - name: "Generated code is current (buf, sqlc)"
         run: |
           buf generate
-          git status --porcelain -- internal/gen | tee /dev/stderr | (! grep -q .) || { echo "run make gen and commit internal/gen"; exit 1; }
+          sqlc generate
+          git status --porcelain -- internal/gen internal/booking/bookingdb | tee /dev/stderr | (! grep -q .) || { echo "run make gen and commit the result"; exit 1; }
 
   unit:
     runs-on: ubuntu-latest

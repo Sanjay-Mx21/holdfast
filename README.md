@@ -111,7 +111,7 @@ client (Phase 4); then chaos drills, load tests and benchmarks (Phases 5-7).
 | `make fairness-e6` | Fairness experiment: lottery before T0, arrival order after it; exits non-zero if the order is not fair | The local stack |
 | `make load-e2` | Waiting-room stampede through the edge with k6; results in `loadtest/results/` | The local stack (`make up`) |
 | `make lint` | golangci-lint and migration checks | golangci-lint (`make tools`) |
-| `make gen` | Lint, format and generate Go code from the protobuf contracts in `proto/` | buf (`make tools`) |
+| `make gen` | Generate Go code: the protobuf contracts in `proto/` (buf) and the SQL queries in `internal/booking/queries` (sqlc) | buf and sqlc (`make tools`) |
 
 Integration tests read `HOLDFAST_TEST_VALKEY_ADDR` and
 `HOLDFAST_TEST_POSTGRES_DSN` and skip when they are unset, so they can also

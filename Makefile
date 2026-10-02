@@ -10,6 +10,7 @@ BINARIES := inventory queue holdfastctl contention fairness
 IMAGES   := inventory queue holdfastctl
 GOLANGCI_LINT_VERSION := v2.14.0
 BUF_VERSION           := v1.73.0
+SQLC_VERSION          := v1.31.1
 
 # Local dependencies started by `make infra` / `make up`.
 export HOLDFAST_TEST_VALKEY_ADDR  ?= localhost:6379
@@ -28,12 +29,14 @@ deps: ## Resolve modules and write go.sum (run once after cloning, then commit g
 deps-upgrade: ## Upgrade every dependency to its latest release
 	$(GO) get -u ./... && $(GO) mod tidy
 
-tools: ## Install golangci-lint and buf
+tools: ## Install golangci-lint, buf and sqlc
 	$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 	$(GO) install github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION)
+	$(GO) install github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
 
-gen: ## Generate Go code from the protobuf contracts in proto/ (needs buf: make tools)
+gen: ## Generate Go code: protobuf contracts (buf) and SQL queries (sqlc); needs make tools
 	buf lint && buf format -w && buf generate
+	sqlc vet && sqlc generate
 
 fmt: ## Format all Go code
 	gofmt -w -s .

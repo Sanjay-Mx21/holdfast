@@ -32,13 +32,13 @@ All times are IST (UTC+05:30).
 | **Project** | A flash-sale booking engine that sells exactly the available units under extreme demand, never more |
 | **Plan version** | 2.0 (1 October 2026) |
 | **Milestones complete** | M0 Foundation, M1 Correctness core, M1.5 Bring-up and baseline, and M2 Fair waiting room |
-| **Current milestone** | M3 MVP backend (Phase 3): 4 of 14 tasks done (section 9); next task 3.5, [issue #23](https://github.com/Sanjay-Mx21/holdfast/issues/23) |
+| **Current milestone** | M3 MVP backend (Phase 3): 5 of 14 tasks done (section 9); next task 3.6, [issue #24](https://github.com/Sanjay-Mx21/holdfast/issues/24) |
 | **Progress to v1.0** | About 35% (18 of about 51 focused-work days, excluding Phase 7 stretch goals), counting Phase 2's planned 7 days |
 | **Repository** | [github.com/Sanjay-Mx21/holdfast](https://github.com/Sanjay-Mx21/holdfast), branch `main` |
 | **First commit** | `2173e50` "first commit", 2026-10-01 20:20, 82 files, 12,973 lines |
 | **Latest release** | [v0.2.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.2.0), 2026-10-02 21:51, on `cd0592a` (before it: [v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0), 2026-10-01 23:47, on `9dcd2f8`) |
 | **CI** | Green since 2026-10-01 22:00; `main` is protected and every change needs a pull request with all 7 required checks passing |
-| **Issues so far** | 72 recorded: 66 resolved, 6 open (section 6) |
+| **Issues so far** | 74 recorded: 68 resolved, 6 open (section 6) |
 
 <Callout type="tip" title="M2 complete: the fair waiting room (2026-10-02)">
 
@@ -124,7 +124,8 @@ Sources: the dates recorded in the ADRs and the plan, file modification times, a
 | 2026-10-02 22:15 | **Task 3.1 (Kafka) built and verified:** Kafka 4.3.1 (KRaft) and Redpanda Console (port 8089) in Compose; a one-shot job creates the three topics and their dead-letter topics (6 partitions each), and `make topics` again changes nothing; `internal/platform/kafka` with an idempotent producer (CloudEvents headers) and a consumer-group helper (manual commits, backoff retries, dead-lettering). 7 unit and 6 integration tests; the integration tests passed 3 runs against the local broker; CI's integration job gets a Kafka service. Gates pass (gofmt, test, lint, up, itest, E1). Kafka uses about 406 MB, the console 39 MB | PR #74 (merged by the assistant at 22:20 after all 7 checks passed), `76adefb`; issue #19 closed |
 | 2026-10-02 22:49 | **Task 3.2 (tracing) built and verified:** `internal/platform/otel` (W3C propagation, OTLP/HTTP export); server spans named after routes; `trace_id`/`span_id` on log lines; `traceparent` through Kafka with consumers continuing the producer's trace; Valkey spans only inside traces; inventory-svc and queue-svc traced; OTel Collector and Jaeger in Compose. 13 new unit and integration tests, the trace ones passing 3 runs. Gates pass (gofmt, test, lint, up, itest, E1). In Jaeger: a hold traced through inventory-svc with its `valkey EVALSHA` span, a status poll through queue-svc, an unknown route as `GET unmatched`, and one trace spanning both services (inventory's JWKS fetch continued by queue-svc). Log lines from both services carry `trace_id` | PR #75 (merged by the assistant at 22:56 after all 7 checks passed), `04a657d`; issue #20 closed |
 | 2026-10-02 23:13 | **Task 3.3 (contracts) built and verified:** a Buf workspace with `holdfast.inventory.v1.InventoryService` (GetHold, MarkPaying, Confirm, ReleaseForFailedPayment, matching the service layer's semantics) and the eight booking and payment event payloads in `holdfast.events.v1`; generated Go committed in `internal/gen`; buf 1.73.0 (checksum verified) and the protoc plugins pinned as Go tools. `buf lint` and `buf format` clean; `buf breaking` passed against the committed contracts and failed (exit 100) on a deliberately renumbered field; CI's lint job runs all three plus a stale-code check. Unit tests and lint pass | PR #76 (merged by the assistant at 23:19 after all 7 checks passed), `d9a278d`; issue #21 closed |
-| 2026-10-02 23:39 | **Task 3.4 (inventory over gRPC) built and verified.** Decided service-to-service authentication: per-service Ed25519 tokens, not mTLS (record in `docs/services/inventory.md`). Built `authn` service tokens, `internal/platform/grpcx` (server: tracing, metrics, logging, recovery, token auth with a per-method allowlist, required deadline; client: tokens, 800 ms default deadline, up to 3 attempts on UNAVAILABLE), `inventory.GRPCServer` and a typed `inventory.Client`; inventory-svc serves on :7070 and trusts booking's dev key. 4 authn, 7 grpcx and 2 inventory gRPC contract tests (3 runs each). Gates pass (gofmt, test, lint, up, itest, E1). End to end on the stack, acting as booking-svc: GetHold HELD, MarkPaying protected for 10m, Confirm confirmed then replay, another user's hold NotFound, a stranger's key and a missing token Unauthenticated; server metrics by method and code; the gRPC spans with their Valkey spans in Jaeger. The run also caught a timing-sensitive queue test (P28), fixed | Branch `feat/p3-inventory-grpc`, issue #22 |
+| 2026-10-02 23:39 | **Task 3.4 (inventory over gRPC) built and verified.** Decided service-to-service authentication: per-service Ed25519 tokens, not mTLS (record in `docs/services/inventory.md`). Built `authn` service tokens, `internal/platform/grpcx` (server: tracing, metrics, logging, recovery, token auth with a per-method allowlist, required deadline; client: tokens, 800 ms default deadline, up to 3 attempts on UNAVAILABLE), `inventory.GRPCServer` and a typed `inventory.Client`; inventory-svc serves on :7070 and trusts booking's dev key. 4 authn, 7 grpcx and 2 inventory gRPC contract tests (3 runs each). Gates pass (gofmt, test, lint, up, itest, E1). End to end on the stack, acting as booking-svc: GetHold HELD, MarkPaying protected for 10m, Confirm confirmed then replay, another user's hold NotFound, a stranger's key and a missing token Unauthenticated; server metrics by method and code; the gRPC spans with their Valkey spans in Jaeger. The run also caught a timing-sensitive queue test (P28), fixed | PR #77 (merged by the assistant at 23:48 after all 7 checks passed; the merge call needed a retry, E17), `116dec9`; issue #22 closed |
+| 2026-10-03 00:01 | **Task 3.5 (booking schema) built and verified:** migration `booking/00002` (bookings with a trigger enforcing the 7.2 state machine, idempotency keys, outbox, processed messages); sqlc 1.31.1 (installed with `go install`, verified by Go's checksum database) generating `internal/booking/bookingdb`; ADR 0011. 6 integration tests against PostgreSQL, 5 runs each: the trigger refuses every move outside the machine (even a raw UPDATE), compare-and-set loses to a concurrent move, one booking per hold, owner-only reads, the intent recorded once, disjoint batches for concurrent deadline jobs and outbox relays, idempotency keys, and duplicate messages detected. Gates pass (gofmt, test, lint, up with the migration applied, itest, E1); `make gen` leaves the generated code unchanged | Branch `feat/p3-booking-schema`, issue #23 |
 
 ## 3. What is complete, and what each piece contributes
 
@@ -202,9 +203,9 @@ Every problem met while bringing Drop 1 up and running the soak on 2026-10-01, i
 | Group | Recorded | Resolved | Open |
 |---|---|---|---|
 | P: defects in the repository | 28 | 23 | 5 |
-| E: machine and network | 16 | 15 | 1 |
-| D: diagnosis and process | 28 | 28 | 0 |
-| **Total** | **72** | **66** | **6** |
+| E: machine and network | 17 | 16 | 1 |
+| D: diagnosis and process | 29 | 29 | 0 |
+| **Total** | **74** | **68** | **6** |
 
 CI took **three runs** to go green:
 
@@ -267,6 +268,7 @@ CI took **three runs** to go green:
 | E14 | Pulling `apache/kafka:4.3.1` from Docker Hub failed once with a TLS handshake timeout | A retry | Flaky connection to Docker Hub (as E5 and E12) | The second attempt succeeded | ✅ |
 | E15 | Docker Hub TLS handshake timeouts again while pulling the collector and Jaeger images: three failed attempts in a row, then a 401, before the network recovered | About 10 minutes | Flaky connection to Docker Hub (as E5, E12, E14) | Retried with longer waits; both images pulled | ✅ |
 | E16 | Downloading buf from GitHub's release assets failed twice (a connection timeout after 134 s, then the checksum file), before succeeding | A few minutes | Flaky connection to GitHub's asset host | Retried; the binary's SHA-256 matched the release's `sha256.txt` before installing | ✅ |
+| E17 | Merging PR #77: every check passed, but the merge script's GitHub API calls timed out (`dial tcp ...:443: i/o timeout`), so the PR stayed open | A retry | Network | Checked the PR through the REST API (not merged), merged it with a retry | ✅ |
 
 ### 6.4 Diagnosis and process
 
@@ -300,6 +302,7 @@ CI took **three runs** to go green:
 | D26 | Earlier Phase 2 tasks left forward-looking lines in the queue service doc that went stale as later tasks landed ("Rank lookups arrive with task 2.4", "buyers will compare their rank"), and one became wrong: "`jti:*` arrives with task 2.8", although task 2.8 decided not to build single-use tokens | Readers could believe parts of the service were missing, or that tokens are single use | Found while reviewing the docs in task 2.14; all corrected, and the doc's status line now lists what is built and what is not | ✅ |
 | D27 | The first end-to-end tracing check queried Jaeger's v1 query API (`/api/services`), which Jaeger 2.21 no longer serves (404); the Python traceback interleaved with the rest of the output and hid the gate results | One confusing run | The gate logs showed every gate passed; Jaeger 2's `/api/v3` API returned the traces | ✅ |
 | D28 | The first version of `grpcx.Dial` always set a retry policy, but gRPC rejects one with `maxAttempts: 1`, so a client configured for no retries could not even be created; the first test run caught it | Caught before commit | A single-attempt client now disables retries instead | ✅ |
+| D29 | The first version of the deadline-job test assumed an empty database: it claimed two batches of 2 and expected all three of its expired bookings among them, but earlier runs had left expired bookings that sort first, so runs 2 and 3 failed | Two failed test runs | The second claim now takes everything left (overlap still checked), and the test cancels its bookings afterwards; the outbox test marks its events published; the 9 leftover test bookings in the local database were cancelled. 5 runs pass | ✅ |
 
 ### 6.5 Owner setup actions
 
@@ -371,8 +374,8 @@ Goal: every paid booking ends confirmed or refunded, the effect happens once eve
 | 3.1 Kafka | [#19](https://github.com/Sanjay-Mx21/holdfast/issues/19) | ✅ 2026-10-02 (PR #74): Kafka 4.3.1 (KRaft) and Redpanda Console in Compose, topics with dead-letter topics, franz-go producer and consumer helper |
 | 3.2 Tracing | [#20](https://github.com/Sanjay-Mx21/holdfast/issues/20) | ✅ 2026-10-02 (PR #75): OTLP to Collector and Jaeger, route-named server spans, `trace_id` in logs, `traceparent` through Kafka, Valkey spans in traces |
 | 3.3 Contracts | [#21](https://github.com/Sanjay-Mx21/holdfast/issues/21) | ✅ 2026-10-02 (PR #76): Buf workspace, `InventoryService` and the booking and payment event payloads, generated Go, lint, format, breaking and stale-code checks in CI |
-| 3.4 inventory over gRPC | [#22](https://github.com/Sanjay-Mx21/holdfast/issues/22) | ✅ 2026-10-02: per-service Ed25519 tokens (decision), `grpcx` server and client, inventory's gRPC adapter and typed client, booking's dev key |
-| 3.5 Booking schema | [#23](https://github.com/Sanjay-Mx21/holdfast/issues/23) | ⏳ |
+| 3.4 inventory over gRPC | [#22](https://github.com/Sanjay-Mx21/holdfast/issues/22) | ✅ 2026-10-02 (PR #77): per-service Ed25519 tokens (decision), `grpcx` server and client, inventory's gRPC adapter and typed client, booking's dev key |
+| 3.5 Booking schema | [#23](https://github.com/Sanjay-Mx21/holdfast/issues/23) | ✅ 2026-10-03: `booking/00002` (bookings with a state-machine trigger, idempotency keys, outbox, processed messages), sqlc queries, ADR 0011 |
 | 3.6 booking-svc API | [#24](https://github.com/Sanjay-Mx21/holdfast/issues/24) | ⏳ |
 | 3.7 Outbox relay | [#25](https://github.com/Sanjay-Mx21/holdfast/issues/25) | ⏳ |
 | 3.8 Payment schema | [#26](https://github.com/Sanjay-Mx21/holdfast/issues/26) | ⏳ |
