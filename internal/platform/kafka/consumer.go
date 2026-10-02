@@ -11,6 +11,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -104,6 +105,22 @@ func (c *Consumer) Name() string { return "kafka-consumer-" + c.cfg.Group }
 // message stays uncommitted and is redelivered.
 func (c *Consumer) Run(ctx context.Context) error {
 	defer c.kc.Close()
+	if c.m != nil {
+		lagCtx, stopLag := context.WithCancel(ctx)
+		defer stopLag()
+		go func() {
+			t := time.NewTicker(15 * time.Second)
+			defer t.Stop()
+			for {
+				c.reportLag(lagCtx)
+				select {
+				case <-lagCtx.Done():
+					return
+				case <-t.C:
+				}
+			}
+		}()
+	}
 	for {
 		fetches := c.kc.PollRecords(ctx, c.cfg.MaxPollRecords)
 		if fetches.IsClientClosed() || ctx.Err() != nil {
@@ -208,22 +225,54 @@ const (
 	resultDeadLettered = "dead_lettered"
 )
 
-// Metrics counts consumed messages by topic and result.
+// Metrics counts consumed messages by topic and result, and how far each
+// consumer group is behind.
 type Metrics struct {
 	consumed *prometheus.CounterVec
+	lag      *prometheus.GaugeVec
 }
 
 // NewMetrics registers holdfast_kafka_consumed_total. The topic label is
 // bounded: topics are HoldFast's own.
 func NewMetrics(reg prometheus.Registerer) *Metrics {
-	return &Metrics{consumed: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-		Name: "holdfast_kafka_consumed_total",
-		Help: "Messages handled by consumers, by topic and result: ok, retried (one failed attempt), dead_lettered.",
-	}, []string{"topic", "result"})}
+	f := promauto.With(reg)
+	return &Metrics{
+		consumed: f.NewCounterVec(prometheus.CounterOpts{
+			Name: "holdfast_kafka_consumed_total",
+			Help: "Messages handled by consumers, by topic and result: ok, retried (one failed attempt), dead_lettered.",
+		}, []string{"topic", "result"}),
+		lag: f.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "holdfast_kafka_consumer_lag",
+			Help: "Messages in the topic not yet committed by the consumer group (summed over partitions), refreshed every 15 s.",
+		}, []string{"group", "topic"}),
+	}
 }
 
 func (m *Metrics) inc(topic, result string) {
 	if m != nil {
 		m.consumed.WithLabelValues(topic, result).Inc()
+	}
+}
+
+// reportLag sets holdfast_kafka_consumer_lag for the group's topics: the
+// committed offset against the end of each partition.
+func (c *Consumer) reportLag(ctx context.Context) {
+	lags, err := kadm.NewClient(c.kc).Lag(ctx, c.cfg.Group)
+	if err != nil {
+		return
+	}
+	for _, g := range lags {
+		if g.Error() != nil {
+			continue
+		}
+		for topic, parts := range g.Lag {
+			var sum int64
+			for _, l := range parts {
+				if l.Err == nil && l.Lag > 0 {
+					sum += l.Lag
+				}
+			}
+			c.m.lag.WithLabelValues(c.cfg.Group, topic).Set(float64(sum))
+		}
 	}
 }

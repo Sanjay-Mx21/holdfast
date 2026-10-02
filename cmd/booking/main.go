@@ -25,9 +25,11 @@ import (
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/grpcx"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/health"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/httpx"
+	"github.com/Sanjay-Mx21/holdfast/internal/platform/kafka"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/logging"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/metrics"
 	hfotel "github.com/Sanjay-Mx21/holdfast/internal/platform/otel"
+	"github.com/Sanjay-Mx21/holdfast/internal/platform/outbox"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/postgres"
 )
 
@@ -37,6 +39,7 @@ type config struct {
 	Service  cfgpkg.Service
 	HTTP     cfgpkg.HTTP
 	Postgres cfgpkg.Postgres
+	Kafka    cfgpkg.Kafka
 
 	// DevIdentity trusts the X-Dev-User-Id header as the buyer's identity
 	// until auth-svc exists (Phase 4). Never allowed in production.
@@ -48,13 +51,24 @@ type config struct {
 	ServicePrivateKeyFile string        `env:"SERVICE_PRIVATE_KEY_FILE,required"`
 	InventoryTimeout      time.Duration `env:"INVENTORY_TIMEOUT" envDefault:"800ms"`
 
+	// The outbox relay publishes booking events to Kafka (one leader across
+	// replicas).
+	OutboxBatch    int           `env:"OUTBOX_BATCH" envDefault:"500"`
+	OutboxInterval time.Duration `env:"OUTBOX_INTERVAL" envDefault:"200ms"`
+
 	// The deadline job cancels bookings whose payment deadline passed.
 	DeadlineScanInterval time.Duration `env:"DEADLINE_SCAN_INTERVAL" envDefault:"5s"`
 	DeadlineBatch        int           `env:"DEADLINE_BATCH" envDefault:"100"`
 }
 
 func (c *config) Validate() error {
-	errs := []error{cfgpkg.ValidateAll(c.Service, c.HTTP, c.Postgres)}
+	errs := []error{cfgpkg.ValidateAll(c.Service, c.HTTP, c.Postgres, c.Kafka)}
+	if c.OutboxBatch < 1 || c.OutboxBatch > 10_000 {
+		errs = append(errs, errors.New("OUTBOX_BATCH must be between 1 and 10000"))
+	}
+	if c.OutboxInterval < 10*time.Millisecond || c.OutboxInterval > time.Minute {
+		errs = append(errs, errors.New("OUTBOX_INTERVAL must be between 10ms and 1m"))
+	}
 	if c.DevIdentity && c.Service.Environment == "production" {
 		errs = append(errs, errors.New("DEV_IDENTITY must not be enabled in production: anyone could claim any user ID"))
 	}
@@ -126,6 +140,18 @@ func run(ctx context.Context) error {
 	defer func() { _ = conn.Close() }()
 	log.Info("calling inventory over gRPC", "addr", cfg.InventoryGRPCAddr, "kid", authn.KeyID(key.Public().(ed25519.PublicKey)))
 
+	producer, err := kafka.NewProducer(ctx, cfg.Kafka, serviceName)
+	if err != nil {
+		return err
+	}
+	defer producer.Close()
+	relay, err := outbox.NewRelay(pool, producer, outbox.Config{
+		Schema: "booking", Source: "booking-svc", Batch: cfg.OutboxBatch, Interval: cfg.OutboxInterval,
+	}, outbox.NewMetrics(reg), log)
+	if err != nil {
+		return err
+	}
+
 	bm := booking.NewMetrics(reg)
 	// Payment intents arrive with payment-svc (task 3.9); until then bookings
 	// are created without one.
@@ -156,6 +182,7 @@ func run(ctx context.Context) error {
 		httpx.NewServer("public", cfg.HTTP.Addr, public, cfg.HTTP, log),
 		httpx.NewServer("admin", cfg.HTTP.AdminAddr, admin, cfg.HTTP, log, httpx.WithWriteTimeout(90*time.Second)),
 		booking.NewDeadlineJob(pool, cfg.DeadlineScanInterval, cfg.DeadlineBatch, bm, log),
+		relay,
 	)
 }
 

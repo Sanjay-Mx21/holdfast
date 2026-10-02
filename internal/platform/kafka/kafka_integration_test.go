@@ -367,3 +367,39 @@ func TestTraceFlowsThroughKafka(t *testing.T) {
 		t.Fatalf("span kinds in the trace: %v, want producer and consumer", kinds)
 	}
 }
+
+// TestConsumerLagIsReported: the lag gauge counts what the group has not
+// committed yet.
+func TestConsumerLagIsReported(t *testing.T) {
+	cfg := testenv.Kafka(t)
+	topic := testTopic(t, cfg, 1)
+	p, err := NewProducer(context.Background(), cfg, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+	group := groupName()
+	publish(t, p, topic, 3, func(int) string { return "k" })
+	col := &collector{}
+	stop := runConsumer(t, cfg, ConsumerConfig{Group: group, Topics: []string{topic}}, col.handle, nil)
+	waitFor(t, "the first 3", func() bool { return len(col.snapshot()) >= 3 })
+	if err := stop(); err != nil {
+		t.Fatal(err)
+	}
+	publish(t, p, topic, 5, func(int) string { return "k" }) // nobody consumes these yet
+
+	m := NewMetrics(prometheus.NewRegistry())
+	c, err := NewConsumer(cfg, "test", ConsumerConfig{Group: group, Topics: []string{topic}}, col.handle, m, discard())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.kc.Close()
+	c.reportLag(context.Background())
+	var out dto.Metric
+	if err := m.lag.WithLabelValues(group, topic).Write(&out); err != nil {
+		t.Fatal(err)
+	}
+	if v := out.GetGauge().GetValue(); v != 5 {
+		t.Fatalf("lag %v, want 5", v)
+	}
+}
