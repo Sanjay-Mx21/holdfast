@@ -33,7 +33,7 @@ IDs match section 2.3 of the design doc.
 | inventory-svc (`cmd/inventory`) | Built; internal gRPC API from task 3.4 | Valkey keys `inv:*` | Valkey; called by booking-svc over gRPC |
 | queue-svc (`cmd/queue`) | Built (Phase 2): provisioning, joining, the T0 transition, positions, admission, the status document, admission tokens and their JWKS | Valkey keys `q:*`, `adm:*`, `rl:*` | Valkey; PostgreSQL for leader election only |
 | NGINX edge (`deploy/nginx`) | Built (Phase 2) | Nothing | queue-svc, inventory-svc |
-| booking final guard (`internal/booking`) | Built as a library | `booking` schema | PostgreSQL |
+| booking-svc (`cmd/booking`) | Phase 3 in progress: the booking API and deadline job built | `booking` schema (with the final guard, `internal/booking/guard`) | PostgreSQL; inventory-svc over gRPC |
 | holdfastctl (`cmd/holdfastctl`) | Built | Nothing (operator tool) | PostgreSQL, Valkey, Kafka (topic creation) |
 | booking, payment, auth | Planned | See design doc | |
 
@@ -90,6 +90,10 @@ door, the role a CDN plays in production:
    queue-svc signs an Ed25519 admission token that expires with the slot.
 6. With the token: `POST /v1/events/{id}/holds` at inventory-svc, which
    verifies it against queue-svc's JWKS (below).
+7. With the hold: `POST /v1/bookings` at booking-svc (idempotent; a retry
+   resumes). booking-svc checks the hold and marks it PAYING over gRPC, then
+   writes the booking and its `booking.created` event in one transaction.
+   Payment (Phase 3, tasks 3.9 to 3.11) follows.
 
 ### `POST /v1/events/{eventID}/holds`
 
