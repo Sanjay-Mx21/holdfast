@@ -6,8 +6,8 @@ Code: `internal/booking`. Schema: `booking` (migrations in
 `db/migrations/booking`, queries in `internal/booking/queries`).
 
 **Status:** Phase 3 in progress. Built: the schema and its state machine
-(task 3.5), the booking API and the deadline job (task 3.6). Payment intents
-arrive with payment-svc (task 3.9), the outbox relay with task 3.7, and
+(task 3.5), the booking API and the deadline job (task 3.6), and the outbox
+relay (task 3.7). Payment intents arrive with payment-svc (task 3.9), and
 confirmation and compensation with task 3.11.
 
 ## Responsibilities
@@ -96,9 +96,21 @@ window ends. Once an hour the job deletes idempotency keys older than a day.
 ## Events (outbox)
 
 Written to `booking.outbox` in the same transaction as the change they
-describe, with the request's trace context in `headers`; published to
-`holdfast.booking.v1` by the relay (task 3.7). Payloads are
-`holdfast.events.v1` messages.
+describe, with the request's trace context in `headers`, and published to
+`holdfast.booking.v1` (keyed by booking ID) by the **outbox relay**
+(`internal/platform/outbox`). Payloads are `holdfast.events.v1` messages; the
+`ce_id` header is the row's `event_id`, which consumers deduplicate on.
+
+- One relay leads across replicas (a PostgreSQL advisory lock), so one
+  booking's events are published in the order they were committed.
+- Each pass publishes up to `OUTBOX_BATCH` rows and marks them published in
+  the same transaction. A failed publish leaves them for the next pass; a
+  crash after publishing republishes them (delivery is at least once).
+- The relay continues the stored trace: its `publish` span joins the request
+  that caused the event.
+- Published rows are deleted after 7 days.
+- `holdfast_outbox_lag_seconds` (age of the oldest unpublished event) and
+  `holdfast_outbox_pending` show whether it keeps up.
 
 | Event | When |
 |---|---|
@@ -116,6 +128,9 @@ defined in `internal/platform/config` and `internal/platform/otel`.
 | `INVENTORY_GRPC_ADDR` | `inventory:7070` | inventory-svc's internal gRPC API |
 | `SERVICE_PRIVATE_KEY_FILE` | required | booking-svc's Ed25519 key for service tokens; inventory-svc trusts the public half |
 | `INVENTORY_TIMEOUT` | `800ms` | Deadline of each inventory call, retries included |
+| `KAFKA_BROKERS` | `localhost:29092` | Kafka, for the outbox relay (Compose: `kafka:9092`) |
+| `OUTBOX_BATCH` | `500` | Events published per relay transaction |
+| `OUTBOX_INTERVAL` | `200ms` | Relay pause after a pass that found less than a full batch |
 | `DEADLINE_SCAN_INTERVAL` | `5s` | Deadline job period |
 | `DEADLINE_BATCH` | `100` | Bookings cancelled per transaction |
 
@@ -131,4 +146,8 @@ edge routes `/v1/bookings` here.
 | `holdfast_booking_requests_resumed_total` | | Requests that resumed an earlier, unfinished attempt |
 | `holdfast_bookings_expired_total` | | Bookings cancelled at their deadline |
 | `holdfast_booking_deadline_runs_total` | `result` | Deadline job passes: ok, error |
+| `holdfast_outbox_published_total` | `schema` | Events published by the relay |
+| `holdfast_outbox_pending` | `schema` | Events not yet published |
+| `holdfast_outbox_lag_seconds` | `schema` | Age of the oldest unpublished event (0 when none) |
+| `holdfast_outbox_relay_leader` | `schema` | 1 while this replica leads the relay |
 | `holdfast_http_*` | `route`, `code` | RED metrics per route pattern |

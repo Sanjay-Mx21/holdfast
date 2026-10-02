@@ -184,6 +184,12 @@ one per event leads, holding a PostgreSQL advisory lock on a dedicated
 connection; every 250 ms it runs `advance.lua`, which refuses a stale epoch
 (fencing) and caps concurrent sessions (Little's Law).
 
+The **outbox relay** runs in every replica of a service that writes events
+(booking-svc so far); exactly one per schema leads, holding a PostgreSQL
+advisory lock on a dedicated connection, and publishes the outbox to Kafka
+in commit order, marking each batch published in the same transaction
+(`internal/platform/outbox`).
+
 ## 8. Security
 
 - queue-svc issues admission tokens when a buyer's turn comes
@@ -236,6 +242,10 @@ connection; every 250 ms it runs `advance.lua`, which refuses a stale epoch
 - **Health:** `/livez` never checks dependencies. `/readyz` checks Valkey (and,
   on inventory-svc with a JWKS URL, that some admission-token key is known) and
   returns 503 from the moment SIGTERM arrives.
+- **Outbox and consumers:** `holdfast_outbox_lag_seconds{schema}` and
+  `holdfast_outbox_pending{schema}` show whether a service's relay keeps up;
+  `holdfast_kafka_consumer_lag{group,topic}` how far each consumer group is
+  behind.
 - **Traces** (from Phase 3, `internal/platform/otel`): every public request
   gets a server span named after its route pattern, continuing the caller's
   W3C `traceparent`; Kafka events carry `traceparent`, and consumers continue

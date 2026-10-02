@@ -47,6 +47,11 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
   `GET /v1/bookings/{id}` is owner-only; a deadline job cancels overdue
   bookings. Each change and its event are written in one transaction. The edge
   routes `/v1/bookings`; service doc `docs/services/booking.md`.
+- **Outbox relay** (task 3.7, `internal/platform/outbox`): publishes a
+  service's outbox to Kafka in commit order, one leader per schema, at least
+  once, continuing each event's stored trace; booking-svc runs it. Metrics
+  `holdfast_outbox_lag_seconds` and `holdfast_outbox_pending`; the Kafka
+  consumer helper reports `holdfast_kafka_consumer_lag`.
 
 ## [0.2.0] - 2026-10-02
 
