@@ -1,0 +1,33 @@
+# sqlc (ADR 0011): typed Go for hand-written SQL. make gen regenerates it,
+# and CI fails if the committed code is stale. The schema is the migrations
+# themselves, so queries are checked against what the database really has.
+version: "2"
+sql:
+  - engine: postgresql
+    schema: db/migrations/booking
+    queries: internal/booking/queries
+    gen:
+      go:
+        package: bookingdb
+        out: internal/booking/bookingdb
+        sql_package: pgx/v5
+        emit_empty_slices: true
+        emit_result_struct_pointers: false
+        overrides:
+          - db_type: uuid
+            go_type: github.com/google/uuid.UUID
+          - db_type: uuid
+            nullable: true
+            go_type:
+              import: github.com/google/uuid
+              type: NullUUID
+          - db_type: timestamptz
+            go_type: time.Time
+        rename:
+          booking_booking: Booking
+          booking_event: Event
+          booking_event_inventory: EventInventory
+          booking_user_event_purchase: UserEventPurchase
+          booking_idempotency_key: IdempotencyKey
+          booking_outbox: OutboxEvent
+          booking_processed_message: ProcessedMessage
