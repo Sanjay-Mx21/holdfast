@@ -17,11 +17,13 @@ import (
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
+	inventoryv1 "github.com/Sanjay-Mx21/holdfast/internal/gen/holdfast/inventory/v1"
 	"github.com/Sanjay-Mx21/holdfast/internal/inventory"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/app"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/authn"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/buildinfo"
 	cfgpkg "github.com/Sanjay-Mx21/holdfast/internal/platform/config"
+	"github.com/Sanjay-Mx21/holdfast/internal/platform/grpcx"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/health"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/httpx"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/logging"
@@ -49,7 +51,14 @@ type config struct {
 	JWKSRefreshInterval     time.Duration `env:"JWKS_REFRESH_INTERVAL" envDefault:"5m"`
 	JWKSMinRefreshInterval  time.Duration `env:"JWKS_MIN_REFRESH_INTERVAL" envDefault:"30s"`
 	TokenLeeway             time.Duration `env:"TOKEN_LEEWAY" envDefault:"5s"`
-	AdminToken              string        `env:"ADMIN_TOKEN,required,unset"`
+
+	// The internal gRPC API for booking-svc (proto/holdfast/inventory/v1),
+	// on the internal network only. Callers authenticate with service tokens
+	// signed by their own keys: GRPC_TRUSTED_CALLERS lists them as
+	// "booking=/keys/booking.pub". With none, every call is refused.
+	GRPCAddr           string   `env:"GRPC_ADDR" envDefault:":7070"`
+	GRPCTrustedCallers []string `env:"GRPC_TRUSTED_CALLERS" envSeparator:","`
+	AdminToken         string   `env:"ADMIN_TOKEN,required,unset"`
 }
 
 func (c *config) Validate() error {
@@ -170,7 +179,22 @@ func run(ctx context.Context) error {
 		authn.RequireStaticToken(cfg.AdminToken),
 	)
 
+	var callers map[string]ed25519.PublicKey
+	if len(cfg.GRPCTrustedCallers) > 0 {
+		if callers, err = authn.LoadServiceKeys(cfg.GRPCTrustedCallers); err != nil {
+			return err
+		}
+	} else {
+		log.Warn("grpc: no trusted callers (GRPC_TRUSTED_CALLERS); every call will be refused")
+	}
+	grpcSrv := grpcx.NewServer(grpcx.ServerConfig{
+		Verifier: authn.NewServiceVerifier(serviceName, callers, cfg.TokenLeeway),
+		Allow:    inventory.GRPCAllow(),
+	}, reg, log)
+	inventoryv1.RegisterInventoryServiceServer(grpcSrv, inventory.NewGRPCServer(svc))
+
 	components := append([]app.Component{
+		grpcx.NewComponent("grpc", cfg.GRPCAddr, grpcSrv, log),
 		httpx.NewServer("public", cfg.HTTP.Addr, public, cfg.HTTP, log),
 		httpx.NewServer("admin", cfg.HTTP.AdminAddr, admin, cfg.HTTP, log, httpx.WithWriteTimeout(90*time.Second)),
 		inventory.NewSweeper(store, cfg.SweepInterval, cfg.SweepBatch, invMetrics, log),
