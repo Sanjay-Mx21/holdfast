@@ -431,7 +431,7 @@ and sets `DEV_IDENTITY=true`.
 | `holdfast_queue_admitted_up_to` | `event` | `admittedUpTo`, the highest admitted rank; set by the leader on every tick |
 | `holdfast_queue_active_sessions` | `event` | Unexpired session slots; set by the leader on every tick |
 | `holdfast_queue_max_sessions` | `event` | The session budget (Little's Law L); set when a term starts |
-| `holdfast_queue_status_age_seconds` | `event` | Age of the status document, measured by the opener in every replica; absent until a leader has written one |
+| `holdfast_queue_status_age_seconds` | `event` | Age of the status document by Valkey's clock (the clock that stamped it), measured by the opener in every replica; absent until a leader has written one |
 | `holdfast_queue_opened_total` | `by` | T0 transitions: `join` (a join got there first) or `opener` |
 | `holdfast_queue_opener_runs_total` | `result` | Opener passes: ok, error |
 | `holdfast_queue_opener_duration_seconds` | | One opener pass over all events |

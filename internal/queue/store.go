@@ -248,24 +248,28 @@ func (s *Store) Admit(ctx context.Context, eventID, userID string) (Turn, error)
 	return Turn{EventID: eventID, UserID: userID, Rank: res[1], SessionExpires: time.UnixMilli(res[2]).UTC()}, nil
 }
 
-// StatusUpdatedAt returns when the admission leader last wrote the event's
-// status document; ok is false if no leader has written one.
-func (s *Store) StatusUpdatedAt(ctx context.Context, eventID string) (time.Time, bool, error) {
-	raw, err := s.rdb.Get(ctx, keysFor(eventID).status()).Result()
-	if errors.Is(err, redis.Nil) {
-		return time.Time{}, false, nil
+// StatusAge returns how long ago the admission leader last wrote the event's
+// status document, by Valkey's clock (the clock that stamped it, so skew
+// between hosts cannot distort it); ok is false if no leader has written one.
+func (s *Store) StatusAge(ctx context.Context, eventID string) (time.Duration, bool, error) {
+	pipe := s.rdb.Pipeline()
+	docCmd := pipe.Get(ctx, keysFor(eventID).status())
+	timeCmd := pipe.Time(ctx)
+	_, err := pipe.Exec(ctx)
+	if errors.Is(docCmd.Err(), redis.Nil) {
+		return 0, false, nil
 	}
 	if err != nil {
-		return time.Time{}, false, fmt.Errorf("queue: read status: %w", err)
+		return 0, false, fmt.Errorf("queue: read status: %w", err)
 	}
 	var d statusDoc
-	if err := json.Unmarshal([]byte(raw), &d); err != nil {
-		return time.Time{}, false, fmt.Errorf("queue: bad status document: %w", err)
+	if err := json.Unmarshal([]byte(docCmd.Val()), &d); err != nil {
+		return 0, false, fmt.Errorf("queue: bad status document: %w", err)
 	}
 	if d.UpdatedAtMs == 0 {
-		return time.Time{}, false, errors.New("queue: status document has no update time")
+		return 0, false, errors.New("queue: status document has no update time")
 	}
-	return time.UnixMilli(d.UpdatedAtMs), true, nil
+	return timeCmd.Val().Sub(time.UnixMilli(d.UpdatedAtMs)), true, nil
 }
 
 // Overview reads an event's settings, stored state, leader epoch, live

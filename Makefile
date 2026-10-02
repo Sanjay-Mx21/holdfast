@@ -58,8 +58,9 @@ build: ## Build every binary into ./bin
 	@mkdir -p bin
 	@for b in $(BINARIES); do $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o bin/$$b ./cmd/$$b || exit 1; done
 
-keys: ## Generate the dev admission-token key pair in .local/keys (idempotent)
+keys: ## Generate dev key pairs in .local/keys: admission tokens, booking-svc's service tokens (idempotent)
 	$(GO) run ./cmd/holdfastctl keys generate --out-dir .local/keys --if-missing
+	$(GO) run ./cmd/holdfastctl keys generate --out-dir .local/keys --name booking --if-missing
 
 infra: ## Start only PostgreSQL, Valkey and Kafka
 	docker compose up -d --wait postgres valkey kafka

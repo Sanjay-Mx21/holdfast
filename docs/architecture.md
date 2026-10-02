@@ -30,7 +30,7 @@ IDs match section 2.3 of the design doc.
 
 | Service | Status | Owns | Talks to |
 |---|---|---|---|
-| inventory-svc (`cmd/inventory`) | Built | Valkey keys `inv:*` | Valkey |
+| inventory-svc (`cmd/inventory`) | Built; internal gRPC API from task 3.4 | Valkey keys `inv:*` | Valkey; called by booking-svc over gRPC |
 | queue-svc (`cmd/queue`) | Built (Phase 2): provisioning, joining, the T0 transition, positions, admission, the status document, admission tokens and their JWKS | Valkey keys `q:*`, `adm:*`, `rl:*` | Valkey; PostgreSQL for leader election only |
 | NGINX edge (`deploy/nginx`) | Built (Phase 2) | Nothing | queue-svc, inventory-svc |
 | booking final guard (`internal/booking`) | Built as a library | `booking` schema | PostgreSQL |
@@ -44,6 +44,12 @@ Each service listens on two ports:
 - **public** (`HTTP_ADDR`, default `:8080`): the buyer-facing API behind the edge;
 - **admin** (`ADMIN_ADDR`, default `:9090`): `/metrics`, `/livez`, `/readyz`,
   `/buildz`, `/debug/pprof/*` and operator APIs. Internal network only.
+
+A service that other services call also serves **gRPC** (`GRPC_ADDR`;
+inventory-svc on `:7070`), internal network only, through
+`internal/platform/grpcx`: service-token authentication with a per-method
+allowlist, required deadlines, tracing and metrics on the server; tokens, an
+800 ms default deadline and bounded retries of `UNAVAILABLE` on the client.
 
 Locally, `compose.yaml` runs PostgreSQL 18, Valkey 9.1, a one-shot migration
 job, Kafka 4.3 (KRaft, with a one-shot topic job and Redpanda Console),
@@ -183,6 +189,11 @@ connection; every 250 ms it runs `advance.lua`, which refuses a stale epoch
   service refuses to start with it in production.
 - Joining passes per-IP (IPv6 per /64) and per-user token buckets in Valkey
   (`internal/platform/ratelimit`), shared by every replica.
+- Services call each other over gRPC with service tokens: short-lived
+  Ed25519 JWTs signed by the caller's own key and checked against that
+  caller's public key, with a per-method allowlist (decision record in
+  `docs/services/inventory.md`). Traffic between services is plaintext on the
+  internal network until Phase 6 adds TLS or a mesh.
 - Operator endpoints live on the admin port behind a static bearer token
   compared in constant time; auth-svc replaces it in Phase 4.
 - IDs are canonicalised to lower-case hyphenated UUIDs before they become

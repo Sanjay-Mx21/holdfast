@@ -87,13 +87,13 @@ func (o *Opener) OpenDue(ctx context.Context) (int, error) {
 // observeStatusAge exports how old the status document clients are served
 // is. It grows while no leader writes it, which is when it matters.
 func (o *Opener) observeStatusAge(ctx context.Context, eventID string) {
-	at, ok, err := o.store.StatusUpdatedAt(ctx, eventID)
+	age, ok, err := o.store.StatusAge(ctx, eventID)
 	switch {
 	case err != nil:
 		o.log.Warn("status age: read failed", "event_id", eventID, "err", err)
 	case !ok:
 		o.m.statusAge.DeleteLabelValues(eventID) // no leader has written one yet
 	default:
-		o.m.statusAge.WithLabelValues(eventID).Set(time.Since(at).Seconds())
+		o.m.statusAge.WithLabelValues(eventID).Set(age.Seconds())
 	}
 }

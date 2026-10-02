@@ -130,11 +130,16 @@ services:
       # Trust whatever queue-svc publishes: key rotation needs no restart here.
       ADMISSION_JWKS_URL: http://queue:8080/.well-known/jwks.json
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      # Internal gRPC API: booking-svc's service tokens are trusted (dev key from make keys).
+      GRPC_TRUSTED_CALLERS: booking=/keys/booking.pub
       ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-only-admin-token-change-me-0123456789}
     networks: [default, edge]
     ports:
       - "8081:8080" # public API
       - "9091:9090" # admin: metrics, health, pprof, operator API (never expose in production)
+      - "7071:7070" # internal gRPC API, for services run on the host (never expose in production)
+    volumes:
+      - ./.local/keys:/keys:ro
     depends_on:
       valkey: { condition: service_healthy }
       holdfastctl: { condition: service_completed_successfully }
