@@ -6,6 +6,17 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
 
 ## [Unreleased]
 
+### Added
+
+- **Kafka** (task 3.1): Kafka 4.3.1 in KRaft mode and Redpanda Console
+  (http://localhost:8089) in Compose; `holdfastctl kafka topics` and
+  `make topics` create `holdfast.booking.v1`, `holdfast.payment.v1`,
+  `holdfast.inventory.v1` and their dead-letter topics (auto-creation is off),
+  and `make up` runs it. `internal/platform/kafka`: an idempotent producer
+  whose events carry CloudEvents headers, and a consumer-group helper with
+  manual commits, retries with backoff and dead-lettering. Metric
+  `holdfast_kafka_consumed_total{topic,result}`.
+
 ## [0.2.0] - 2026-10-02
 
 The fair waiting room (milestone M2, build plan Phase 2): queue-svc, the NGINX

@@ -34,7 +34,7 @@ IDs match section 2.3 of the design doc.
 | queue-svc (`cmd/queue`) | Built (Phase 2): provisioning, joining, the T0 transition, positions, admission, the status document, admission tokens and their JWKS | Valkey keys `q:*`, `adm:*`, `rl:*` | Valkey; PostgreSQL for leader election only |
 | NGINX edge (`deploy/nginx`) | Built (Phase 2) | Nothing | queue-svc, inventory-svc |
 | booking final guard (`internal/booking`) | Built as a library | `booking` schema | PostgreSQL |
-| holdfastctl (`cmd/holdfastctl`) | Built | Nothing (operator tool) | PostgreSQL, Valkey |
+| holdfastctl (`cmd/holdfastctl`) | Built | Nothing (operator tool) | PostgreSQL, Valkey, Kafka (topic creation) |
 | booking, payment, auth | Planned | See design doc | |
 
 ## 4. Runtime topology
@@ -46,7 +46,8 @@ Each service listens on two ports:
   `/buildz`, `/debug/pprof/*` and operator APIs. Internal network only.
 
 Locally, `compose.yaml` runs PostgreSQL 18, Valkey 9.1, a one-shot migration
-job, inventory-svc, queue-svc, the NGINX edge, Prometheus and Grafana.
+job, Kafka 4.3 (KRaft, with a one-shot topic job and Redpanda Console),
+inventory-svc, queue-svc, the NGINX edge, Prometheus and Grafana.
 
 **The edge** (`deploy/nginx/nginx.conf`, host port 8088) is the buyers' front
 door, the role a CDN plays in production:
@@ -116,6 +117,24 @@ Valkey.
 
 Migrations are embedded SQL applied by `holdfastctl migrate` (ADR 0003).
 
+**Kafka** (events between services, from Phase 3). Topics are created
+explicitly (`holdfastctl kafka topics`; auto-creation is off), each with a
+dead-letter topic:
+
+| Topic | Key | Producer |
+|---|---|---|
+| `holdfast.booking.v1` | booking ID | booking-svc, via its outbox |
+| `holdfast.payment.v1` | booking ID | payment-svc, via its outbox |
+| `holdfast.inventory.v1` | event ID | inventory-svc, informational snapshots |
+| `<topic>.dlq.v1` (for example `holdfast.booking.dlq.v1`) | original key | any consumer, after repeated failures |
+
+Every message carries CloudEvents attributes as headers (`ce_id`, the
+deduplication key; `ce_type`; `ce_source`; `ce_time`). `internal/platform/kafka`
+produces with `acks=all` and idempotence, and consumes with manual commits:
+an offset is committed only after the handler finishes, so handlers must be
+idempotent, and a message that keeps failing is dead-lettered instead of
+stalling its partition.
+
 ## 7. Background work
 
 The expiry sweeper runs in every replica, every `SWEEP_INTERVAL`, in batches
@@ -174,7 +193,9 @@ connection; every 250 ms it runs `advance.lua`, which refuses a stale epoch
   raw paths) and `holdfast_build_info`. queue-svc adds `holdfast_queue_*`:
   join, position, claim, tick and opener outcomes, and per-event gauges for
   queue size, `admittedUpTo`, sessions, the session budget, the leader's epoch
-  and the status document's age (`docs/services/queue.md`).
+  and the status document's age (`docs/services/queue.md`). Kafka consumers
+  count `holdfast_kafka_consumed_total{topic,result}` (ok, retried,
+  dead_lettered).
 - **Dashboards:** Grafana, HoldFast / Inventory and HoldFast / Queue.
 - **Health:** `/livez` never checks dependencies. `/readyz` checks Valkey (and,
   on inventory-svc with a JWKS URL, that some admission-token key is known) and

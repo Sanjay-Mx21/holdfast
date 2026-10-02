@@ -35,7 +35,7 @@ sells exactly 1,000 (never 1,001) and stays up while doing it.
 Requirements: Go 1.27+, Docker with Compose v2, make.
 
 ```bash
-make up                                          # dev keys, PostgreSQL, Valkey, migrations, inventory-svc, queue-svc, the NGINX edge, Prometheus, Grafana
+make up                                          # dev keys, PostgreSQL, Valkey, Kafka and its topics, migrations, inventory-svc, queue-svc, the NGINX edge, Prometheus, Grafana
 make event NAME="Coldplay Mumbai" CAPACITY=1000  # the event, its inventory and its waiting room (opens now); prints the event ID
 export EVENT=<event id>
 export ME=$(cat /proc/sys/kernel/random/uuid)    # your buyer ID (development identity until Phase 4)
@@ -66,6 +66,10 @@ metrics and health checks are on its admin port: http://localhost:9091/metrics
 and `/readyz` (queue-svc: http://localhost:9092). Prometheus and Grafana read
 their config and dashboards only at start-up; `make up` restarts both, so a
 changed scrape config or a new dashboard loads.
+
+Kafka (from Phase 3): the broker is on `localhost:29092`, and Redpanda Console
+at http://localhost:8089 shows topics, messages and consumer groups.
+`make topics` creates the topics (`make up` does it too).
 
 ## Repository layout
 
@@ -98,7 +102,7 @@ client (Phase 4); then chaos drills, load tests and benchmarks (Phases 5-7).
 | Command | Runs | Needs |
 |---|---|---|
 | `make test` | Unit tests with the race detector | Nothing |
-| `make itest` | Integration tests against real PostgreSQL and Valkey: script behaviour, concurrency, a randomized model check, the guard, migrations | Docker |
+| `make itest` | Integration tests against real PostgreSQL, Valkey and Kafka: script behaviour, concurrency, randomized model checks, the guard, migrations, consumers | Docker |
 | `make e1` | Contention experiment; exits non-zero on any invariant violation | The local stack |
 | `make fairness-e6` | Fairness experiment: lottery before T0, arrival order after it; exits non-zero if the order is not fair | The local stack |
 | `make load-e2` | Waiting-room stampede through the edge with k6; results in `loadtest/results/` | The local stack (`make up`) |
