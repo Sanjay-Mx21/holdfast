@@ -15,6 +15,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -29,6 +30,7 @@ import (
 	"github.com/Sanjay-Mx21/holdfast/internal/inventory"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/authn"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/config"
+	"github.com/Sanjay-Mx21/holdfast/internal/platform/kafka"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/postgres"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/valkey"
 	"github.com/Sanjay-Mx21/holdfast/internal/queue"
@@ -50,6 +52,7 @@ func commands() []command {
 		{"inventory status", "show an event's live availability", cmdInventoryStatus},
 		{"queue provision", "provision an event's waiting room (opening time from PostgreSQL by default)", cmdQueueProvision},
 		{"queue status", "show an event's waiting room: state, size, admission, sessions, leader", cmdQueueStatus},
+		{"kafka topics", "create every Kafka topic HoldFast uses (idempotent; auto-creation is off)", cmdKafkaTopics},
 	}
 }
 
@@ -528,4 +531,41 @@ func cmdInventoryStatus(ctx context.Context, args []string) error {
 	}
 	fmt.Printf("event %s: %d of %d units available (sold out: %t)\n", a.EventID, a.Available, a.Capacity, a.SoldOut())
 	return nil
+}
+
+// cmdKafkaTopics creates HoldFast's topics and their dead-letter topics.
+// Brokers run with auto-creation off, so a topic exists only if this created
+// it; existing topics are left exactly as they are.
+func cmdKafkaTopics(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("kafka topics", flag.ContinueOnError)
+	def := os.Getenv("KAFKA_BROKERS")
+	if def == "" {
+		def = "localhost:29092"
+	}
+	brokers := fs.String("brokers", def, "comma-separated Kafka brokers (env KAFKA_BROKERS)")
+	partitions := fs.Int("partitions", 6, "partitions for new topics (design: 6 locally, 24 or more in production)")
+	replication := fs.Int("replication-factor", 1, "replication factor for new topics (design: 1 locally, 3 in production)")
+	retention := fs.Duration("retention", 7*24*time.Hour, "retention for new topics")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *partitions < 1 || *partitions > 1000 || *replication < 1 || *replication > 5 {
+		return errors.New("--partitions must be 1 to 1000 and --replication-factor 1 to 5")
+	}
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	res, err := kafka.EnsureTopics(ctx, config.Kafka{
+		Brokers: strings.Split(*brokers, ","), DialTimeout: 5 * time.Second, DeliveryTimeout: 30 * time.Second,
+	}, kafka.TopicSpec{
+		Partitions: int32(*partitions), ReplicationFactor: int16(*replication), //nolint:gosec // bounded above
+		Retention: strconv.FormatInt(retention.Milliseconds(), 10),
+	}, kafka.Topics()...)
+	for _, r := range res {
+		state := "exists"
+		if r.Created {
+			state = "created"
+		}
+		fmt.Fprintf(stdout, "%-26s %-8s %d partitions\n", r.Topic, state, r.Partitions)
+	}
+	return err
 }

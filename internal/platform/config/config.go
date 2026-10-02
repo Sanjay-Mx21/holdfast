@@ -200,6 +200,26 @@ func (p Postgres) Validate() error {
 	return nil
 }
 
+// Kafka configures the Kafka client (internal/platform/kafka).
+type Kafka struct {
+	Brokers     []string      `env:"KAFKA_BROKERS" envSeparator:"," envDefault:"localhost:29092"`
+	DialTimeout time.Duration `env:"KAFKA_DIAL_TIMEOUT" envDefault:"5s"`
+	// DeliveryTimeout bounds how long a produced record may take to be
+	// acknowledged, retries included.
+	DeliveryTimeout time.Duration `env:"KAFKA_DELIVERY_TIMEOUT" envDefault:"30s"`
+}
+
+// Validate checks client settings.
+func (k Kafka) Validate() error {
+	if len(k.Brokers) == 0 {
+		return errors.New("KAFKA_BROKERS must list at least one broker")
+	}
+	if k.DialTimeout <= 0 || k.DeliveryTimeout <= 0 {
+		return errors.New("KAFKA_DIAL_TIMEOUT and KAFKA_DELIVERY_TIMEOUT must be positive")
+	}
+	return nil
+}
+
 // Valkey configures the Valkey/Redis client. One address means a standalone
 // node; several addresses mean Cluster; VALKEY_SENTINEL_MASTER enables Sentinel.
 type Valkey struct {

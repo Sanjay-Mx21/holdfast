@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -25,8 +26,9 @@ import (
 
 // Environment variables that enable integration tests.
 const (
-	EnvValkeyAddr  = "HOLDFAST_TEST_VALKEY_ADDR"
-	EnvPostgresDSN = "HOLDFAST_TEST_POSTGRES_DSN"
+	EnvValkeyAddr   = "HOLDFAST_TEST_VALKEY_ADDR"
+	EnvPostgresDSN  = "HOLDFAST_TEST_POSTGRES_DSN"
+	EnvKafkaBrokers = "HOLDFAST_TEST_KAFKA_BROKERS"
 )
 
 // Valkey returns a client for the test Valkey, closed when the test ends.
@@ -82,4 +84,16 @@ func Postgres(t testing.TB) *pgxpool.Pool {
 		t.Fatalf("migrate test database: %v", migrateErr)
 	}
 	return pool
+}
+
+// Kafka returns the client settings for the test Kafka cluster.
+func Kafka(t testing.TB) config.Kafka {
+	t.Helper()
+	brokers := os.Getenv(EnvKafkaBrokers)
+	if brokers == "" {
+		t.Skipf("set %s to run Kafka integration tests", EnvKafkaBrokers)
+	}
+	return config.Kafka{
+		Brokers: strings.Split(brokers, ","), DialTimeout: 5 * time.Second, DeliveryTimeout: 30 * time.Second,
+	}
 }

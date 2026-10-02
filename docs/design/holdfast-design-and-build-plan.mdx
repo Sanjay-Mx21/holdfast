@@ -1739,7 +1739,7 @@ Every Go service follows the same pattern: build from the root `Dockerfile` with
     image: docker.redpanda.com/redpandadata/console:v3.12.0
     environment:
       KAFKA_BROKERS: kafka:9092
-    ports: ["8088:8080"]
+    ports: ["8089:8080"]  # as built: 8088 is the edge's port
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.162.0
@@ -2085,7 +2085,7 @@ The dates are illustrative. The gates are not.
 
 **Tasks, in order:**
 
-- [ ] 3.1 **Kafka.** Kafka 4.3 in KRaft mode and Redpanda Console in Compose (16.1); `make topics` creates every topic explicitly (auto-creation stays off); a franz-go client in `internal/platform/kafka` (idempotent producer, consumer-group helper with manual commits).
+- [x] 3.1 **Kafka.** Kafka 4.3 in KRaft mode and Redpanda Console in Compose (16.1); `make topics` creates every topic explicitly (auto-creation stays off); a franz-go client in `internal/platform/kafka` (idempotent producer, consumer-group helper with manual commits). *Built with Redpanda Console on host port 8089 (8088 is the edge's since task 2.9); topics created by `holdfastctl kafka topics`, which a one-shot Compose job runs on `make up`; the consumer helper also retries with backoff and dead-letters a message after repeated failures.*
 - [ ] 3.2 **Tracing.** `internal/platform/otel` (OTLP to the collector, then Jaeger); `otelhttp` and `otelgrpc`; `trace_id` on every log line; `traceparent` in Kafka headers. Retrofit inventory-svc and queue-svc.
 - [ ] 3.3 **Contracts.** A Buf workspace; `proto/inventory/v1` (`GetHold`, `MarkPaying`, `Confirm`, `ReleaseForFailedPayment`) and `proto/events/v1` (the booking and payment events in 8.3); `buf lint` and `buf breaking` in CI.
 - [ ] 3.4 **inventory over gRPC.** A gRPC adapter on the existing service layer; service-to-service authentication (decide between per-service tokens and mTLS); deadlines and bounded retries in clients.

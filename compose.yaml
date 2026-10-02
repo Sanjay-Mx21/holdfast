@@ -1,8 +1,8 @@
 # Local development stack. `make up` generates dev keys first, then runs this.
 # Host ports: the edge (NGINX, the buyers' front door) 8088 (EDGE_PORT), inventory API 8081,
 # inventory admin 9091, queue API 8082, queue admin 9092, Prometheus 9090,
-# Grafana 3000, PostgreSQL 5432, Valkey 6379. The 808x API ports bypass the edge
-# and are for debugging only.
+# Grafana 3000, PostgreSQL 5432, Valkey 6379, Kafka 29092, Redpanda Console 8089.
+# The 808x API ports bypass the edge and are for debugging only.
 name: holdfast
 
 services:
@@ -51,6 +51,58 @@ services:
       postgres: { condition: service_healthy }
       valkey: { condition: service_healthy }
     restart: "no"
+
+  # Kafka 4.3 in KRaft mode (no ZooKeeper): one node, broker and controller.
+  # Auto-creation is off; topics come from the kafka-topics job below.
+  kafka:
+    image: apache/kafka:4.3.1
+    ports: ["29092:29092"] # EXTERNAL listener, for clients on the host
+    environment:
+      CLUSTER_ID: 4L6g3nShT-eMCtK--X86sw
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_HEAP_OPTS: -Xms256m -Xmx512m # the laptop shares 7.6 GB with everything else
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 20s
+    restart: unless-stopped
+
+  # One-shot job: creates every topic (idempotent), then exits.
+  kafka-topics:
+    build:
+      context: .
+      args: { SERVICE: holdfastctl }
+    command: ["kafka", "topics", "--brokers", "kafka:9092"]
+    depends_on:
+      kafka: { condition: service_healthy }
+    restart: "no"
+
+  # A web UI for topics, messages and consumer groups: http://localhost:8089
+  # (the design doc's 8088 is the edge's port here).
+  redpanda-console:
+    image: docker.redpanda.com/redpandadata/console:v3.12.0
+    environment:
+      KAFKA_BROKERS: kafka:9092
+    ports: ["8089:8080"]
+    depends_on:
+      kafka: { condition: service_healthy }
+    restart: unless-stopped
 
   inventory:
     build:
@@ -149,3 +201,4 @@ networks:
 volumes:
   postgres-data:
   valkey-data:
+  kafka-data:
