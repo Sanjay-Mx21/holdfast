@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package holdfast.events.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// Payment events, published by payment-svc through its outbox on the topic
+// holdfast.payment.v1, keyed by booking_id so they stay in order with the
+// booking's own events (design doc 8.3). The ce_type header names each one.
+
+// PaymentCaptured: the PSP confirmed the money was taken. ce_type
+// payment.captured.v1.
+message PaymentCaptured {
+  string booking_id = 1;
+  string intent_id = 2;
+  string psp_payment_id = 3;
+  int64 amount_paise = 4;
+  google.protobuf.Timestamp captured_at = 5;
+}
+
+// PaymentFailed: the payment failed definitively; no money was taken.
+// ce_type payment.failed.v1.
+message PaymentFailed {
+  string booking_id = 1;
+  string intent_id = 2;
+  // reason is the PSP's failure code, for diagnosis only.
+  string reason = 3;
+  google.protobuf.Timestamp failed_at = 4;
+}
+
+// PaymentExpired: the payment window closed without a capture. ce_type
+// payment.expired.v1.
+message PaymentExpired {
+  string booking_id = 1;
+  string intent_id = 2;
+  google.protobuf.Timestamp expired_at = 3;
+}
+
+// RefundCompleted: a refund (after BookingRefundRequired) was settled by the
+// PSP. ce_type refund.completed.v1.
+message RefundCompleted {
+  string booking_id = 1;
+  string intent_id = 2;
+  string psp_refund_id = 3;
+  int64 amount_paise = 4;
+  google.protobuf.Timestamp refunded_at = 5;
+}

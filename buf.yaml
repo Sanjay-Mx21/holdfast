@@ -1,0 +1,11 @@
+# Buf workspace: the protobuf contracts between services (proto/) and the
+# events on Kafka. CI runs buf lint, buf format and buf breaking against main.
+version: v2
+modules:
+  - path: proto
+lint:
+  use:
+    - STANDARD
+breaking:
+  use:
+    - WIRE_JSON # generated code may change; what travels on the wire may not

@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package holdfast.events.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// Booking events, published by booking-svc through its outbox on the topic
+// holdfast.booking.v1, keyed by booking_id (design doc 8.3). Each travels as
+// a Kafka message whose ce_type header names it, for example
+// booking.created.v1, and whose ce_id header is the consumers' dedup key.
+//
+// Evolution: add fields only; never reuse or renumber one. A breaking change
+// means a new topic version (v2). buf breaking enforces this in CI.
+
+// BookingCreated: a buyer started checkout for a hold. ce_type
+// booking.created.v1.
+message BookingCreated {
+  string booking_id = 1;
+  string event_id = 2;
+  string user_id = 3;
+  string hold_id = 4;
+  int32 quantity = 5;
+  int64 amount_paise = 6;
+  // payment_deadline is when an unpaid booking expires.
+  google.protobuf.Timestamp payment_deadline = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+// BookingConfirmed: the payment was captured and the final guard accepted the
+// sale. ce_type booking.confirmed.v1.
+message BookingConfirmed {
+  string booking_id = 1;
+  string event_id = 2;
+  string user_id = 3;
+  string hold_id = 4;
+  int32 quantity = 5;
+  google.protobuf.Timestamp confirmed_at = 6;
+}
+
+// CancellationReason says why a booking ended without a sale.
+enum CancellationReason {
+  CANCELLATION_REASON_UNSPECIFIED = 0;
+  // The payment failed definitively.
+  CANCELLATION_REASON_PAYMENT_FAILED = 1;
+  // The payment deadline passed without a capture.
+  CANCELLATION_REASON_PAYMENT_EXPIRED = 2;
+}
+
+// BookingCancelled: the booking ended without a sale; its hold is released.
+// ce_type booking.cancelled.v1.
+message BookingCancelled {
+  string booking_id = 1;
+  string event_id = 2;
+  string user_id = 3;
+  string hold_id = 4;
+  CancellationReason reason = 5;
+  google.protobuf.Timestamp cancelled_at = 6;
+}
+
+// RefundReason says why money must go back.
+enum RefundReason {
+  REFUND_REASON_UNSPECIFIED = 0;
+  // The final guard refused the sale (no units or the per-user cap).
+  REFUND_REASON_GUARD_REJECTED = 1;
+  // The capture arrived after the booking had expired or been cancelled.
+  REFUND_REASON_LATE_CAPTURE = 2;
+}
+
+// BookingRefundRequired: money was captured but the booking cannot be
+// confirmed, so payment-svc must refund it (invariant I3). ce_type
+// booking.refund_required.v1.
+message BookingRefundRequired {
+  string booking_id = 1;
+  string intent_id = 2;
+  int64 amount_paise = 3;
+  RefundReason reason = 4;
+  google.protobuf.Timestamp required_at = 5;
+}

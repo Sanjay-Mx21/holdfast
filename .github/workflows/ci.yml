@@ -31,6 +31,23 @@ jobs:
           version: v2.14.0
       - name: Migration files
         run: ./scripts/check-migrations.sh
+      - uses: bufbuild/buf-action@v1
+        with:
+          version: 1.73.0
+          setup_only: true
+      - name: "Contracts: buf lint and buf format"
+        run: buf lint && buf format --diff --exit-code
+      - name: "Contracts: no breaking change against main"
+        run: |
+          if git cat-file -e origin/main:buf.yaml 2>/dev/null; then
+            buf breaking --against '.git#ref=origin/main'
+          else
+            echo "main has no contracts yet: nothing to compare against"
+          fi
+      - name: "Contracts: generated code is current"
+        run: |
+          buf generate
+          git status --porcelain -- internal/gen | tee /dev/stderr | (! grep -q .) || { echo "run make gen and commit internal/gen"; exit 1; }
 
   unit:
     runs-on: ubuntu-latest
