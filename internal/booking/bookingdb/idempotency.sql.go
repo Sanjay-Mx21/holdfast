@@ -7,6 +7,7 @@ package bookingdb
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -82,6 +83,19 @@ func (q *Queries) CompleteIdempotentRequest(ctx context.Context, arg CompleteIde
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const deleteIdempotencyKeysBefore = `-- name: DeleteIdempotencyKeysBefore :execrows
+DELETE FROM booking.idempotency_keys WHERE created_at < $1
+`
+
+// Keys are kept for 24 hours (design doc 9.5); retries come within minutes.
+func (q *Queries) DeleteIdempotencyKeysBefore(ctx context.Context, before time.Time) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteIdempotencyKeysBefore, before)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const getIdempotencyKey = `-- name: GetIdempotencyKey :one

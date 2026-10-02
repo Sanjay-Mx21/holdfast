@@ -6,8 +6,8 @@ VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev
 COMMIT   ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 PKG      := github.com/Sanjay-Mx21/holdfast
 LDFLAGS  := -s -w -X $(PKG)/internal/platform/buildinfo.Version=$(VERSION) -X $(PKG)/internal/platform/buildinfo.Commit=$(COMMIT)
-BINARIES := inventory queue holdfastctl contention fairness
-IMAGES   := inventory queue holdfastctl
+BINARIES := inventory queue booking holdfastctl contention fairness
+IMAGES   := inventory queue booking holdfastctl
 GOLANGCI_LINT_VERSION := v2.14.0
 BUF_VERSION           := v1.73.0
 SQLC_VERSION          := v1.31.1
@@ -73,9 +73,9 @@ topics: ## Create every Kafka topic (idempotent; make up does it too)
 
 up: keys ## Start the whole local stack (migrations run automatically)
 	docker compose up -d --build
-	@# Prometheus and Grafana read their mounted config and dashboards at start-up
-	@# only; restart them so a changed scrape config or a new dashboard loads.
-	docker compose restart prometheus grafana
+	@# Prometheus, Grafana and the NGINX edge read their mounted config at start-up
+	@# only; restart them so a changed scrape config, dashboard or route loads.
+	docker compose restart prometheus grafana nginx
 
 down: ## Stop the stack (keeps data volumes)
 	docker compose down
