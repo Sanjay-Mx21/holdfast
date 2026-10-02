@@ -2,6 +2,9 @@
 -- The admission leader already gave every admitted rank a session slot in
 -- adm:{E}:sessions (advance.lua). A user may claim while their rank is within
 -- admittedUpTo and their slot is alive; the slot's expiry bounds the token.
+-- A slot is judged by Valkey's clock, not by whether the leader has swept it
+-- yet: the leader removes expired slots only on its next tick, and not at all
+-- while no leader runs.
 -- Claiming again returns the same answer, so it is safe to retry.
 -- KEYS[1] q:{E}:state   KEYS[2] q:{E}:members   KEYS[3] q:{E}:admitted
 -- KEYS[4] adm:{E}:sessions
@@ -24,6 +27,9 @@ local rank = r + 1
 local up = tonumber(redis.call('GET', KEYS[3]) or '0')
 if rank > up then return {0, rank, up} end
 
-local expires = redis.call('ZSCORE', KEYS[4], rank)
+local expires = tonumber(redis.call('ZSCORE', KEYS[4], rank))
 if not expires then return {-3, rank, 0} end
-return {1, rank, tonumber(expires)}
+local t = redis.call('TIME')
+local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
+if expires <= now then return {-3, rank, 0} end
+return {1, rank, expires}

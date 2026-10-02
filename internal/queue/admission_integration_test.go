@@ -253,6 +253,56 @@ func TestOneLeaderAndFailover(t *testing.T) {
 	mustEqual(t, "former leader's leader gauge", gauge(t, leader.m, f.eventID), float64(0))
 }
 
+// TestControllerStopsWhenTheEventIsGone: a controller whose event has been
+// removed stops, instead of campaigning forever and recreating the event's
+// epoch key on every attempt (issue P24); and a controller for an event that
+// was never provisioned stops at once, without creating any key.
+func TestControllerStopsWhenTheEventIsGone(t *testing.T) {
+	f := newFixture(t)
+	pool := testenv.Postgres(t)
+	f.openQueueWith(t, 1_000, 10_000)
+	cfg := AdmissionConfig{Tick: 20 * time.Millisecond, RetryLeadership: 50 * time.Millisecond, Rescan: time.Second}
+	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
+	k := keysFor(f.eventID)
+	run := func(eventID string) chan struct{} {
+		done := make(chan struct{})
+		c := NewController(f.store, pool, eventID, cfg, NewMetrics(prometheus.NewRegistry()), quiet)
+		go func() { defer close(done); c.Run(ctx) }()
+		return done
+	}
+	waitStopped := func(what string, done chan struct{}) {
+		t.Helper()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s kept running", what)
+		}
+	}
+
+	done := run(f.eventID)
+	deadline := time.Now().Add(5 * time.Second)
+	for f.admittedUpTo(t) == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("the controller never admitted anyone")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	// Remove the event, as a test's cleanup (or an operator) would.
+	if err := f.rdb.Del(ctx, k.config(), k.state(), k.members(), k.seq(), k.admitted(), k.epoch(), k.sessions(), k.status()).Err(); err != nil {
+		t.Fatal(err)
+	}
+	waitStopped("the controller of a removed event", done)
+	if n, _ := f.rdb.Exists(ctx, k.epoch()).Result(); n != 0 {
+		t.Fatal("the stopped controller recreated the epoch key")
+	}
+
+	never := uuid.Must(uuid.NewV7()).String()
+	waitStopped("a controller for an unknown event", run(never))
+	if n, _ := f.rdb.Exists(ctx, keysFor(never).epoch()).Result(); n != 0 {
+		t.Fatal("a controller for an unknown event created its epoch key")
+	}
+}
+
 // eventGauge returns the value of name{event=eventID} in reg, or -1 if the
 // series does not exist.
 func eventGauge(t *testing.T, reg *prometheus.Registry, name, eventID string) float64 {
@@ -432,6 +482,31 @@ func TestAdmitAfterTheSessionSlotExpired(t *testing.T) {
 	}
 	_, err := f.svc.Admit(ctx, f.eventID, first[0])
 	mustErr(t, "claim after the slot expired", err, ErrTurnExpired)
+}
+
+// TestAdmitAfterTheSlotExpiredBeforeTheSweep: a slot past its expiry is
+// expired even while it is still in adm:{E}:sessions (the leader removes it
+// on its next tick, or never while no leader runs). Before the fix, the claim
+// passed and signing then failed, a 500 instead of TURN_EXPIRED.
+func TestAdmitAfterTheSlotExpiredBeforeTheSweep(t *testing.T) {
+	f := newFixture(t)
+	f.openQueueWith(t, 2, 10_000)
+	epoch, _ := f.store.NewTerm(ctx, f.eventID)
+	if _, err := f.store.Advance(ctx, f.eventID, epoch, 2); err != nil {
+		t.Fatal(err)
+	}
+	members, _ := f.rdb.ZRange(ctx, keysFor(f.eventID).members(), 0, 1).Result()
+	past := float64(time.Now().Add(-time.Second).UnixMilli())
+	if err := f.rdb.ZAddXX(ctx, keysFor(f.eventID).sessions(), redis.Z{Score: past, Member: "1"}).Err(); err != nil {
+		t.Fatal(err)
+	}
+	_, err := f.svc.Admit(ctx, f.eventID, members[0])
+	mustErr(t, "claim with an expired slot not yet swept", err, ErrTurnExpired)
+	turn, err := f.svc.Admit(ctx, f.eventID, members[1])
+	mustErr(t, "claim with a live slot", err, nil)
+	if !turn.SessionExpires.After(time.Now()) {
+		t.Fatalf("live slot expires at %s, in the past", turn.SessionExpires)
+	}
 }
 
 func TestAdmitRefusedWhenClosedOrUnknown(t *testing.T) {

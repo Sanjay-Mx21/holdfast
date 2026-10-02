@@ -68,9 +68,20 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
   `holdfast_queue_status_age_seconds` from every replica;
   `holdfast_queue_admitted_total` is labelled by event. Grafana dashboard
   HoldFast / Queue.
+- **Queue tests** (task 2.11): a model test for fairness (F1) that checks
+  random interleavings of joins, ticks, claims, expiring sessions, T0 and
+  freezes against a reference model; the leader's tick loop tested under
+  `testing/synctest`; `internal/stats` with Spearman's rank correlation for
+  experiment E6.
 
 ### Fixed
 
+- Claiming a turn whose session slot had expired, before the leader's next
+  tick removed it, returned 500 instead of 409 `TURN_EXPIRED`; `admit.lua`
+  now judges the slot by Valkey's clock.
+- An admission controller whose event was removed never stopped: it retried
+  every 2 seconds, opening a PostgreSQL connection and recreating the event's
+  epoch key each time. It now stops, and never recreates keys.
 - The inventory dashboard's HTTP panels counted queue-svc's requests too;
   they now filter on `job="inventory"`.
 - `make up` restarts Prometheus and Grafana, which read their config and

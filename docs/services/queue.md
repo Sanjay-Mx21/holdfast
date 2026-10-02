@@ -137,7 +137,9 @@ Cache-Control: no-store
 
 - Allowed while your rank is within `admittedUpTo` and the session slot the
   leader gave your rank is alive (it lasts the session TTL from the moment you
-  were admitted). Otherwise 409 `NOT_YOUR_TURN` (the detail gives your rank and
+  were admitted). The slot's expiry is judged by Valkey's clock, so a slot
+  that has run out is expired even before the leader's next tick removes it.
+  Otherwise 409 `NOT_YOUR_TURN` (the detail gives your rank and
   how far admission has got), 409 `TURN_EXPIRED`, 404 `NOT_IN_QUEUE`, 409
   `QUEUE_CLOSED` (`SOLD_OUT` or `CLOSED`) or 404 `EVENT_NOT_FOUND`. A `FROZEN`
   sale still honours turns already given.
@@ -239,6 +241,11 @@ status document (task 2.6) and exchange their turn for an admission token
   last member, moves `admittedUpTo`, and gives each newly admitted rank a slot
   in `adm:{E}:sessions` that lasts the session TTL.
 - **Only `OPEN` admits.** `FROZEN` pauses admission; slots keep expiring.
+- **Controllers follow the work list.** A replica starts a controller for each
+  event in `q:events` (rescanned every `ADMISSION_RESCAN_INTERVAL`). A
+  controller whose event no longer exists (its settings are gone) stops, and
+  reads the settings before starting a term so it never recreates the event's
+  keys; if the event is provisioned again, a new controller starts.
 - PostgreSQL is used only for elections. Readiness does not depend on it: if it
   is down, admissions pause and joining and positions keep working.
 
@@ -336,10 +343,25 @@ The remaining key in the design doc (section 8.2), `jti:*`, arrives with task 2.
 | `join.lua` | {1 joined, 0 already joined, -1 closed, -2 not provisioned, member's score, 1 if this join opened the queue at T0} |
 | `open.lua` | {1 opened, 0 nothing to do, -1 not provisioned; ms late after T0, or ms left until T0} |
 | `position.lua` | {1 ranked, 0 before T0, -1 not in queue, -2 not provisioned; rank or opens_at_ms; state} |
-| `advance.lua` | {1 admitted some, 0 nothing to admit, -1 fenced, -2 not provisioned; admittedUpTo, admitted now, active sessions}; also rewrites `q:{E}:status` unless fenced |
+| `advance.lua` | {1 admitted some, 0 nothing to admit, -1 fenced, -2 not provisioned; admittedUpTo, admitted now, active sessions, queue size}; also rewrites `q:{E}:status` unless fenced |
 | `status.lua` | {1 the leader's document, 0 fallback without `updatedAtMs`, -2 not provisioned; the document as JSON} |
-| `admit.lua` | {1 admitted, 0 not your turn, -1 not in queue, -2 not provisioned, -3 turn expired, -4 closed; rank; slot expiry ms or admittedUpTo} |
+| `admit.lua` | {1 admitted, 0 not your turn, -1 not in queue, -2 not provisioned, -3 turn expired (slot gone, or past its expiry by Valkey's clock), -4 closed; rank; slot expiry ms or admittedUpTo} |
 | `token_bucket.lua` (`internal/platform/ratelimit`) | {allowed 1 or 0, remaining tokens × 1000, retry after ms} |
+
+## Tests
+
+| Layer | What it covers | Where |
+|---|---|---|
+| Unit | The leader's allowance (rate, one-second cap, fractions); handlers, validation and error mapping; lottery scores; the Spearman helper | `admission_test.go`, `handler_test.go`, `lottery_test.go`, `model_test.go`, `internal/stats` |
+| Fake clock | The leader's tick loop under `testing/synctest`: exact tick times, no starting burst, carried allowance capped at one second, stepping down when fenced, when the lock's connection dies or when the event is gone, surviving a failed tick | `admission_synctest_test.go` |
+| Integration | Every script against real Valkey: provisioning, joins (idempotent, no re-roll, concurrent), the T0 switch by Valkey's clock, positions, a stale epoch refused, the session budget, slot expiry, the status document, claims | `store_integration_test.go`, `admission_integration_test.go` |
+| Model (F1) | Random interleavings of joins, rejoins, ticks, claims, expiring slots, T0 and freezes, checked step by step against a reference model: the queue's order, which ranks each tick admits, every claim's answer, and that no rank changes once admission has begun | `fairness_model_integration_test.go` (12 seeds × 400 steps; a failure prints its seed and step) |
+| Failover | Two real controllers on PostgreSQL and Valkey: one leader, the standby takes over with a higher epoch when the leader dies, the old epoch is fenced, only the new leader exports gauges; a controller stops when its event is removed | `admission_integration_test.go` |
+
+`make test` runs the unit and fake-clock tests; `make itest` runs the rest.
+Timing-dependent integration tests judge time by Valkey's clock and skip only
+the check a WSL2 wall-clock step invalidates, with a log line (progress log
+E7).
 
 ## Configuration
 
