@@ -16,3 +16,7 @@ SET status = 'COMPLETED', booking_id = sqlc.arg(booking_id), response_code = sql
     response_body = sqlc.arg(response_body), updated_at = now()
 WHERE user_id = sqlc.arg(user_id) AND idem_key = sqlc.arg(idem_key) AND status = 'IN_PROGRESS'
 RETURNING *;
+
+-- name: DeleteIdempotencyKeysBefore :execrows
+-- Keys are kept for 24 hours (design doc 9.5); retries come within minutes.
+DELETE FROM booking.idempotency_keys WHERE created_at < sqlc.arg(before);

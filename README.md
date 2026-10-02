@@ -24,6 +24,11 @@ sells exactly 1,000 (never 1,001) and stays up while doing it.
   their turn for the signed admission token inventory-svc requires;
   inventory-svc follows the queue's published keys, so rotating them needs no
   restart.
+- **booking-svc** (Phase 3, in progress) turns a hold into a booking that
+  waits for payment. Its API is idempotent Stripe-style: a retried request
+  gets the same answer, and a request that failed part-way resumes. It protects
+  the hold over gRPC, writes each state change and its event in one
+  transaction (an outbox), and cancels bookings whose payment deadline passes.
 - **holdfastctl** runs migrations, generates dev keys and tokens, creates
   events, provisions their inventory and queue, rebuilds inventory, and shows
   an event's availability and waiting room (`queue status`).
@@ -35,7 +40,7 @@ sells exactly 1,000 (never 1,001) and stays up while doing it.
 Requirements: Go 1.27+, Docker with Compose v2, make.
 
 ```bash
-make up                                          # dev keys (admission tokens, booking-svc), PostgreSQL, Valkey, Kafka and its topics, migrations, inventory-svc, queue-svc, the NGINX edge, Prometheus, Grafana, OTel Collector, Jaeger
+make up                                          # dev keys (admission tokens, booking-svc), PostgreSQL, Valkey, Kafka and its topics, migrations, inventory-svc, queue-svc, booking-svc, the NGINX edge, Prometheus, Grafana, OTel Collector, Jaeger
 make event NAME="Coldplay Mumbai" CAPACITY=1000  # the event, its inventory and its waiting room (opens now); prints the event ID
 export EVENT=<event id>
 export ME=$(cat /proc/sys/kernel/random/uuid)    # your buyer ID (development identity until Phase 4)
@@ -51,6 +56,11 @@ curl -s -X POST $EDGE/v1/events/$EVENT/holds \
   -H "Authorization: Bearer $TOKEN" \
   -H "Idempotency-Key: order-$(date +%s)" \
   -H 'Content-Type: application/json' -d '{"quantity":2}'
+export HOLD=<hold id>
+
+curl -s -X POST $EDGE/v1/bookings -H "X-Dev-User-Id: $ME" \
+  -H "Idempotency-Key: booking-$(date +%s)" \
+  -H 'Content-Type: application/json' -d "{\"eventId\":\"$EVENT\",\"holdId\":\"$HOLD\"}"   # book it
 
 make e1                                          # contention experiment against the local stack
 make fairness-e6                                 # fairness of the queue order (E6)
@@ -133,6 +143,8 @@ failure with `HOLDFAST_TEST_SEED=<seed>`.
 | `POST /v1/queue/{eventID}/admit` | `X-Dev-User-Id` until Phase 4 (queue-svc) | Exchange your turn for an admission token |
 | `GET /.well-known/jwks.json` | Public (queue-svc) | Public keys of admission tokens |
 | `PUT /internal/v1/events/{eventID}/queue` | Operator token, queue-svc admin port only | Provision the queue |
+| `POST /v1/bookings` | `X-Dev-User-Id` until Phase 4 + `Idempotency-Key` (booking-svc) | Book a hold: a booking waiting for payment |
+| `GET /v1/bookings/{bookingID}` | `X-Dev-User-Id` until Phase 4 (booking-svc) | Your booking |
 
 Errors are RFC 9457 problem documents with stable `code` values; see
 [`docs/services/inventory.md`](docs/services/inventory.md).

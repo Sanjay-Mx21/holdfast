@@ -1,6 +1,7 @@
 # Local development stack. `make up` generates dev keys first, then runs this.
 # Host ports: the edge (NGINX, the buyers' front door) 8088 (EDGE_PORT), inventory API 8081,
-# inventory admin 9091, queue API 8082, queue admin 9092, Prometheus 9090,
+# inventory admin 9091, queue API 8082, queue admin 9092, booking API 8083,
+# booking admin 9093, inventory gRPC 7071, Prometheus 9090,
 # Grafana 3000, PostgreSQL 5432, Valkey 6379, Kafka 29092, Redpanda Console 8089,
 # Jaeger 16686, OTLP 4317 (gRPC) and 4318 (HTTP).
 # The 808x API ports bypass the edge and are for debugging only.
@@ -105,6 +106,32 @@ services:
       kafka: { condition: service_healthy }
     restart: unless-stopped
 
+  # booking-svc: turns holds into bookings that wait for payment. Calls
+  # inventory over gRPC with its own service token (dev key from make keys).
+  booking:
+    build:
+      context: .
+      args: { SERVICE: booking }
+    environment:
+      ENVIRONMENT: development
+      LOG_FORMAT: text
+      DEV_IDENTITY: "true" # buyers identified by X-Dev-User-Id until auth-svc (Phase 4)
+      POSTGRES_DSN: postgres://holdfast:holdfast@postgres:5432/holdfast?sslmode=disable
+      INVENTORY_GRPC_ADDR: inventory:7070
+      SERVICE_PRIVATE_KEY_FILE: /keys/booking.key
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    networks: [default, edge]
+    ports:
+      - "8083:8080" # public API
+      - "9093:9090" # admin: metrics, health, pprof (never expose in production)
+    volumes:
+      - ./.local/keys:/keys:ro
+    depends_on:
+      postgres: { condition: service_healthy }
+      holdfastctl: { condition: service_completed_successfully }
+      inventory: { condition: service_started }
+    restart: unless-stopped
+
   # Traces: services send OTLP to the collector, which forwards to Jaeger.
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.161.0
@@ -184,7 +211,7 @@ services:
       edge: { ipv4_address: 10.250.0.10 }
     ports:
       - "${EDGE_PORT:-8088}:80"
-    depends_on: [queue, inventory]
+    depends_on: [queue, inventory, booking]
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
       interval: 5s

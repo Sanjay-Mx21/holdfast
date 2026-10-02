@@ -142,7 +142,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [inventory, queue, holdfastctl]
+        service: [inventory, queue, booking, holdfastctl]
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
