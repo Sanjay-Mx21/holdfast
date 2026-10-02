@@ -12,6 +12,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/logging"
 )
@@ -73,6 +75,9 @@ func AccessLog(base *slog.Logger, logSuccess bool) Middleware {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 			l := base.With(slog.String("request_id", RequestIDFrom(r.Context())))
+			if sc := trace.SpanContextFromContext(r.Context()); sc.IsValid() {
+				l = l.With(slog.String("trace_id", sc.TraceID().String())) // also on lines logged without the context
+			}
 			rec := wrapRecorder(w)
 			next.ServeHTTP(rec, r.WithContext(logging.WithContext(r.Context(), l)))
 
@@ -237,3 +242,15 @@ func (r *recorder) Write(b []byte) (int, error) {
 
 // Unwrap lets http.ResponseController reach the underlying writer.
 func (r *recorder) Unwrap() http.ResponseWriter { return r.ResponseWriter }
+
+// Trace starts a server span for every request, continuing the caller's
+// trace when the request carries a W3C traceparent header. It must be the
+// outermost middleware, so the span covers everything else. The span is
+// renamed to the route pattern once the router has matched one; requests
+// that match no route keep "<method> unmatched".
+func Trace() Middleware {
+	return func(next http.Handler) http.Handler {
+		return otelhttp.NewHandler(next, "http.server",
+			otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string { return r.Method + " unmatched" }))
+	}
+}

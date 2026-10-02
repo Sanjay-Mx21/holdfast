@@ -8,6 +8,8 @@ import (
 	"io"
 	"log/slog"
 
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/buildinfo"
 )
 
@@ -30,7 +32,7 @@ func New(w io.Writer, level, format, service, environment string) (*slog.Logger,
 	default:
 		return nil, fmt.Errorf("logging: unknown format %q", format)
 	}
-	return slog.New(h).With(
+	return slog.New(traceHandler{Handler: h}).With(
 		slog.String("service", service),
 		slog.String("env", environment),
 		slog.String("version", buildinfo.Get().Version),
@@ -48,4 +50,35 @@ func FromContext(ctx context.Context) *slog.Logger {
 		return l
 	}
 	return slog.Default()
+}
+
+// traceHandler adds trace_id and span_id to every record logged with a
+// context that carries a span, so a log line leads straight to its trace. A
+// logger that already carries a trace_id (a request-scoped logger, see
+// httpx.AccessLog) only gets the span_id.
+type traceHandler struct {
+	slog.Handler
+	hasTraceID bool
+}
+
+func (h traceHandler) Handle(ctx context.Context, r slog.Record) error {
+	if sc := trace.SpanContextFromContext(ctx); sc.IsValid() {
+		if !h.hasTraceID {
+			r.AddAttrs(slog.String("trace_id", sc.TraceID().String()))
+		}
+		r.AddAttrs(slog.String("span_id", sc.SpanID().String()))
+	}
+	return h.Handler.Handle(ctx, r)
+}
+
+func (h traceHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	has := h.hasTraceID
+	for _, a := range attrs {
+		has = has || a.Key == "trace_id"
+	}
+	return traceHandler{Handler: h.Handler.WithAttrs(attrs), hasTraceID: has}
+}
+
+func (h traceHandler) WithGroup(name string) slog.Handler {
+	return traceHandler{Handler: h.Handler.WithGroup(name), hasTraceID: h.hasTraceID}
 }

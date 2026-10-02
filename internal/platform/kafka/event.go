@@ -33,16 +33,26 @@ type Event struct {
 	Source string
 	// Time defaults to now.
 	Time time.Time
-	// Headers are extra headers (traceparent, from Phase 3's tracing).
+	// Headers are extra headers. Publish sets traceparent from the context;
+	// an event that already carries one keeps its trace (see startPublish).
 	Headers map[string]string
 }
 
-func (e Event) record() (*kgo.Record, error) {
+// withDefaults fills in a missing ID and checks the required fields.
+func (e Event) withDefaults() (Event, error) {
 	if e.Topic == "" || e.Key == "" || e.Type == "" || e.Source == "" {
-		return nil, errors.New("kafka: an event needs a topic, key, type and source")
+		return e, errors.New("kafka: an event needs a topic, key, type and source")
 	}
 	if e.ID == "" {
 		e.ID = uuid.Must(uuid.NewV7()).String()
+	}
+	return e, nil
+}
+
+func (e Event) record() (*kgo.Record, error) {
+	e, err := e.withDefaults()
+	if err != nil {
+		return nil, err
 	}
 	if e.Time.IsZero() {
 		e.Time = time.Now()

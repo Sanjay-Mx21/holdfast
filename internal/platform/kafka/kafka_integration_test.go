@@ -16,6 +16,8 @@ import (
 	dto "github.com/prometheus/client_model/go"
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/config"
 	"github.com/Sanjay-Mx21/holdfast/internal/testenv"
@@ -318,5 +320,50 @@ func TestProducerNeedsABroker(t *testing.T) {
 	defer cancel()
 	if _, err := NewProducer(ctx, testConfig(), "test"); err == nil {
 		t.Fatal("a producer connected to nothing")
+	}
+}
+
+// TestTraceFlowsThroughKafka: the handler runs in the publisher's trace, so a
+// request and everything it causes downstream are one trace.
+func TestTraceFlowsThroughKafka(t *testing.T) {
+	cfg := testenv.Kafka(t)
+	rec := recordSpans(t)
+	topic := testTopic(t, cfg, 1)
+	p, err := NewProducer(context.Background(), cfg, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	reqCtx, req := otel.Tracer("test").Start(context.Background(), "POST /v1/bookings")
+	if err := p.Publish(reqCtx, Event{Topic: topic, Key: "b1", Type: "booking.created.v1", Source: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	req.End()
+
+	var mu sync.Mutex
+	var handlerTrace trace.TraceID
+	h := func(ctx context.Context, _ Message) error {
+		mu.Lock()
+		defer mu.Unlock()
+		handlerTrace = trace.SpanContextFromContext(ctx).TraceID()
+		return nil
+	}
+	stop := runConsumer(t, cfg, ConsumerConfig{Group: groupName(), Topics: []string{topic}}, h, nil)
+	waitFor(t, "the message", func() bool { mu.Lock(); defer mu.Unlock(); return handlerTrace.IsValid() })
+	if err := stop(); err != nil {
+		t.Fatal(err)
+	}
+	if handlerTrace != req.SpanContext().TraceID() {
+		t.Fatal("the consumer's handler is not in the request's trace")
+	}
+	kinds := map[trace.SpanKind]bool{}
+	for _, s := range rec.Ended() {
+		if s.SpanContext().TraceID() == req.SpanContext().TraceID() {
+			kinds[s.SpanKind()] = true
+		}
+	}
+	if !kinds[trace.SpanKindProducer] || !kinds[trace.SpanKindConsumer] {
+		t.Fatalf("span kinds in the trace: %v, want producer and consumer", kinds)
 	}
 }

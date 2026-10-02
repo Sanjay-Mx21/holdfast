@@ -7,6 +7,9 @@ package httpx
 import (
 	"context"
 	"net/http"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Middleware wraps an http.Handler.
@@ -54,6 +57,12 @@ func (rt *Router) Handle(pattern string, h http.Handler) {
 	rt.mux.Handle(pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if ri, ok := r.Context().Value(routeKey{}).(*routeInfo); ok {
 			ri.pattern = pattern
+		}
+		// Name the server span after the route, never the raw path, so span
+		// names stay bounded like metric labels.
+		if span := trace.SpanFromContext(r.Context()); span.IsRecording() {
+			span.SetName(pattern)
+			span.SetAttributes(attribute.String("http.route", pattern))
 		}
 		h.ServeHTTP(w, r)
 	}))

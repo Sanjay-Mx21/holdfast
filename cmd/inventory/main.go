@@ -10,9 +10,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"os"
 	"time"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/Sanjay-Mx21/holdfast/internal/inventory"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/app"
@@ -23,6 +26,7 @@ import (
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/httpx"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/logging"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/metrics"
+	hfotel "github.com/Sanjay-Mx21/holdfast/internal/platform/otel"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/valkey"
 )
 
@@ -93,6 +97,17 @@ func run(ctx context.Context) error {
 	bi := buildinfo.Get()
 	log.Info("starting", "commit", bi.Commit, "go_version", bi.GoVersion)
 
+	shutdownTracing, exporting, err := hfotel.Setup(ctx, serviceName, bi.Version, cfg.Service.Environment)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = shutdownTracing(sctx) // flush buffered spans
+	}()
+	log.Info("tracing", "exporting", exporting)
+
 	reg := metrics.NewRegistry(serviceName)
 
 	rdb, err := valkey.New(ctx, cfg.Valkey, serviceName)
@@ -114,6 +129,8 @@ func run(ctx context.Context) error {
 		jwks := authn.NewJWKSClient(authn.JWKSOptions{
 			URL: cfg.AdmissionJWKSURL, Static: static,
 			RefreshEvery: cfg.JWKSRefreshInterval, MinRefresh: cfg.JWKSMinRefreshInterval,
+			// Fetches carry traceparent, so queue-svc's span joins the trace.
+			Client: &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)},
 		}, reg, log)
 		// Not fatal: queue-svc may start later. Readiness stays false until
 		// some key is known, and the first token with a new kid fetches again.
@@ -138,6 +155,7 @@ func run(ctx context.Context) error {
 	hc := health.New(2*time.Second, checks...)
 	httpMetrics := httpx.NewHTTPMetrics(reg)
 	public := httpx.NewRouter(
+		httpx.Trace(), // outermost: the span covers the whole request
 		httpx.RequestID(),
 		httpx.AccessLog(log, cfg.HTTP.AccessLogSuccess),
 		httpMetrics.Middleware(),

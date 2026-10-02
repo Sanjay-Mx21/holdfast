@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/twmb/franz-go/pkg/kgo"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/config"
 )
@@ -33,14 +34,32 @@ func NewProducer(ctx context.Context, cfg config.Kafka, clientID string) (*Produ
 // event IDs and rely on consumers dropping duplicates.
 func (p *Producer) Publish(ctx context.Context, events ...Event) error {
 	records := make([]*kgo.Record, 0, len(events))
+	spans := make([]trace.Span, 0, len(events))
+	defer func() {
+		for _, s := range spans {
+			s.End() // spans of records never sent (a validation failure)
+		}
+	}()
 	for _, e := range events {
+		e, err := e.withDefaults()
+		if err != nil {
+			return err
+		}
+		span, headers := startPublish(ctx, e)
+		spans = append(spans, span)
+		e.Headers = headers
 		r, err := e.record()
 		if err != nil {
 			return err
 		}
 		records = append(records, r)
 	}
-	if err := p.kc.ProduceSync(ctx, records...).FirstErr(); err != nil {
+	results := p.kc.ProduceSync(ctx, records...)
+	for i, res := range results {
+		endSpan(spans[i], res.Err)
+	}
+	spans = nil
+	if err := results.FirstErr(); err != nil {
 		return fmt.Errorf("kafka: publish: %w", err)
 	}
 	return nil
