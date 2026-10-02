@@ -6,6 +6,12 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-02
+
+The fair waiting room (milestone M2, build plan Phase 2): queue-svc, the NGINX
+edge, admission tokens trusted by inventory-svc through a JWKS, experiments E2
+and E6, and the decision records behind them (ADRs 0005 to 0007).
+
 ### Added
 
 - **queue-svc** (`cmd/queue`), the waiting-room service (Phase 2). Task 2.1:
@@ -120,6 +126,23 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
 - `prometheus/client_golang` upgraded from 1.23.2 to 1.24.1, proposed by
   Dependabot (#1).
 
+### Known issues
+
+- Experiment E2 was accepted at 30-second polling (50,000 users from join to
+  admission token, origin flat). The design's 3-second polling load did not fit
+  on the development laptop with k6 alongside, and join p99 was 203 ms against
+  the 150 ms SLO there; the design-scale run moves to Phase 6 (task 6.1), on
+  separate machines. See `loadtest/results/README.md`.
+- The queue does not yet limit admissions to the units left (oversubscription)
+  or mark itself `SOLD_OUT`; buyers admitted after the last unit get 409
+  `SOLD_OUT` from inventory-svc, and nothing oversells. Recommended for
+  Phase 3.
+- `make itest` is flaky while the `make up` stack is running, because
+  inventory-svc's sweeper also releases the tests' holds. Run
+  `docker compose stop inventory` first. CI is not affected.
+- Compose-built images report `version: dev` and `commit: unknown` on `/buildz`.
+- `holdfast-explained-simply.mdx` still uses the old invariant numbering.
+
 ## [0.1.0] - 2026-10-01
 
 Drop 1: the foundation and the inventory correctness core (milestones M0 and
@@ -182,5 +205,6 @@ M1), brought up and proven on real infrastructure (milestone M1.5).
 - Compose-built images report `version: dev` and `commit: unknown` on `/buildz`.
 - `holdfast-explained-simply.mdx` still uses the old invariant numbering.
 
-[Unreleased]: https://github.com/Sanjay-Mx21/holdfast/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Sanjay-Mx21/holdfast/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Sanjay-Mx21/holdfast/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0
