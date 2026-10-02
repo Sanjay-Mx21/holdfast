@@ -115,6 +115,8 @@ type Advance struct {
 	Admitted int64
 	// ActiveSessions counts unexpired session slots after this tick.
 	ActiveSessions int64
+	// QueueSize counts everyone in the queue (q:{E}:members).
+	QueueSize int64
 }
 
 // Status is an event's status document: the same for every client, so the

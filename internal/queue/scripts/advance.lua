@@ -15,18 +15,18 @@
 -- KEYS[4] q:{E}:members    KEYS[5] q:{E}:admitted KEYS[6] adm:{E}:sessions
 -- KEYS[7] q:{E}:status
 -- ARGV[1] the caller's epoch   ARGV[2] most people to admit this tick (from the rate)
--- Returns {code, admitted_up_to, admitted_now, active_sessions}
+-- Returns {code, admitted_up_to, admitted_now, active_sessions, queue_size}
 --    1 admitted some       0 nothing to admit (not OPEN, no budget, or nobody waiting)
 --   -1 fenced: the caller is not the current leader
 --   -2 not provisioned
-if redis.call('GET', KEYS[1]) ~= ARGV[1] then return {-1, 0, 0, 0} end
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then return {-1, 0, 0, 0, 0} end
 
 local cfg = redis.call('HMGET', KEYS[3], 'max_sessions', 'session_ttl_ms', 'opens_at_ms')
 local max_sessions = tonumber(cfg[1])
 local ttl = tonumber(cfg[2])
 local opens = tonumber(cfg[3])
 local state = redis.call('GET', KEYS[2])
-if not max_sessions or not ttl or not opens or not state then return {-2, 0, 0, 0} end
+if not max_sessions or not ttl or not opens or not state then return {-2, 0, 0, 0, 0} end
 
 local t = redis.call('TIME')
 local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
@@ -61,4 +61,4 @@ redis.call('SET', KEYS[7], cjson.encode({
   queueSize = total,
   updatedAtMs = now,
 }))
-return {code, cur, admitted_now, active}
+return {code, cur, admitted_now, active, total}
