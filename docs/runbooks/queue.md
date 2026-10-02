@@ -1,7 +1,7 @@
 # queue-svc runbook
 
 Operator procedures for the waiting room. Service reference:
-`docs/services/queue.md`. Grows with each Phase 2 task.
+`docs/services/queue.md`. Decisions behind it: ADRs 0005 to 0007.
 
 ## RB-Q-1 `PROVISION_CONFLICT`
 
