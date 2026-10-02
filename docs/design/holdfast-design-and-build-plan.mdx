@@ -1782,9 +1782,11 @@ Topics are created explicitly by `make topics`, because auto-creation is disable
 | `make event`, `make token` | Creates and provisions an event; mints a dev admission token |
 | `make run-inventory` | Runs inventory-svc on the host using `.env` |
 | `make e1` | Experiment E1 |
+| `make fairness-e6` | Experiment E6 (built in task 2.12) |
+| `make load-e2` | Experiment E2 (built in task 2.12) |
 | `make docker` | Builds the container images |
 
-**Planned additions:** `make load-e2` and `make fairness-e6` (Phase 2); `make topics` and `make gen` for `buf generate && sqlc generate` (Phase 3); `make web` (Phase 4); `make chaos-e3` and `make chaos-e4` (Phase 5); `make load-e5` (Phase 6).
+**Planned additions:** `make topics` and `make gen` for `buf generate && sqlc generate` (Phase 3); `make web` (Phase 4); `make chaos-e3` and `make chaos-e4` (Phase 5); `make load-e5` (Phase 6).
 
 ### 16.3 Container image
 
@@ -2056,15 +2058,15 @@ The dates are illustrative. The gates are not.
 - [x] 2.9 **NGINX.** Route `/v1/queue/` to queue-svc and hold paths to inventory-svc. Micro-cache `/v1/events/{id}/status` and `/availability` for one second, with `proxy_cache_lock on` and `proxy_cache_use_stale updating`.
 - [x] 2.10 **Metrics and dashboard.** Queue size, `admittedUpTo`, active sessions, admission rate, status-document age, leader epoch and join results, added to Grafana. *Built with the per-event gauges exported by the leader only (deleted when its term ends), the status age measured by the opener in every replica, and the dashboard HoldFast / Queue.*
 - [x] 2.11 **Tests.** Unit: admission math, token bucket, rank, the Spearman helper. Integration: join idempotency and no re-roll, the T0 switch, a stale epoch rejected by `advance.lua`, session expiry. A model test for F1 (nobody is admitted ahead of a lower rank). A failover test (two controllers, one killed). `testing/synctest` for the tick loop. *Built with the Spearman helper in `internal/stats`; the token bucket and rank tested against real Valkey, since they are Lua; the tests are listed in `docs/services/queue.md`. Designing the model test exposed that a claim on a slot past its expiry but not yet swept returned 500, and the timing review found controllers outliving their events; both fixed.*
-- [ ] 2.12 **Experiments.** E2: k6 ramps joins from 0 to maximum in 10 s while 50,000 virtual users poll status every 3 s with jitter; compare origin and edge request counts. E6: 100,000 pre-T0 joins with recorded join times; Spearman correlation close to 0 before T0 and exactly 1 after.
+- [x] 2.12 **Experiments.** E2: k6 ramps joins from 0 to maximum in 10 s while 50,000 virtual users poll status every 3 s with jitter; compare origin and edge request counts. E6: 100,000 pre-T0 joins with recorded join times; Spearman correlation close to 0 before T0 and exactly 1 after. *Built as `make fairness-e6` (`cmd/fairness`) and `make load-e2` (`loadtest/e2`). E6 passed (ρ = −0.0008 before T0, exactly 1 after). E2 models users as arrival rates rather than virtual users; the origin answered about 0.5 status requests per second whatever the edge served, and 50,000 users flowed from join to token at 30-second polling. The 3-second design load did not fit on the laptop with k6 alongside, and join p99 missed the 150 ms SLO; see `loadtest/results/README.md`.*
 - [ ] 2.13 **`holdfastctl`.** `queue provision` and `queue status`; extend `event create`.
 - [ ] 2.14 **Docs.** Queue service doc and runbook; ADR 0005 (lottery before T0, FIFO after), ADR 0006 (cached status polling instead of WebSockets or SSE), ADR 0007 (leader election with advisory locks plus fencing epochs); README status; architecture sections 3 to 5.
 
 **Exit criteria:**
 
-- [ ] 50,000 simulated users flow from join to admit, and origin status requests stay roughly flat while edge requests grow. *E2 results committed.*
+- [ ] 50,000 simulated users flow from join to admit, and origin status requests stay roughly flat while edge requests grow. *E2 results committed.* *Status 2026-10-02: met at 30-second polling (50,000 tokens; origin 5 requests per 10 s while the edge grew to 16,670); the 3-second design load needs a separate load generator, and join p99 was 203 ms against the 150 ms SLO. Left for the owner's review.*
 - [ ] Killing the leader hands over to the standby, and a test proves the stale leader's writes are rejected.
-- [ ] E6 shows correlation close to 0 for pre-T0 joiners and exactly 1 after T0.
+- [x] E6 shows correlation close to 0 for pre-T0 joiners and exactly 1 after T0. *ρ = −0.0008 and exactly 1 (`loadtest/results/`, 2026-10-02).*
 - [ ] In the end-to-end test, inventory accepts only queue-issued tokens, and E1 still passes.
 
 **Demo checkpoint:** a 30-second clip of the k6 stampede with the queue draining on Grafana.

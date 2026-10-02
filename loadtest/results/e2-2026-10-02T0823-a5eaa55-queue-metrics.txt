@@ -1,0 +1,234 @@
+holdfast_build_info{commit="unknown",go_version="go1.27.1",service="queue",version="dev"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /.well-known/jwks.json",le="0.001"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /.well-known/jwks.json",le="0.0025"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /.well-known/jwks.json",le="0.005"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /.well-known/jwks.json",le="0.01"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /.well-known/jwks.json",le="0.025"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /.well-known/jwks.json",le="0.05"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /.well-known/jwks.json",le="0.1"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /.well-known/jwks.json",le="0.25"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /.well-known/jwks.json",le="0.5"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /.well-known/jwks.json",le="1"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /.well-known/jwks.json",le="2.5"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /.well-known/jwks.json",le="5"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /.well-known/jwks.json",le="+Inf"} 1
+holdfast_http_request_duration_seconds_sum{route="GET /.well-known/jwks.json"} 0.000317968
+holdfast_http_request_duration_seconds_count{route="GET /.well-known/jwks.json"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/events/{eventID}/status",le="0.001"} 35
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/events/{eventID}/status",le="0.0025"} 70
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/events/{eventID}/status",le="0.005"} 86
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/events/{eventID}/status",le="0.01"} 88
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/events/{eventID}/status",le="0.025"} 89
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/events/{eventID}/status",le="0.05"} 90
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/events/{eventID}/status",le="0.1"} 90
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/events/{eventID}/status",le="0.25"} 90
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/events/{eventID}/status",le="0.5"} 90
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/events/{eventID}/status",le="1"} 90
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/events/{eventID}/status",le="2.5"} 90
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/events/{eventID}/status",le="5"} 90
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/events/{eventID}/status",le="+Inf"} 90
+holdfast_http_request_duration_seconds_sum{route="GET /v1/events/{eventID}/status"} 0.201404461
+holdfast_http_request_duration_seconds_count{route="GET /v1/events/{eventID}/status"} 90
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/admit",le="0.001"} 183
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/admit",le="0.0025"} 42466
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/admit",le="0.005"} 48095
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/admit",le="0.01"} 49409
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/admit",le="0.025"} 49957
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/admit",le="0.05"} 49984
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/admit",le="0.1"} 50000
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/admit",le="0.25"} 50000
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/admit",le="0.5"} 50000
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/admit",le="1"} 50000
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/admit",le="2.5"} 50000
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/admit",le="5"} 50000
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/admit",le="+Inf"} 50000
+holdfast_http_request_duration_seconds_sum{route="POST /v1/queue/{eventID}/admit"} 109.98857898400067
+holdfast_http_request_duration_seconds_count{route="POST /v1/queue/{eventID}/admit"} 50000
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/join",le="0.001"} 751
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/join",le="0.0025"} 15430
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/join",le="0.005"} 38199
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/join",le="0.01"} 43663
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/join",le="0.025"} 46459
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/join",le="0.05"} 47381
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/join",le="0.1"} 48243
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/join",le="0.25"} 49928
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/join",le="0.5"} 50000
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/join",le="1"} 50000
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/join",le="2.5"} 50000
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/join",le="5"} 50000
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/join",le="+Inf"} 50000
+holdfast_http_request_duration_seconds_sum{route="POST /v1/queue/{eventID}/join"} 563.2845832860015
+holdfast_http_request_duration_seconds_count{route="POST /v1/queue/{eventID}/join"} 50000
+holdfast_http_requests_in_flight 0
+holdfast_http_requests_total{code="200",route="GET /.well-known/jwks.json"} 1
+holdfast_http_requests_total{code="200",route="GET /v1/events/{eventID}/status"} 90
+holdfast_http_requests_total{code="200",route="POST /v1/queue/{eventID}/admit"} 50000
+holdfast_http_requests_total{code="202",route="POST /v1/queue/{eventID}/join"} 50000
+holdfast_queue_active_sessions{event="01a0f963-17d2-74ab-9983-061aa7ae3fbc"} 0
+holdfast_queue_active_sessions{event="01a0f976-1161-7366-8228-dbdf767304a1"} 0
+holdfast_queue_active_sessions{event="01a0f977-6254-788c-b9d1-45cd50dc3360"} 0
+holdfast_queue_active_sessions{event="01a0f978-bf0f-7813-a93f-97be0582d6d4"} 0
+holdfast_queue_active_sessions{event="01a0f985-81b4-7177-97b6-cc5b03025f0b"} 0
+holdfast_queue_active_sessions{event="01a0f987-b7c9-7ab9-baae-c79bc1e84c84"} 0
+holdfast_queue_active_sessions{event="01a0f989-c188-7283-88ef-ffb208cff116"} 0
+holdfast_queue_active_sessions{event="01a0f98b-eee1-755b-8f4c-bd32d7c76782"} 0
+holdfast_queue_active_sessions{event="01a0f996-bbc4-70c0-9491-84be08adb452"} 0
+holdfast_queue_active_sessions{event="01a0fb09-0b2a-752f-9ec4-562151006139"} 0
+holdfast_queue_active_sessions{event="01a0fbb6-3344-7696-b85d-bcd98ebb0947"} 50000
+holdfast_queue_active_sessions{event="161bd02e-9dc9-47d3-a388-86106b129353"} 0
+holdfast_queue_active_sessions{event="4e4045f9-dca9-4c73-85a0-06568897b770"} 0
+holdfast_queue_active_sessions{event="bd9bb2f5-0f18-4816-82f7-e58f9de0d509"} 0
+holdfast_queue_active_sessions{event="c8e6eb0b-0a3c-499e-aa87-60377b14d747"} 0
+holdfast_queue_active_sessions{event="f716bf8d-8204-4c4b-a167-97966c908d7c"} 0
+holdfast_queue_active_sessions{event="fd215d69-c8c9-4a64-a062-915554c2e700"} 0
+holdfast_queue_admission_leader{event="01a0f963-17d2-74ab-9983-061aa7ae3fbc"} 1
+holdfast_queue_admission_leader{event="01a0f976-1161-7366-8228-dbdf767304a1"} 1
+holdfast_queue_admission_leader{event="01a0f977-6254-788c-b9d1-45cd50dc3360"} 1
+holdfast_queue_admission_leader{event="01a0f978-bf0f-7813-a93f-97be0582d6d4"} 1
+holdfast_queue_admission_leader{event="01a0f985-81b4-7177-97b6-cc5b03025f0b"} 1
+holdfast_queue_admission_leader{event="01a0f987-b7c9-7ab9-baae-c79bc1e84c84"} 1
+holdfast_queue_admission_leader{event="01a0f989-c188-7283-88ef-ffb208cff116"} 1
+holdfast_queue_admission_leader{event="01a0f98b-eee1-755b-8f4c-bd32d7c76782"} 1
+holdfast_queue_admission_leader{event="01a0f996-bbc4-70c0-9491-84be08adb452"} 1
+holdfast_queue_admission_leader{event="01a0fb09-0b2a-752f-9ec4-562151006139"} 1
+holdfast_queue_admission_leader{event="01a0fbb6-3344-7696-b85d-bcd98ebb0947"} 1
+holdfast_queue_admission_leader{event="161bd02e-9dc9-47d3-a388-86106b129353"} 1
+holdfast_queue_admission_leader{event="4e4045f9-dca9-4c73-85a0-06568897b770"} 1
+holdfast_queue_admission_leader{event="bd9bb2f5-0f18-4816-82f7-e58f9de0d509"} 1
+holdfast_queue_admission_leader{event="c8e6eb0b-0a3c-499e-aa87-60377b14d747"} 1
+holdfast_queue_admission_leader{event="f716bf8d-8204-4c4b-a167-97966c908d7c"} 1
+holdfast_queue_admission_leader{event="fd215d69-c8c9-4a64-a062-915554c2e700"} 1
+holdfast_queue_admission_ticks_total{result="advanced"} 408
+holdfast_queue_admission_ticks_total{result="error"} 0
+holdfast_queue_admission_ticks_total{result="fenced"} 0
+holdfast_queue_admission_ticks_total{result="idle"} 12939
+holdfast_queue_admits_total{result="closed"} 0
+holdfast_queue_admits_total{result="error"} 0
+holdfast_queue_admits_total{result="expired"} 0
+holdfast_queue_admits_total{result="invalid"} 0
+holdfast_queue_admits_total{result="issued"} 50000
+holdfast_queue_admits_total{result="not_found"} 0
+holdfast_queue_admits_total{result="not_in_queue"} 0
+holdfast_queue_admits_total{result="not_your_turn"} 0
+holdfast_queue_admits_total{result="rate_limited"} 0
+holdfast_queue_admitted_total{event="01a0fbb6-3344-7696-b85d-bcd98ebb0947"} 50000
+holdfast_queue_admitted_up_to{event="01a0f963-17d2-74ab-9983-061aa7ae3fbc"} 6
+holdfast_queue_admitted_up_to{event="01a0f976-1161-7366-8228-dbdf767304a1"} 2
+holdfast_queue_admitted_up_to{event="01a0f977-6254-788c-b9d1-45cd50dc3360"} 1
+holdfast_queue_admitted_up_to{event="01a0f978-bf0f-7813-a93f-97be0582d6d4"} 1
+holdfast_queue_admitted_up_to{event="01a0f985-81b4-7177-97b6-cc5b03025f0b"} 2
+holdfast_queue_admitted_up_to{event="01a0f987-b7c9-7ab9-baae-c79bc1e84c84"} 3
+holdfast_queue_admitted_up_to{event="01a0f989-c188-7283-88ef-ffb208cff116"} 0
+holdfast_queue_admitted_up_to{event="01a0f98b-eee1-755b-8f4c-bd32d7c76782"} 1
+holdfast_queue_admitted_up_to{event="01a0f996-bbc4-70c0-9491-84be08adb452"} 25
+holdfast_queue_admitted_up_to{event="01a0fb09-0b2a-752f-9ec4-562151006139"} 3001
+holdfast_queue_admitted_up_to{event="01a0fbb6-3344-7696-b85d-bcd98ebb0947"} 50000
+holdfast_queue_admitted_up_to{event="161bd02e-9dc9-47d3-a388-86106b129353"} 35
+holdfast_queue_admitted_up_to{event="4e4045f9-dca9-4c73-85a0-06568897b770"} 2000
+holdfast_queue_admitted_up_to{event="bd9bb2f5-0f18-4816-82f7-e58f9de0d509"} 500
+holdfast_queue_admitted_up_to{event="c8e6eb0b-0a3c-499e-aa87-60377b14d747"} 300
+holdfast_queue_admitted_up_to{event="f716bf8d-8204-4c4b-a167-97966c908d7c"} 2
+holdfast_queue_admitted_up_to{event="fd215d69-c8c9-4a64-a062-915554c2e700"} 6
+holdfast_queue_joins_total{result="already_joined"} 0
+holdfast_queue_joins_total{result="closed"} 0
+holdfast_queue_joins_total{result="error"} 0
+holdfast_queue_joins_total{result="invalid"} 0
+holdfast_queue_joins_total{result="joined"} 50000
+holdfast_queue_joins_total{result="not_found"} 0
+holdfast_queue_joins_total{result="rate_limited_ip"} 0
+holdfast_queue_joins_total{result="rate_limited_user"} 0
+holdfast_queue_leader_epoch{event="01a0f963-17d2-74ab-9983-061aa7ae3fbc"} 31
+holdfast_queue_leader_epoch{event="01a0f976-1161-7366-8228-dbdf767304a1"} 30
+holdfast_queue_leader_epoch{event="01a0f977-6254-788c-b9d1-45cd50dc3360"} 28
+holdfast_queue_leader_epoch{event="01a0f978-bf0f-7813-a93f-97be0582d6d4"} 26
+holdfast_queue_leader_epoch{event="01a0f985-81b4-7177-97b6-cc5b03025f0b"} 23
+holdfast_queue_leader_epoch{event="01a0f987-b7c9-7ab9-baae-c79bc1e84c84"} 23
+holdfast_queue_leader_epoch{event="01a0f989-c188-7283-88ef-ffb208cff116"} 23
+holdfast_queue_leader_epoch{event="01a0f98b-eee1-755b-8f4c-bd32d7c76782"} 23
+holdfast_queue_leader_epoch{event="01a0f996-bbc4-70c0-9491-84be08adb452"} 22
+holdfast_queue_leader_epoch{event="01a0fb09-0b2a-752f-9ec4-562151006139"} 20
+holdfast_queue_leader_epoch{event="01a0fbb6-3344-7696-b85d-bcd98ebb0947"} 1
+holdfast_queue_leader_epoch{event="161bd02e-9dc9-47d3-a388-86106b129353"} 34
+holdfast_queue_leader_epoch{event="4e4045f9-dca9-4c73-85a0-06568897b770"} 33
+holdfast_queue_leader_epoch{event="bd9bb2f5-0f18-4816-82f7-e58f9de0d509"} 33
+holdfast_queue_leader_epoch{event="c8e6eb0b-0a3c-499e-aa87-60377b14d747"} 32
+holdfast_queue_leader_epoch{event="f716bf8d-8204-4c4b-a167-97966c908d7c"} 34
+holdfast_queue_leader_epoch{event="fd215d69-c8c9-4a64-a062-915554c2e700"} 34
+holdfast_queue_leader_terms_total 17
+holdfast_queue_max_sessions{event="01a0f963-17d2-74ab-9983-061aa7ae3fbc"} 100
+holdfast_queue_max_sessions{event="01a0f976-1161-7366-8228-dbdf767304a1"} 10000
+holdfast_queue_max_sessions{event="01a0f977-6254-788c-b9d1-45cd50dc3360"} 10000
+holdfast_queue_max_sessions{event="01a0f978-bf0f-7813-a93f-97be0582d6d4"} 10000
+holdfast_queue_max_sessions{event="01a0f985-81b4-7177-97b6-cc5b03025f0b"} 10000
+holdfast_queue_max_sessions{event="01a0f987-b7c9-7ab9-baae-c79bc1e84c84"} 10000
+holdfast_queue_max_sessions{event="01a0f989-c188-7283-88ef-ffb208cff116"} 10000
+holdfast_queue_max_sessions{event="01a0f98b-eee1-755b-8f4c-bd32d7c76782"} 10000
+holdfast_queue_max_sessions{event="01a0f996-bbc4-70c0-9491-84be08adb452"} 500
+holdfast_queue_max_sessions{event="01a0fb09-0b2a-752f-9ec4-562151006139"} 500
+holdfast_queue_max_sessions{event="01a0fbb6-3344-7696-b85d-bcd98ebb0947"} 50000
+holdfast_queue_max_sessions{event="161bd02e-9dc9-47d3-a388-86106b129353"} 50
+holdfast_queue_max_sessions{event="4e4045f9-dca9-4c73-85a0-06568897b770"} 10000
+holdfast_queue_max_sessions{event="bd9bb2f5-0f18-4816-82f7-e58f9de0d509"} 50
+holdfast_queue_max_sessions{event="c8e6eb0b-0a3c-499e-aa87-60377b14d747"} 10000
+holdfast_queue_max_sessions{event="f716bf8d-8204-4c4b-a167-97966c908d7c"} 10000
+holdfast_queue_max_sessions{event="fd215d69-c8c9-4a64-a062-915554c2e700"} 10000
+holdfast_queue_opened_total{by="join"} 0
+holdfast_queue_opened_total{by="opener"} 1
+holdfast_queue_opener_duration_seconds_bucket{le="0.0005"} 0
+holdfast_queue_opener_duration_seconds_bucket{le="0.001"} 0
+holdfast_queue_opener_duration_seconds_bucket{le="0.002"} 0
+holdfast_queue_opener_duration_seconds_bucket{le="0.004"} 12
+holdfast_queue_opener_duration_seconds_bucket{le="0.008"} 54
+holdfast_queue_opener_duration_seconds_bucket{le="0.016"} 97
+holdfast_queue_opener_duration_seconds_bucket{le="0.032"} 518
+holdfast_queue_opener_duration_seconds_bucket{le="0.064"} 735
+holdfast_queue_opener_duration_seconds_bucket{le="0.128"} 769
+holdfast_queue_opener_duration_seconds_bucket{le="0.256"} 775
+holdfast_queue_opener_duration_seconds_bucket{le="0.512"} 776
+holdfast_queue_opener_duration_seconds_bucket{le="1.024"} 780
+holdfast_queue_opener_duration_seconds_bucket{le="+Inf"} 780
+holdfast_queue_opener_duration_seconds_sum 27.47334058399997
+holdfast_queue_opener_duration_seconds_count 780
+holdfast_queue_opener_runs_total{result="error"} 0
+holdfast_queue_opener_runs_total{result="ok"} 780
+holdfast_queue_position_lookups_total{result="error"} 0
+holdfast_queue_position_lookups_total{result="invalid"} 0
+holdfast_queue_position_lookups_total{result="not_found"} 0
+holdfast_queue_position_lookups_total{result="not_in_queue"} 0
+holdfast_queue_position_lookups_total{result="randomizing"} 0
+holdfast_queue_position_lookups_total{result="ranked"} 0
+holdfast_queue_position_lookups_total{result="rate_limited"} 0
+holdfast_queue_size{event="01a0f963-17d2-74ab-9983-061aa7ae3fbc"} 6
+holdfast_queue_size{event="01a0f976-1161-7366-8228-dbdf767304a1"} 2
+holdfast_queue_size{event="01a0f977-6254-788c-b9d1-45cd50dc3360"} 1
+holdfast_queue_size{event="01a0f978-bf0f-7813-a93f-97be0582d6d4"} 1
+holdfast_queue_size{event="01a0f985-81b4-7177-97b6-cc5b03025f0b"} 2
+holdfast_queue_size{event="01a0f987-b7c9-7ab9-baae-c79bc1e84c84"} 3
+holdfast_queue_size{event="01a0f989-c188-7283-88ef-ffb208cff116"} 0
+holdfast_queue_size{event="01a0f98b-eee1-755b-8f4c-bd32d7c76782"} 1
+holdfast_queue_size{event="01a0f996-bbc4-70c0-9491-84be08adb452"} 25
+holdfast_queue_size{event="01a0fb09-0b2a-752f-9ec4-562151006139"} 3001
+holdfast_queue_size{event="01a0fbb6-3344-7696-b85d-bcd98ebb0947"} 50000
+holdfast_queue_size{event="161bd02e-9dc9-47d3-a388-86106b129353"} 35
+holdfast_queue_size{event="4e4045f9-dca9-4c73-85a0-06568897b770"} 2000
+holdfast_queue_size{event="bd9bb2f5-0f18-4816-82f7-e58f9de0d509"} 500
+holdfast_queue_size{event="c8e6eb0b-0a3c-499e-aa87-60377b14d747"} 300
+holdfast_queue_size{event="f716bf8d-8204-4c4b-a167-97966c908d7c"} 2
+holdfast_queue_size{event="fd215d69-c8c9-4a64-a062-915554c2e700"} 6
+holdfast_queue_status_age_seconds{event="01a0f963-17d2-74ab-9983-061aa7ae3fbc"} 0.220016618
+holdfast_queue_status_age_seconds{event="01a0f976-1161-7366-8228-dbdf767304a1"} 0.238161307
+holdfast_queue_status_age_seconds{event="01a0f977-6254-788c-b9d1-45cd50dc3360"} 0.226321791
+holdfast_queue_status_age_seconds{event="01a0f978-bf0f-7813-a93f-97be0582d6d4"} 0.224460532
+holdfast_queue_status_age_seconds{event="01a0f985-81b4-7177-97b6-cc5b03025f0b"} 0.223612427
+holdfast_queue_status_age_seconds{event="01a0f987-b7c9-7ab9-baae-c79bc1e84c84"} 0.226756143
+holdfast_queue_status_age_seconds{event="01a0f989-c188-7283-88ef-ffb208cff116"} 0.232898617
+holdfast_queue_status_age_seconds{event="01a0f98b-eee1-755b-8f4c-bd32d7c76782"} 0.225043583
+holdfast_queue_status_age_seconds{event="01a0f996-bbc4-70c0-9491-84be08adb452"} 0.236179117
+holdfast_queue_status_age_seconds{event="01a0fb09-0b2a-752f-9ec4-562151006139"} 0.247470313
+holdfast_queue_status_age_seconds{event="01a0fbb6-3344-7696-b85d-bcd98ebb0947"} 0.245682193
+holdfast_queue_status_age_seconds{event="161bd02e-9dc9-47d3-a388-86106b129353"} 0.225435804
+holdfast_queue_status_age_seconds{event="4e4045f9-dca9-4c73-85a0-06568897b770"} 0.231574425
+holdfast_queue_status_age_seconds{event="bd9bb2f5-0f18-4816-82f7-e58f9de0d509"} 0.219729836
+holdfast_queue_status_age_seconds{event="c8e6eb0b-0a3c-499e-aa87-60377b14d747"} 0.223871774
+holdfast_queue_status_age_seconds{event="f716bf8d-8204-4c4b-a167-97966c908d7c"} 0.219081248
+holdfast_queue_status_age_seconds{event="fd215d69-c8c9-4a64-a062-915554c2e700"} 0.22327633

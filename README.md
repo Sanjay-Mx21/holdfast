@@ -52,6 +52,8 @@ curl -s -X POST $EDGE/v1/events/$EVENT/holds \
   -H 'Content-Type: application/json' -d '{"quantity":2}'
 
 make e1                                          # contention experiment against the local stack
+make fairness-e6                                 # fairness of the queue order (E6)
+make load-e2                                     # k6 stampede on the waiting room through the edge (E2)
 ```
 
 `make -s token EVENT=$EVENT` still mints a token directly, bypassing the waiting
@@ -97,6 +99,8 @@ client (Phase 4); then chaos drills, load tests and benchmarks (Phases 5-7).
 | `make test` | Unit tests with the race detector | Nothing |
 | `make itest` | Integration tests against real PostgreSQL and Valkey: script behaviour, concurrency, a randomized model check, the guard, migrations | Docker |
 | `make e1` | Contention experiment; exits non-zero on any invariant violation | The local stack |
+| `make fairness-e6` | Fairness experiment: lottery before T0, arrival order after it; exits non-zero if the order is not fair | The local stack |
+| `make load-e2` | Waiting-room stampede through the edge with k6; results in `loadtest/results/` | The local stack (`make up`) |
 | `make lint` | golangci-lint and migration checks | golangci-lint (`make tools`) |
 
 Integration tests read `HOLDFAST_TEST_VALKEY_ADDR` and

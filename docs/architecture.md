@@ -54,7 +54,8 @@ door, the role a CDN plays in production:
   for one second with `proxy_cache_lock` (concurrent misses wait for one
   origin fetch), keyed by path only, serving stale copies while updating or
   if the origin fails;
-- rate-limits `/v1/queue/` per client address (10/s, burst 20);
+- rate-limits `/v1/queue/` per client address (10/s, burst 20; the zone is in
+  `deploy/nginx/edge-limits.conf`, which `make load-e2` swaps out);
 - overwrites `X-Forwarded-For`, `X-Real-IP` and `X-Request-Id`. It sits on its
   own network at a fixed address that queue-svc trusts (`TRUSTED_PROXIES`).
 
@@ -170,6 +171,12 @@ connection; every 250 ms it runs `advance.lua`, which refuses a stale epoch
   migration-runner guarantees.
 - E1 (`make e1`, and every CI run): 50,000 buyers for 1,000 units, plus
   10,000 concurrent confirmations through the guard.
+- E6 (`make fairness-e6`): 100,000 joins before T0 and 20,000 after,
+  checking with Spearman's rank correlation that join time does not predict
+  a lottery position and that positions after T0 are the arrival order.
+- E2 (`make load-e2`): a k6 stampede through the edge, comparing the status
+  polls the edge answers with those that reach queue-svc. Results and their
+  limits are in `loadtest/results/README.md`.
 
 ## 12. Adding a service
 

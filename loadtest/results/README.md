@@ -71,3 +71,122 @@ guard confirmations median 1,111 per second (range 561 to 1,168).
   design: the guard serialises them. It is a stress figure, not a checkout time.
 - A shared laptop is noisy. Repeat on a quiet or dedicated machine before
   publishing any latency number.
+
+## E6 fairness, 2026-10-02 (task 2.12)
+
+**Result: PASS.** Before T0, join time did not predict queue position
+(Spearman's ρ = −0.0008 over 100,000 joiners; the pass limit is |ρ| < 0.0127,
+four standard errors). After T0, position was exactly the arrival order
+(ρ = 1 over 10,000 joiners), and every one of them stood behind every
+lottery joiner.
+
+| File | Content |
+|---|---|
+| `e6-2026-10-02T0820-a5eaa55.log` | Output of `make fairness-e6` |
+| `e6-2026-10-02T0820-a5eaa55.json` | The same report as JSON |
+
+### Method
+
+- Commit `a5eaa55`, `make fairness-e6` (`cmd/fairness`, defaults), at 13:50 IST
+  against the local `make up` stack's Valkey. It calls the queue service and
+  its Lua scripts directly, like E1, so the HTTP rate limits play no part:
+  E6 tests the order, not the front door.
+- 100,000 users join concurrently (256 in flight) before T0, each with its send
+  time recorded; the tool waits until Valkey's clock passes T0; 10,000 users
+  join one at a time; 10,000 more join concurrently. Positions are then read
+  through the service, as a client would.
+
+| Phase | Joins | Rate | Join p99 | Spearman ρ (send time, position) | Earliest tenth in the first tenth |
+|---|---|---|---|---|---|
+| Before T0, concurrent | 100,000 | 14,621/s | 57.5 ms | −0.000775 | 10.2% (a fair lottery: 10%) |
+| After T0, one at a time | 10,000 | 4,195/s | 0.55 ms | exactly 1 | 100% |
+| After T0, concurrent (reported only) | 10,000 | 28,539/s | 16.0 ms | 0.999637 | 99.3% |
+
+### Caveats
+
+- "Exactly 1" needs the client's order to be the arrival order, so those joins
+  go one at a time. With many clients at once, a send time taken by the client
+  can disagree with the order Valkey received the joins in by the time a request
+  is in flight; the concurrent phase shows how much (ρ = 0.9996). The server's
+  arrival order itself is FIFO by construction (`join.lua`) and pinned by the
+  F1 model test.
+- One run is evidence, not a distribution. ρ for a fair lottery varies from run
+  to run with standard error 1/√(n−1) ≈ 0.0032; this run's −0.0008 is well
+  inside that.
+
+## E2 waiting-room stampede, 2026-10-02 (task 2.12)
+
+**Result: the edge works as designed; the laptop cannot generate the design
+load.** In both runs the origin answered the status document 4 to 6 times per
+10 seconds, about 0.5 requests per second, whatever the edge served: from
+1,478 to 81,434 polls per 10 seconds. At the sustainable load, all 50,000
+simulated users flowed from join to admission token. Join latency missed the
+150 ms p99 SLO in both runs (203 ms and 518 ms).
+
+| File | Content |
+|---|---|
+| `e2-2026-10-02T0823-a5eaa55.log`, `-summary.json`, `-queue-metrics.txt` | Run A, the completion run: k6 output and summary, queue-svc's metrics at the end |
+| `e2-2026-10-02T0821-a5eaa55.log`, `-summary.json`, `-queue-metrics.txt` | Run B, the design-scale attempt |
+
+### Method
+
+- Commit `a5eaa55`, `make load-e2` (`loadtest/e2/run.sh` and
+  `waiting-room.js`), at 13:51 and 13:53 IST, against the local `make up` stack,
+  with Windows kept awake for the duration (see Caveats).
+- The event opens 8 seconds before k6 starts, so every join is after T0. Joins
+  ramp from 0 to JOIN_PEAK per second in 10 s and hold there until USERS have
+  joined. Every joined user polls `GET /v1/events/{id}/status` through the edge
+  every POLL_EVERY seconds, so the polls grow with the queue. Once admission has
+  reached them, users claim their turn (`POST /v1/queue/{id}/admit`), asking again
+  once a second while it is not yet theirs.
+- k6 runs in a container on the edge network and talks to NGINX directly, as a
+  CDN would. The per-IP limits are switched off for the run, because one load
+  generator is one IP; the per-user limits stay on.
+- Edge counts are the status responses k6 received. Origin counts come from
+  queue-svc's own request counter, read once a second by a sampler in the same
+  k6 run. Both are kept per 10-second window.
+- Users are arrival rates, not 50,000 virtual users: one iteration is one
+  request by some user. 50,000 k6 virtual users would need tens of gigabytes.
+
+| | Run A (completion) | Run B (design scale) |
+|---|---|---|
+| Users, join peak, admission rate, poll interval | 50,000, 1,000/s, 500/s, 30 s | 50,000, 2,000/s, 1,000/s, 3 s |
+| Requests served, average | 1,956/s | 5,672/s |
+| Iterations k6 could not start (`dropped_iterations`) | 128 | 340,140 |
+| Joined, and tokens issued | **50,000 and 50,000** | 43,856 and 43,856 |
+| Claims refused | 0 | 1,746, all `NOT_IN_QUEUE` (users whose joins were dropped) |
+| Status polls at the edge | 253,343 | 483,366 |
+| Status requests at the origin | 90 (5 in every 10 s window) | 51 (4 to 6 per window) |
+| Polls per origin request | 2,814 overall, 3,334 at the plateau | 9,477 overall, up to 13,572 per window |
+| Join p50, p95, p99 (k6) | 5.0, 83.9, **203.3** ms | 162.9, 377.5, **518.4** ms |
+| Join requests over 100 ms inside queue-svc | 3.5% | 61% |
+
+Run A's edge polls per 10 s window climb with the queue (1,478, 4,455,
+7,432, 10,400, 13,383, 16,128, then about 16,670 for the rest of the run)
+while the origin count stays at 5 in every window.
+
+### Caveats
+
+- **The design load did not fit on this laptop.** 50,000 users polling every
+  3 s is about 16,700 requests per second on top of the joins. With the stack
+  and k6 sharing 12 threads and 7.6 GB, the most served was about 5,700 per
+  second (in profiling runs k6 alone used 2 to 4.6 cores); k6 dropped 340,140 of the
+  planned iterations in run B. Run A keeps 50,000 users but polls every 30 s.
+  The design-scale run needs a separate load generator (design doc 13.3).
+- **The join SLO was missed in both runs.** queue-svc's own latency histogram
+  shows the tail is at the origin: in run A, 87% of joins took under 10 ms
+  inside queue-svc but 3.5% took over 100 ms. A CPU profile taken during the
+  join phase (not committed) found no hot spot in HoldFast's code: about a third
+  of queue-svc's CPU went to system calls and another third to the Go scheduler
+  waiting for CPU, on a host where k6, NGINX, queue-svc and Valkey compete for
+  the same cores. The SLO has to be checked on a host that does not also run
+  the load generator.
+- The origin sees about one status request every 2 seconds rather than every
+  second: NGINX's one-second entries plus `proxy_cache_background_update` refresh
+  in the background, so the origin is asked roughly once per expiry cycle.
+- **An earlier attempt is not in this folder.** At 13:20 IST, during a run on
+  uncommitted code, Windows entered Modern Standby and froze the stack and the
+  load generator for 17 minutes; on resume, Valkey's clock had moved on and
+  thousands of session slots had expired. That run was discarded (progress log
+  E10), and the recorded runs held Windows awake with `SetThreadExecutionState`
+  for their duration. Earlier trial runs on uncommitted code were discarded too.

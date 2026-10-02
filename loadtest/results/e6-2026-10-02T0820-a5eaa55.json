@@ -1,0 +1,87 @@
+{
+  "eventId": "01a0fbb3-413c-7ba5-9aae-0ce655f050c6",
+  "started": "2026-10-02T08:20:23Z",
+  "phases": [
+    {
+      "name": "before T0 (concurrent)",
+      "joins": 100000,
+      "concurrency": 256,
+      "elapsedMs": 6839.313,
+      "joinsPerSecond": 14621.350212199744,
+      "latencyMs": {
+        "max": 200.563,
+        "p50": 14.862,
+        "p95": 33.546,
+        "p99": 57.463
+      },
+      "spearman": -0.0007754031912803551,
+      "firstDecileStay": 0.1015,
+      "minRank": 1,
+      "maxRank": 100000
+    },
+    {
+      "name": "after T0 (one at a time)",
+      "joins": 10000,
+      "concurrency": 1,
+      "elapsedMs": 2384.036,
+      "joinsPerSecond": 4194.566820884837,
+      "latencyMs": {
+        "max": 4.821,
+        "p50": 0.211,
+        "p95": 0.412,
+        "p99": 0.55
+      },
+      "spearman": 1,
+      "firstDecileStay": 1,
+      "minRank": 100001,
+      "maxRank": 110000
+    },
+    {
+      "name": "after T0 (concurrent, reported only)",
+      "joins": 10000,
+      "concurrency": 256,
+      "elapsedMs": 350.396,
+      "joinsPerSecond": 28539.125624376495,
+      "latencyMs": {
+        "max": 20.903,
+        "p50": 8.489,
+        "p95": 13.628,
+        "p99": 15.974
+      },
+      "spearman": 0.9996369466861517,
+      "firstDecileStay": 0.993,
+      "minRank": 110001,
+      "maxRank": 120000
+    }
+  ],
+  "checks": [
+    {
+      "name": "every join succeeded",
+      "ok": true,
+      "detail": "0 errors"
+    },
+    {
+      "name": "every pre-T0 joiner got a lottery position",
+      "ok": true
+    },
+    {
+      "name": "every post-T0 joiner got an arrival-order position",
+      "ok": true
+    },
+    {
+      "name": "pre-T0: join time does not predict position",
+      "ok": true,
+      "detail": "Spearman -0.00078, want |rho| \u003c 0.01265 (4 standard errors for n = 100000)"
+    },
+    {
+      "name": "post-T0: position is exactly the arrival order",
+      "ok": true,
+      "detail": "Spearman 1, want exactly 1"
+    },
+    {
+      "name": "every post-T0 joiner stands behind every pre-T0 joiner",
+      "ok": true,
+      "detail": "pre-T0 ranks 1 to 100000, post-T0 ranks from 100001"
+    }
+  ]
+}
