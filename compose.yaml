@@ -119,6 +119,7 @@ services:
       POSTGRES_DSN: postgres://holdfast:holdfast@postgres:5432/holdfast?sslmode=disable
       INVENTORY_GRPC_ADDR: inventory:7070
       SERVICE_PRIVATE_KEY_FILE: /keys/booking.key
+      KAFKA_BROKERS: kafka:9092 # the outbox relay publishes booking events
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     networks: [default, edge]
     ports:
@@ -129,6 +130,7 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       holdfastctl: { condition: service_completed_successfully }
+      kafka-topics: { condition: service_completed_successfully }
       inventory: { condition: service_started }
     restart: unless-stopped
 
