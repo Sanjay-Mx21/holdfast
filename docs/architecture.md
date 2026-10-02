@@ -47,7 +47,8 @@ Each service listens on two ports:
 
 Locally, `compose.yaml` runs PostgreSQL 18, Valkey 9.1, a one-shot migration
 job, Kafka 4.3 (KRaft, with a one-shot topic job and Redpanda Console),
-inventory-svc, queue-svc, the NGINX edge, Prometheus and Grafana.
+inventory-svc, queue-svc, the NGINX edge, Prometheus, Grafana, the
+OpenTelemetry Collector and Jaeger.
 
 **The edge** (`deploy/nginx/nginx.conf`, host port 8088) is the buyers' front
 door, the role a CDN plays in production:
@@ -200,7 +201,13 @@ connection; every 250 ms it runs `advance.lua`, which refuses a stale epoch
 - **Health:** `/livez` never checks dependencies. `/readyz` checks Valkey (and,
   on inventory-svc with a JWKS URL, that some admission-token key is known) and
   returns 503 from the moment SIGTERM arrives.
-- Tracing arrives with the first cross-service call (ADR 0004).
+- **Traces** (from Phase 3, `internal/platform/otel`): every public request
+  gets a server span named after its route pattern, continuing the caller's
+  W3C `traceparent`; Kafka events carry `traceparent`, and consumers continue
+  the producer's trace, so a purchase is one trace across asynchronous hops;
+  Valkey commands get spans only inside a trace. Spans go over OTLP to the
+  OpenTelemetry Collector, which forwards them to Jaeger
+  (http://localhost:16686). Log lines carry `trace_id` and `span_id`.
 
 ## 10. Failure modes
 
