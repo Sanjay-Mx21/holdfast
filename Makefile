@@ -6,7 +6,7 @@ VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev
 COMMIT   ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 PKG      := github.com/Sanjay-Mx21/holdfast
 LDFLAGS  := -s -w -X $(PKG)/internal/platform/buildinfo.Version=$(VERSION) -X $(PKG)/internal/platform/buildinfo.Commit=$(COMMIT)
-BINARIES := inventory queue holdfastctl contention
+BINARIES := inventory queue holdfastctl contention fairness
 IMAGES   := inventory queue holdfastctl
 GOLANGCI_LINT_VERSION := v2.14.0
 
@@ -68,7 +68,7 @@ down: ## Stop the stack (keeps data volumes)
 	docker compose down
 
 clean: ## Stop the stack, delete volumes and build output
-	docker compose down -v; rm -rf bin coverage.out coverage.html e1-results.json
+	docker compose down -v; rm -rf bin coverage.out coverage.html e1-results.json e6-results.json
 
 migrate: ## Apply migrations to the local database
 	$(GO) run ./cmd/holdfastctl migrate --dsn "$(HOLDFAST_TEST_POSTGRES_DSN)"
@@ -88,7 +88,13 @@ run-inventory: ## Run inventory-svc on the host using .env
 e1: ## Experiment E1: contention against local Valkey and PostgreSQL
 	$(GO) run ./cmd/contention -mode all -valkey "$(HOLDFAST_TEST_VALKEY_ADDR)" -dsn "$(HOLDFAST_TEST_POSTGRES_DSN)" -json e1-results.json
 
+fairness-e6: ## Experiment E6: fairness of the queue order (lottery before T0, FIFO after)
+	$(GO) run ./cmd/fairness -valkey "$(HOLDFAST_TEST_VALKEY_ADDR)" -json e6-results.json
+
+load-e2: ## Experiment E2: k6 stampede on the waiting room through the edge (needs make up and k6)
+	bash loadtest/e2/run.sh
+
 docker: ## Build container images for the deployable binaries
 	@for s in $(IMAGES); do docker build --build-arg SERVICE=$$s --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) -t holdfast/$$s:$(VERSION) . || exit 1; done
 
-.PHONY: help deps deps-upgrade tools fmt vet lint test itest cover build keys infra up down clean migrate event token run-inventory e1 docker
+.PHONY: help deps deps-upgrade tools fmt vet lint test itest cover build keys infra up down clean migrate event token run-inventory e1 fairness-e6 load-e2 docker

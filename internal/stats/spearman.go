@@ -4,6 +4,7 @@ package stats
 import (
 	"errors"
 	"math"
+	"slices"
 	"sort"
 )
 
@@ -27,8 +28,24 @@ func Spearman(x, y []float64) (float64, error) {
 	if len(x) < 2 {
 		return 0, ErrTooFew
 	}
-	return pearson(Ranks(x), Ranks(y))
+	rx, ry := Ranks(x), Ranks(y)
+	// Identical or exactly reversed ranks are a perfect correlation; say so
+	// exactly, rather than as 1 minus a rounding error for large n.
+	same, reversed := true, true
+	for i := range rx {
+		same = same && rx[i] == ry[i]
+		reversed = reversed && rx[i]+ry[i] == float64(len(rx)+1)
+	}
+	switch {
+	case same && !isConstant(rx):
+		return 1, nil
+	case reversed && !isConstant(rx):
+		return -1, nil
+	}
+	return pearson(rx, ry)
 }
+
+func isConstant(r []float64) bool { return slices.Min(r) == slices.Max(r) }
 
 // Ranks returns the 1-based rank of every value in v, in v's order. Tied
 // values share the average of the ranks they span: Ranks([10 20 20 30]) is

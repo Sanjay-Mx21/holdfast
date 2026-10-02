@@ -463,6 +463,29 @@ func TestOpenUnprovisioned(t *testing.T) {
 	mustErr(t, "open unprovisioned", err, ErrEventNotFound)
 }
 
+func TestPurgeRemovesEveryKeyAndTheWorkListEntry(t *testing.T) {
+	f := newFixture(t)
+	f.provisionAt(t, time.Now().Add(-time.Second))
+	if _, err := f.svc.Join(ctx, f.eventID, uuid.NewString()); err != nil {
+		t.Fatal(err)
+	}
+	epoch, _ := f.store.NewTerm(ctx, f.eventID)
+	_, _ = f.store.Advance(ctx, f.eventID, epoch, 1)
+	// On the work list only for the moment it takes to purge, so a running
+	// queue-svc has no time to start a controller for it.
+	if err := f.rdb.SAdd(ctx, eventsKey, f.eventID).Err(); err != nil {
+		t.Fatal(err)
+	}
+	mustErr(t, "purge", f.store.Purge(ctx, f.eventID), nil)
+	k := keysFor(f.eventID)
+	n, err := f.rdb.Exists(ctx, k.config(), k.state(), k.members(), k.seq(), k.admitted(), k.status(), k.epoch(), k.sessions()).Result()
+	mustErr(t, "exists", err, nil)
+	mustEqual(t, "keys left after purge", n, int64(0))
+	listed, _ := f.rdb.SIsMember(ctx, eventsKey, f.eventID).Result()
+	mustEqual(t, "still on the work list", listed, false)
+	mustErr(t, "purging again", f.store.Purge(ctx, f.eventID), nil)
+}
+
 func TestProvisionRegistersEventForTheOpener(t *testing.T) {
 	f := newFixture(t)
 	if _, err := f.svc.Provision(ctx, f.eventID, validConfig()); err != nil {

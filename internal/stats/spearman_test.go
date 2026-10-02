@@ -84,3 +84,21 @@ func TestSpearmanErrors(t *testing.T) {
 		t.Fatalf("constant series: %v, want ErrConstant", err)
 	}
 }
+
+func TestSpearmanPerfectIsExactForLargeN(t *testing.T) {
+	// Pearson's formula on 100,000 ranks rounds to 1 - 1e-16; E6 must be
+	// able to report "exactly 1".
+	n := 100_000
+	x, y, z := make([]float64, n), make([]float64, n), make([]float64, n)
+	for i := range n {
+		x[i] = float64(i)
+		y[i] = float64(i) * 3
+		z[i] = -float64(i)
+	}
+	if r, err := Spearman(x, y); err != nil || r != 1 {
+		t.Fatalf("perfect agreement: %v %v, want exactly 1", r, err)
+	}
+	if r, err := Spearman(x, z); err != nil || r != -1 {
+		t.Fatalf("perfect reversal: %v %v, want exactly -1", r, err)
+	}
+}

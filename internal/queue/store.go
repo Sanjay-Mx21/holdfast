@@ -268,6 +268,20 @@ func (s *Store) StatusUpdatedAt(ctx context.Context, eventID string) (time.Time,
 	return time.UnixMilli(d.UpdatedAtMs), true, nil
 }
 
+// Purge deletes every key of an event and takes it off the work list, so
+// every replica's opener and admission controller let it go. For tests and
+// tooling only: never run it against an event that is on sale.
+func (s *Store) Purge(ctx context.Context, eventID string) error {
+	if err := s.rdb.SRem(ctx, eventsKey, eventID).Err(); err != nil {
+		return fmt.Errorf("queue: purge: %w", err)
+	}
+	k := keysFor(eventID)
+	if err := s.rdb.Unlink(ctx, k.config(), k.state(), k.members(), k.seq(), k.admitted(), k.status(), k.epoch(), k.sessions()).Err(); err != nil {
+		return fmt.Errorf("queue: purge: %w", err)
+	}
+	return nil
+}
+
 // Events lists provisioned events (the opener's work list).
 func (s *Store) Events(ctx context.Context) ([]string, error) {
 	ids, err := s.rdb.SMembers(ctx, eventsKey).Result()
