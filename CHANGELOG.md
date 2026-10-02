@@ -73,6 +73,11 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
   freezes against a reference model; the leader's tick loop tested under
   `testing/synctest`; `internal/stats` with Spearman's rank correlation for
   experiment E6.
+- **`holdfastctl queue provision` and `queue status`** (task 2.13): provision
+  an existing event's waiting room (opening time from PostgreSQL), and see its
+  state, size, admission, sessions, leader and status-document age at a
+  glance (`--json` too). Runbook RB-Q-8: putting a queue back after Valkey
+  lost it.
 - **Experiments E6 and E2** (task 2.12): `make fairness-e6` (`cmd/fairness`)
   checks that join time does not predict a lottery position and that
   positions after T0 are the arrival order; `make load-e2` (`loadtest/e2`)

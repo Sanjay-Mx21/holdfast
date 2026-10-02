@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -47,8 +48,13 @@ func commands() []command {
 		{"event create", "create an event in PostgreSQL and provision its inventory and queue", cmdEventCreate},
 		{"inventory provision", "provision or rebuild an event's Valkey inventory from PostgreSQL", cmdInventoryProvision},
 		{"inventory status", "show an event's live availability", cmdInventoryStatus},
+		{"queue provision", "provision an event's waiting room (opening time from PostgreSQL by default)", cmdQueueProvision},
+		{"queue status", "show an event's waiting room: state, size, admission, sessions, leader", cmdQueueStatus},
 	}
 }
+
+// stdout is where commands print their results (tests replace it).
+var stdout io.Writer = os.Stdout
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -237,9 +243,7 @@ func cmdEventCreate(ctx context.Context, args []string) error {
 	perUser := fs.Int("per-user-limit", 4, "maximum units per user")
 	price := fs.Int64("price-paise", 250000, "unit price in paise")
 	opens := fs.String("opens-at", "", "sale opening time, RFC 3339 (default: now)")
-	rate := fs.Int("admission-rate", 83, "queue: buyers admitted per second")
-	sessions := fs.Int("max-sessions", 10_000, "queue: maximum concurrent checkout sessions")
-	sessionTTL := fs.Duration("session-ttl", 10*time.Minute, "queue: lifetime of an admitted buyer's session")
+	qf := addQueueFlags(fs)
 	noProvision := fs.Bool("no-provision", false, "only write PostgreSQL; provision Valkey later")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -252,7 +256,7 @@ func cmdEventCreate(ctx context.Context, args []string) error {
 		}
 		opensAt = t
 	}
-	qcfg := queue.EventConfig{OpensAt: opensAt, AdmissionRate: *rate, MaxSessions: *sessions, SessionTTL: *sessionTTL}
+	qcfg := qf.config(opensAt)
 	// Check the queue settings before writing anything, so a bad flag never
 	// leaves an event in PostgreSQL that cannot be put on sale.
 	if err := qcfg.Validate(); err != nil {
@@ -344,16 +348,162 @@ func provisionQueue(ctx context.Context, addrs, eventID string, cfg queue.EventC
 	}
 	defer func() { _ = rdb.Close() }()
 	created, err := queue.NewService(queue.NewStore(rdb)).Provision(ctx, eventID, cfg)
+	if errors.Is(err, queue.ErrProvisionConflict) {
+		return fmt.Errorf("%w: a queue's settings are fixed once provisioned; see 'holdfastctl queue status --event %s'", err, eventID)
+	}
 	if err != nil {
 		return err
 	}
 	if created {
-		fmt.Printf("queue provisioned: opens %s, %d admissions/s, %d sessions of %s, state PRE\n",
+		fmt.Fprintf(stdout, "queue provisioned: opens %s, %d admissions/s, %d sessions of %s, state PRE\n",
 			cfg.OpensAt.UTC().Format(time.RFC3339), cfg.AdmissionRate, cfg.MaxSessions, cfg.SessionTTL)
 	} else {
-		fmt.Println("queue already provisioned with the same settings; nothing to do")
+		fmt.Fprintln(stdout, "queue already provisioned with the same settings; nothing to do")
 	}
 	return nil
+}
+
+// queueFlags are the waiting-room settings, shared by event create and queue
+// provision.
+type queueFlags struct {
+	rate, sessions *int
+	sessionTTL     *time.Duration
+}
+
+func addQueueFlags(fs *flag.FlagSet) queueFlags {
+	return queueFlags{
+		rate:       fs.Int("admission-rate", 83, "queue: buyers admitted per second"),
+		sessions:   fs.Int("max-sessions", 10_000, "queue: maximum concurrent checkout sessions"),
+		sessionTTL: fs.Duration("session-ttl", 10*time.Minute, "queue: lifetime of an admitted buyer's session"),
+	}
+}
+
+func (q queueFlags) config(opensAt time.Time) queue.EventConfig {
+	return queue.EventConfig{OpensAt: opensAt, AdmissionRate: *q.rate, MaxSessions: *q.sessions, SessionTTL: *q.sessionTTL}
+}
+
+// cmdQueueProvision provisions an event's waiting room: for an event created
+// with --no-provision, or to put its settings back after Valkey lost them.
+// The opening time comes from PostgreSQL (the catalog) unless --opens-at is
+// given; the admission settings are not stored there, so they come from flags.
+// Rebuilding cannot bring back who had joined: the queue lives in Valkey only.
+func cmdQueueProvision(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("queue provision", flag.ContinueOnError)
+	dsn := dsnFlag(fs)
+	vk := valkeyFlag(fs)
+	event := fs.String("event", "", "event ID (required)")
+	opens := fs.String("opens-at", "", "sale opening time, RFC 3339 (default: the event's opening time in PostgreSQL)")
+	qf := addQueueFlags(fs)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	id, err := uuid.Parse(*event)
+	if err != nil {
+		return errors.New("--event must be a UUID")
+	}
+	var opensAt time.Time
+	if *opens != "" {
+		if opensAt, err = time.Parse(time.RFC3339, *opens); err != nil {
+			return fmt.Errorf("--opens-at: %w", err)
+		}
+	} else {
+		pool, err := openPool(ctx, *dsn)
+		if err != nil {
+			return fmt.Errorf("%w (or pass --opens-at)", err)
+		}
+		defer pool.Close()
+		e, err := catalog.Get(ctx, pool, id)
+		if err != nil {
+			return err
+		}
+		opensAt = e.SaleOpensAt
+	}
+	cfg := qf.config(opensAt)
+	if err := cfg.Validate(); err != nil {
+		return err
+	}
+	return provisionQueue(ctx, *vk, id.String(), cfg)
+}
+
+func cmdQueueStatus(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("queue status", flag.ContinueOnError)
+	vk := valkeyFlag(fs)
+	event := fs.String("event", "", "event ID (required)")
+	asJSON := fs.Bool("json", false, "print the overview as JSON")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	rdb, err := openValkey(ctx, *vk)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rdb.Close() }()
+	o, err := queue.NewService(queue.NewStore(rdb)).Overview(ctx, *event)
+	if err != nil {
+		return err
+	}
+	if *asJSON {
+		enc := json.NewEncoder(stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(queueStatusJSON(o))
+	}
+	printQueueStatus(stdout, o)
+	return nil
+}
+
+func printQueueStatus(w io.Writer, o queue.Overview) {
+	state := string(o.State)
+	if o.State != o.StoredState {
+		state += fmt.Sprintf(" (stored %s: T0 has passed and no join or opener has flipped it yet)", o.StoredState)
+	}
+	when := "opens"
+	if !o.Now.Before(o.Config.OpensAt) {
+		when = "opened"
+	}
+	fmt.Fprintf(w, "event %s\n", o.EventID)
+	fmt.Fprintf(w, "  %-11s %s, %s %s\n", "state", state, when, o.Config.OpensAt.Format(time.RFC3339))
+	fmt.Fprintf(w, "  %-11s %d in line, %d admitted (admittedUpTo)\n", "queue", o.QueueSize, o.AdmittedUpTo)
+	fmt.Fprintf(w, "  %-11s %d active of %d; %d admissions/s; sessions last %s\n", "sessions",
+		o.ActiveSessions, o.Config.MaxSessions, o.Config.AdmissionRate, o.Config.SessionTTL)
+	leader := "no controller has led yet"
+	if o.LeaderEpoch > 0 {
+		leader = fmt.Sprintf("epoch %d", o.LeaderEpoch)
+	}
+	doc := "not written yet (no leader)"
+	if !o.UpdatedAt.IsZero() {
+		doc = fmt.Sprintf("written %s ago", o.Now.Sub(o.UpdatedAt).Round(time.Millisecond))
+	}
+	fmt.Fprintf(w, "  %-11s %s; status document %s\n", "leader", leader, doc)
+	list := "yes"
+	if !o.OnWorkList {
+		list = "NO: no opener or admission controller serves this event"
+	}
+	fmt.Fprintf(w, "  %-11s %s\n", "work list", list)
+}
+
+func queueStatusJSON(o queue.Overview) any {
+	var updated *time.Time
+	if !o.UpdatedAt.IsZero() {
+		updated = &o.UpdatedAt
+	}
+	return struct {
+		EventID        string     `json:"eventId"`
+		State          string     `json:"state"`
+		StoredState    string     `json:"storedState"`
+		OpensAt        time.Time  `json:"opensAt"`
+		QueueSize      int64      `json:"queueSize"`
+		AdmittedUpTo   int64      `json:"admittedUpTo"`
+		ActiveSessions int64      `json:"activeSessions"`
+		MaxSessions    int        `json:"maxSessions"`
+		AdmissionRate  int        `json:"admissionRate"`
+		SessionTTL     string     `json:"sessionTtl"`
+		LeaderEpoch    int64      `json:"leaderEpoch"`
+		UpdatedAt      *time.Time `json:"updatedAt"`
+		OnWorkList     bool       `json:"onWorkList"`
+		Now            time.Time  `json:"now"`
+	}{o.EventID, string(o.State), string(o.StoredState), o.Config.OpensAt, o.QueueSize, o.AdmittedUpTo,
+		o.ActiveSessions, o.Config.MaxSessions, o.Config.AdmissionRate, o.Config.SessionTTL.String(),
+		o.LeaderEpoch, updated, o.OnWorkList, o.Now}
 }
 
 func cmdInventoryStatus(ctx context.Context, args []string) error {

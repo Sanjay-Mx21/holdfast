@@ -197,6 +197,19 @@ is already past `PRE` back to `PRE`.
 `--session-ttl` (default 10m); the opening time is the event's `--opens-at`.
 It validates these flags before writing anything to PostgreSQL.
 
+`holdfastctl queue provision --event <id>` provisions the queue of an event
+that already exists (created with `--no-provision`, or after Valkey lost its
+keys: RB-Q-8). It takes the same three flags; the opening time comes from the
+event in PostgreSQL unless `--opens-at` is given. It is idempotent, and a
+conflict says how to read the stored settings.
+
+`holdfastctl queue status --event <id>` shows what an operator needs in one
+place: the state (and the stored state, if T0 has passed but nobody has
+flipped it yet), the opening time, the queue size, `admittedUpTo`, active
+session slots (unexpired by Valkey's clock) against the budget, the admission
+rate and session TTL, the leader's epoch, the status document's age, and
+whether the event is on the work list. `--json` prints the same as JSON.
+
 ## The T0 transition
 
 T0 is the event's `opensAt`. It is decided by **Valkey's clock**, the same

@@ -76,6 +76,24 @@ func (s *Service) Status(ctx context.Context, eventID string) (Status, error) {
 	return s.store.Status(ctx, ev)
 }
 
+// Overview reads everything an operator needs about an event's queue.
+func (s *Service) Overview(ctx context.Context, eventID string) (Overview, error) {
+	ev, err := canonicalUUID("eventId", eventID)
+	if err != nil {
+		return Overview{}, err
+	}
+	st, err := s.store.Status(ctx, ev)
+	if err != nil {
+		return Overview{}, err
+	}
+	o, err := s.store.Overview(ctx, ev)
+	if err != nil {
+		return Overview{}, err
+	}
+	o.Status = st
+	return o, nil
+}
+
 // Admit lets userID claim their turn once their rank is within
 // admittedUpTo; the caller then issues an admission token bounded by the
 // session slot.

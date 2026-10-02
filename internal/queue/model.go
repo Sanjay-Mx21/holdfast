@@ -133,6 +133,26 @@ type Status struct {
 	UpdatedAt time.Time
 }
 
+// Overview is an operator's view of one event's queue: the status clients
+// see, plus the settings and admission state behind it (holdfastctl queue
+// status).
+type Overview struct {
+	Status
+	Config EventConfig
+	// StoredState is the state as stored; Status.State applies the T0 rule.
+	StoredState State
+	// LeaderEpoch is the fencing epoch of the latest admission term; 0 if no
+	// controller has led yet.
+	LeaderEpoch int64
+	// ActiveSessions counts session slots that are unexpired by Valkey's clock.
+	ActiveSessions int64
+	// OnWorkList is true while the event is in q:events, so every replica's
+	// opener and admission controller serve it.
+	OnWorkList bool
+	// Now is Valkey's clock when the overview was read.
+	Now time.Time
+}
+
 // statusDoc is the JSON stored in q:{E}:status by advance.lua.
 type statusDoc struct {
 	State        State `json:"state"`

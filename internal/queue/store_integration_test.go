@@ -463,6 +463,51 @@ func TestOpenUnprovisioned(t *testing.T) {
 	mustErr(t, "open unprovisioned", err, ErrEventNotFound)
 }
 
+func TestOverview(t *testing.T) {
+	f := newFixture(t)
+	_, err := f.svc.Overview(ctx, f.eventID)
+	mustErr(t, "overview of an unknown event", err, ErrEventNotFound)
+	_, err = f.svc.Overview(ctx, "not-a-uuid")
+	mustErr(t, "overview with a bad ID", err, ErrInvalidRequest)
+
+	f.openQueueWith(t, 10, 10_000) // opened a minute ago, not on the work list
+	epoch, _ := f.store.NewTerm(ctx, f.eventID)
+	if _, err := f.store.Advance(ctx, f.eventID, epoch, 4); err != nil {
+		t.Fatal(err)
+	}
+	// One slot past its expiry but not yet swept: not active.
+	past := float64(time.Now().Add(-time.Second).UnixMilli())
+	if err := f.rdb.ZAddXX(ctx, keysFor(f.eventID).sessions(), redis.Z{Score: past, Member: "1"}).Err(); err != nil {
+		t.Fatal(err)
+	}
+	o, err := f.svc.Overview(ctx, f.eventID)
+	mustErr(t, "overview", err, nil)
+	mustEqual(t, "state", o.State, StateOpen)
+	mustEqual(t, "stored state", o.StoredState, StateOpen)
+	mustEqual(t, "queue size", o.QueueSize, int64(10))
+	mustEqual(t, "admittedUpTo", o.AdmittedUpTo, int64(4))
+	mustEqual(t, "active sessions", o.ActiveSessions, int64(3))
+	mustEqual(t, "leader epoch", o.LeaderEpoch, epoch)
+	mustEqual(t, "on the work list", o.OnWorkList, false)
+	cfg := validConfig()
+	mustEqual(t, "admission rate", o.Config.AdmissionRate, cfg.AdmissionRate)
+	mustEqual(t, "max sessions", o.Config.MaxSessions, 10_000)
+	mustEqual(t, "session TTL", o.Config.SessionTTL, cfg.SessionTTL)
+	if d := o.Now.Sub(o.UpdatedAt); d < 0 || d > 5*time.Second {
+		t.Fatalf("status document age %s, want about 0", d)
+	}
+
+	// Before any leader: epoch 0, no sessions.
+	g := newFixture(t)
+	g.provision(t)
+	o, err = g.svc.Overview(ctx, g.eventID)
+	mustErr(t, "overview before any leader", err, nil)
+	mustEqual(t, "state", o.State, StatePre)
+	mustEqual(t, "leader epoch", o.LeaderEpoch, int64(0))
+	mustEqual(t, "active sessions", o.ActiveSessions, int64(0))
+	mustEqual(t, "no status document yet", o.UpdatedAt.IsZero(), true)
+}
+
 func TestPurgeRemovesEveryKeyAndTheWorkListEntry(t *testing.T) {
 	f := newFixture(t)
 	f.provisionAt(t, time.Now().Add(-time.Second))
