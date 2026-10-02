@@ -337,13 +337,22 @@ func TestOpenerExportsStatusAge(t *testing.T) {
 	mustEqual(t, "age before any leader wrote the document", eventGauge(t, reg, "holdfast_queue_status_age_seconds", f.eventID), float64(-1))
 
 	epoch, _ := f.store.NewTerm(ctx, f.eventID)
+	start := time.Now() // with a monotonic reading, to detect a wall-clock step (E7)
 	if _, err := f.store.Advance(ctx, f.eventID, epoch, 1); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(300 * time.Millisecond)
 	op.observeStatusAge(ctx, f.eventID)
 	age := eventGauge(t, reg, "holdfast_queue_status_age_seconds", f.eventID)
-	if age < 0.25 || age > 5 {
+	if age < 0 || age > 5 {
+		t.Fatalf("status age %v s, want about 0.3", age)
+	}
+	// The age is measured by Valkey's wall clock, which WSL2 steps to resync it
+	// with Windows (E7); a run in which the measured age was 0.15 s after a
+	// 0.3 s sleep showed it. Judge the lower bound only without a step.
+	if step := time.Now().Round(0).Sub(start.Round(0)) - time.Since(start); step > 50*time.Millisecond || step < -50*time.Millisecond {
+		t.Logf("wall clock stepped by %s during the test; skipping the lower bound", step)
+	} else if age < 0.25 {
 		t.Fatalf("status age %v s, want about 0.3", age)
 	}
 }
