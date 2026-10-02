@@ -45,10 +45,13 @@ func NewAdmission(store *Store, pool *pgxpool.Pool, cfg AdmissionConfig, m *Metr
 func (a *Admission) Name() string { return "queue-admission" }
 
 // Run implements app.Component: it starts a controller for every event on
-// the work list, and for new ones as they are provisioned.
+// the work list, and for new ones as they are provisioned. A controller stops
+// when its event no longer exists; it is started again if the event is
+// provisioned again.
 func (a *Admission) Run(ctx context.Context) error {
 	var wg sync.WaitGroup
 	defer wg.Wait()
+	var mu sync.Mutex
 	running := make(map[string]bool)
 	t := time.NewTicker(a.cfg.Rescan)
 	defer t.Stop()
@@ -57,6 +60,7 @@ func (a *Admission) Run(ctx context.Context) error {
 		if err != nil && ctx.Err() == nil {
 			a.log.Warn("admission: list events failed", "err", err)
 		}
+		mu.Lock()
 		for _, ev := range events {
 			if running[ev] {
 				continue
@@ -67,8 +71,12 @@ func (a *Admission) Run(ctx context.Context) error {
 			go func() {
 				defer wg.Done()
 				c.Run(ctx)
+				mu.Lock()
+				delete(running, ev)
+				mu.Unlock()
 			}()
 		}
+		mu.Unlock()
 		select {
 		case <-ctx.Done():
 			return nil
@@ -101,12 +109,17 @@ func NewController(store *Store, pool *pgxpool.Pool, eventID string, cfg Admissi
 // errNotLeader means another controller holds the leadership lock.
 var errNotLeader = errors.New("queue: another controller is admission leader")
 
-// Run campaigns for leadership until ctx ends. A lost or refused term is
-// followed by another attempt after RetryLeadership.
+// Run campaigns for leadership until ctx ends or the event no longer exists.
+// A lost or refused term is followed by another attempt after
+// RetryLeadership.
 func (c *Controller) Run(ctx context.Context) {
 	for {
 		err := c.term(ctx)
 		if ctx.Err() != nil {
+			return
+		}
+		if errors.Is(err, ErrEventNotFound) {
+			c.log.Info("admission: event no longer provisioned; controller stopped")
 			return
 		}
 		if err != nil && !errors.Is(err, errNotLeader) {
@@ -140,11 +153,13 @@ func (c *Controller) term(ctx context.Context) error {
 	if !leader {
 		return errNotLeader
 	}
-	epoch, err := c.store.NewTerm(ctx, c.eventID)
+	// Settings first: a term for an event that no longer exists must not
+	// recreate its epoch key.
+	rate, maxSessions, err := c.store.termConfig(ctx, c.eventID)
 	if err != nil {
 		return err
 	}
-	rate, maxSessions, err := c.store.termConfig(ctx, c.eventID)
+	epoch, err := c.store.NewTerm(ctx, c.eventID)
 	if err != nil {
 		return err
 	}
@@ -152,7 +167,17 @@ func (c *Controller) term(ctx context.Context) error {
 	c.m.leaderTerm(c.eventID, epoch, maxSessions, true)
 	defer c.m.leaderTerm(c.eventID, epoch, maxSessions, false)
 	c.log.Info("admission: became leader", "epoch", epoch, "rate_per_second", rate, "max_sessions", maxSessions)
+	return c.lead(ctx, epoch, rate, conn.Ping, c.store.Advance)
+}
 
+// advanceFunc is one fenced admission tick (Store.Advance).
+type advanceFunc func(ctx context.Context, eventID string, epoch int64, n int) (Advance, error)
+
+// lead is the leader's tick loop: every Tick it checks that the lock's
+// connection is alive (ping), then admits what the rate allows. It returns
+// nil when ctx ends, and an error when the connection is lost, a newer
+// leader has fenced this one off, or the event no longer exists.
+func (c *Controller) lead(ctx context.Context, epoch int64, rate int, ping func(context.Context) error, advance advanceFunc) error {
 	bucket := newAllowance(float64(rate), time.Now())
 	t := time.NewTicker(c.cfg.Tick)
 	defer t.Stop()
@@ -161,14 +186,17 @@ func (c *Controller) term(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case now := <-t.C:
-			if err := conn.Ping(ctx); err != nil {
+			if err := ping(ctx); err != nil {
 				return fmt.Errorf("lost the lock's connection: %w", err) // step down; a standby takes over
 			}
-			adv, err := c.store.Advance(ctx, c.eventID, epoch, bucket.available(now))
+			adv, err := advance(ctx, c.eventID, epoch, bucket.available(now))
 			switch {
 			case errors.Is(err, ErrFenced):
 				c.m.tick(tickFenced)
 				c.log.Warn("admission: fenced off by a newer leader; stepping down", "epoch", epoch)
+				return err
+			case errors.Is(err, ErrEventNotFound):
+				c.m.tick(tickError)
 				return err
 			case err != nil:
 				c.m.tick(tickError)
@@ -223,11 +251,15 @@ func (a *allowance) available(now time.Time) int {
 func (a *allowance) take(n int64) { a.tokens = math.Max(0, a.tokens-float64(n)) }
 
 // termConfig reads the event's admission rate and session budget from
-// q:{E}:config; they are fixed once provisioned.
+// q:{E}:config; they are fixed once provisioned. ErrEventNotFound means the
+// event is not (or no longer) provisioned.
 func (s *Store) termConfig(ctx context.Context, eventID string) (rate, maxSessions int, err error) {
 	vals, err := s.rdb.HMGet(ctx, keysFor(eventID).config(), "admission_rate", "max_sessions").Result()
 	if err != nil {
 		return 0, 0, fmt.Errorf("queue: read admission settings: %w", err)
+	}
+	if vals[0] == nil && vals[1] == nil {
+		return 0, 0, ErrEventNotFound
 	}
 	parse := func(v any) int {
 		s, _ := v.(string)
