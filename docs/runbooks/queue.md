@@ -74,16 +74,19 @@ place in arrival order. What is stale is the state other readers see.
 ## RB-Q-5 Admissions are not advancing
 
 **Symptom:** `q:{<event id>}:admitted` stays put while people wait;
-`holdfast_queue_admitted_total` is flat.
+`holdfast_queue_admitted_up_to{event="<event id>"}` is flat, or
+`holdfast_queue_status_age_seconds` keeps growing (dashboard
+HoldFast / Queue).
 
 1. Is anyone leading? `holdfast_queue_admission_leader{event="<event id>"}` is 1
    on exactly one replica. If none: PostgreSQL may be unreachable (elections
    need it); check `docker compose ps postgres` and the queue-svc logs for
    `admission: leadership term ended`.
 2. Is the queue `OPEN`? `FROZEN`, `SOLD_OUT` and `CLOSED` admit nobody.
-3. Is the session budget full? Compare
+3. Is the session budget full? Compare `holdfast_queue_active_sessions`
+   with `holdfast_queue_max_sessions` (or
    `valkey-cli ZCARD "adm:{<event id>}:sessions"` with `max_sessions` in
-   `q:{<event id>}:config`. Slots free themselves after the session TTL.
+   `q:{<event id>}:config`). Slots free themselves after the session TTL.
 4. Repeated `fenced off by a newer leader` warnings mean two processes keep
    taking over from each other; check that every replica reaches the same
    PostgreSQL.
