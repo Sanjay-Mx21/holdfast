@@ -5,15 +5,15 @@ Operator procedures for the waiting room. Service reference:
 
 ## RB-Q-1 `PROVISION_CONFLICT`
 
-**Symptom:** `PUT /internal/v1/events/{id}/queue` or `holdfastctl event create`
-fails with 409 `PROVISION_CONFLICT`.
+**Symptom:** `PUT /internal/v1/events/{id}/queue`, `holdfastctl event create`
+or `holdfastctl queue provision` fails with 409 `PROVISION_CONFLICT`.
 
 **Meaning:** the event's queue was already provisioned with different
 settings. Nothing was changed: the stored settings still apply.
 
-1. Read the stored settings:
-   `docker compose exec valkey valkey-cli HGETALL "q:{<event id>}:config"`
-   (`opens_at_ms` is milliseconds since the Unix epoch; `session_ttl_ms` is milliseconds).
+1. Read the stored settings: `holdfastctl queue status --event <event id>`
+   (or `docker compose exec valkey valkey-cli HGETALL "q:{<event id>}:config"`;
+   `opens_at_ms` is milliseconds since the Unix epoch, `session_ttl_ms` is milliseconds).
 2. If the request was a mistaken retry with different values, resend it with
    the stored values: the call returns 200 and changes nothing.
 3. Changing settings of a provisioned queue is not supported yet. Before the
@@ -64,9 +64,9 @@ place in arrival order. What is stale is the state other readers see.
 1. Check the opener: `holdfast_queue_opener_runs_total{result="error"}`
    climbing, or `opener pass failed` in the logs, usually means Valkey trouble
    (RB-Q-2).
-2. Check the event is on the work list:
-   `valkey-cli SISMEMBER q:events <event id>`. Provisioning adds it; if it is
-   missing, provision again with the same settings (idempotent) to re-register it.
+2. Check the event is on the work list: `holdfastctl queue status --event
+   <event id>` says `work list yes`. Provisioning adds it; if it is missing,
+   provision again with the same settings (idempotent) to re-register it.
 3. Check the opening time: `valkey-cli HGET "q:{<event id>}:config" opens_at_ms`
    against `valkey-cli TIME` (seconds and microseconds). T0 is judged by
    Valkey's clock, not the operator's.
@@ -77,6 +77,10 @@ place in arrival order. What is stale is the state other readers see.
 `holdfast_queue_admitted_up_to{event="<event id>"}` is flat, or
 `holdfast_queue_status_age_seconds` keeps growing (dashboard
 HoldFast / Queue).
+
+Start with `holdfastctl queue status --event <event id>`: it shows the state,
+`admittedUpTo`, sessions against the budget, the leader's epoch and how old
+the status document is.
 
 1. Is anyone leading? `holdfast_queue_admission_leader{event="<event id>"}` is 1
    on exactly one replica. If none: PostgreSQL may be unreachable (elections
@@ -121,3 +125,22 @@ rotation only has to overlap for that long. inventory-svc follows
 Skipping steps 2 and 3 still works without restarts, but tokens signed with
 the new key can be refused (401) for up to 30 seconds after inventory-svc's
 last fetch.
+
+## RB-Q-8 Putting a queue back after Valkey lost it
+
+**Symptom:** after a Valkey failure or flush, `holdfastctl queue status --event
+<event id>` fails with `queue: event not provisioned`, and joins return 404
+`EVENT_NOT_FOUND`.
+
+The queue lives only in Valkey. Its settings can be put back; who had joined,
+and in which order, cannot.
+
+1. Provision it again: `holdfastctl queue provision --event <event id>` with
+   the event's original `--admission-rate`, `--max-sessions` and
+   `--session-ttl`. The opening time comes from PostgreSQL.
+2. Check: `holdfastctl queue status --event <event id>` shows the settings and
+   `work list yes`. If T0 has passed, the state reads `OPEN`, and joins
+   from now on are in arrival order.
+3. Buyers must join again. Tell them: their earlier places are gone. Rebuild
+   inventory too if its keys were lost (`holdfastctl inventory provision`,
+   RB-INV-4).

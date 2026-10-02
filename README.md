@@ -25,7 +25,8 @@ sells exactly 1,000 (never 1,001) and stays up while doing it.
   inventory-svc follows the queue's published keys, so rotating them needs no
   restart.
 - **holdfastctl** runs migrations, generates dev keys and tokens, creates
-  events, provisions their inventory and queue, and rebuilds inventory.
+  events, provisions their inventory and queue, rebuilds inventory, and shows
+  an event's availability and waiting room (`queue status`).
 - **Experiment E1** (`cmd/contention`) fires 50,000 concurrent buyers at 1,000
   units and fails unless exactly 1,000 holds are granted. CI runs it on every push.
 
