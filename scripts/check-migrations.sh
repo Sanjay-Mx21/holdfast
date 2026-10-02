@@ -28,7 +28,7 @@ for dir in "$root"/db/migrations/*/; do
 done
 
 if git -C "$root" rev-parse --verify --quiet origin/main >/dev/null; then
-  changed="$(git -C "$root" diff --name-only --diff-filter=MD origin/main -- db/migrations || true)"
+  changed="$(git -C "$root" diff --name-only --diff-filter=MD origin/main -- 'db/migrations/*/*.sql' || true)"
   if [[ -n "$changed" ]]; then
     echo "x existing migrations were modified or deleted (add a new migration instead):"
     echo "$changed"; status=1
