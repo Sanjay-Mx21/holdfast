@@ -13,6 +13,7 @@ GOLANGCI_LINT_VERSION := v2.14.0
 # Local dependencies started by `make infra` / `make up`.
 export HOLDFAST_TEST_VALKEY_ADDR  ?= localhost:6379
 export HOLDFAST_TEST_POSTGRES_DSN ?= postgres://holdfast:holdfast@localhost:5432/holdfast?sslmode=disable
+export HOLDFAST_TEST_KAFKA_BROKERS ?= localhost:29092
 
 NAME     ?= Demo Concert
 CAPACITY ?= 1000
@@ -42,7 +43,7 @@ lint: ## golangci-lint + migration checks
 test: ## Unit tests with the race detector (no external dependencies)
 	$(GO) test -race -count=1 ./...
 
-itest: infra ## Integration tests against PostgreSQL + Valkey (starts them with Docker)
+itest: infra ## Integration tests against PostgreSQL, Valkey and Kafka (starts them with Docker)
 	$(GO) test -race -count=1 -tags=integration ./...
 
 cover: ## Unit + integration coverage report (coverage.html)
@@ -55,8 +56,11 @@ build: ## Build every binary into ./bin
 keys: ## Generate the dev admission-token key pair in .local/keys (idempotent)
 	$(GO) run ./cmd/holdfastctl keys generate --out-dir .local/keys --if-missing
 
-infra: ## Start only PostgreSQL and Valkey
-	docker compose up -d --wait postgres valkey
+infra: ## Start only PostgreSQL, Valkey and Kafka
+	docker compose up -d --wait postgres valkey kafka
+
+topics: ## Create every Kafka topic (idempotent; make up does it too)
+	$(GO) run ./cmd/holdfastctl kafka topics --brokers "$(HOLDFAST_TEST_KAFKA_BROKERS)"
 
 up: keys ## Start the whole local stack (migrations run automatically)
 	docker compose up -d --build
@@ -97,4 +101,4 @@ load-e2: ## Experiment E2: k6 stampede on the waiting room through the edge (nee
 docker: ## Build container images for the deployable binaries
 	@for s in $(IMAGES); do docker build --build-arg SERVICE=$$s --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) -t holdfast/$$s:$(VERSION) . || exit 1; done
 
-.PHONY: help deps deps-upgrade tools fmt vet lint test itest cover build keys infra up down clean migrate event token run-inventory e1 fairness-e6 load-e2 docker
+.PHONY: help deps deps-upgrade tools fmt vet lint test itest cover build keys infra up down clean migrate event token run-inventory e1 fairness-e6 load-e2 topics docker
