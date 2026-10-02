@@ -1,0 +1,110 @@
+syntax = "proto3";
+
+package holdfast.inventory.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// InventoryService is inventory-svc's internal API, for booking-svc. It is
+// served on the internal network only and wraps the same service layer as the
+// public HTTP API, so every rule has one implementation.
+//
+// Every call is safe to retry: repeating it with the same arguments returns
+// the same answer and changes nothing more. Callers set a deadline on every
+// call.
+//
+// Errors are gRPC status codes, with a google.rpc.ErrorInfo detail whose
+// reason is one of: INVALID_REQUEST (INVALID_ARGUMENT), EVENT_NOT_PROVISIONED
+// and HOLD_NOT_FOUND (NOT_FOUND), HOLD_EXPIRED (FAILED_PRECONDITION).
+service InventoryService {
+  // GetHold returns a hold. A hold that belongs to another user is reported
+  // as HOLD_NOT_FOUND.
+  rpc GetHold(GetHoldRequest) returns (GetHoldResponse);
+
+  // MarkPaying protects a HELD hold from expiry for the payment window, when
+  // checkout starts. A hold already PAYING returns its existing deadline.
+  rpc MarkPaying(MarkPayingRequest) returns (MarkPayingResponse);
+
+  // Confirm marks a hold SOLD. Call it only after the booking is committed in
+  // PostgreSQL (the final guard). It tolerates a hold that expired meanwhile:
+  // the units are taken back from the pool (outcome LATE).
+  rpc Confirm(ConfirmRequest) returns (ConfirmResponse);
+
+  // ReleaseForFailedPayment returns a hold's units after a definitive payment
+  // failure. Releasing a hold that is already released succeeds.
+  rpc ReleaseForFailedPayment(ReleaseForFailedPaymentRequest) returns (ReleaseForFailedPaymentResponse);
+}
+
+// HoldRef identifies a hold. All three IDs are UUIDs.
+message HoldRef {
+  string event_id = 1;
+  string user_id = 2;
+  string hold_id = 3;
+}
+
+// HoldState is a hold's lifecycle state.
+enum HoldState {
+  HOLD_STATE_UNSPECIFIED = 0;
+  HOLD_STATE_HELD = 1;
+  HOLD_STATE_PAYING = 2;
+  HOLD_STATE_SOLD = 3;
+  HOLD_STATE_RELEASED = 4;
+}
+
+// Hold is a reservation of units for one user.
+message Hold {
+  string hold_id = 1;
+  string event_id = 2;
+  string user_id = 3;
+  int32 quantity = 4;
+  HoldState state = 5;
+  // expires_at is when a HELD or PAYING hold is released if nothing happens.
+  google.protobuf.Timestamp expires_at = 6;
+}
+
+message GetHoldRequest {
+  HoldRef hold = 1;
+}
+
+message GetHoldResponse {
+  Hold hold = 1;
+}
+
+message MarkPayingRequest {
+  HoldRef hold = 1;
+}
+
+message MarkPayingResponse {
+  // protected_until is the end of the payment window.
+  google.protobuf.Timestamp protected_until = 1;
+}
+
+message ConfirmRequest {
+  HoldRef hold = 1;
+  // quantity must equal the hold's quantity (1 to 10).
+  int32 quantity = 2;
+}
+
+// ConfirmOutcome says how a confirmation was applied.
+enum ConfirmOutcome {
+  CONFIRM_OUTCOME_UNSPECIFIED = 0;
+  // CONFIRM_OUTCOME_CONFIRMED: the hold became SOLD.
+  CONFIRM_OUTCOME_CONFIRMED = 1;
+  // CONFIRM_OUTCOME_REPLAY: it was SOLD already; nothing changed.
+  CONFIRM_OUTCOME_REPLAY = 2;
+  // CONFIRM_OUTCOME_LATE: the hold had expired; its units were taken back
+  // from the pool. Counted in holdfast_hold_confirms_total{outcome="late"}.
+  CONFIRM_OUTCOME_LATE = 3;
+}
+
+message ConfirmResponse {
+  ConfirmOutcome outcome = 1;
+}
+
+message ReleaseForFailedPaymentRequest {
+  HoldRef hold = 1;
+}
+
+message ReleaseForFailedPaymentResponse {
+  // released is false when the hold was already released or sold.
+  bool released = 1;
+}

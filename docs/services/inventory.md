@@ -62,6 +62,15 @@ Operator token required. Body: `{"capacity":1000,"perUserLimit":4}`. Returns
 201 when created and 200 when already provisioned with identical settings;
 different settings return 409 `PROVISION_CONFLICT`.
 
+### Internal gRPC API (contract defined; served from task 3.4)
+
+`holdfast.inventory.v1.InventoryService` (`proto/holdfast/inventory/v1/inventory.proto`)
+is the API booking-svc will call: `GetHold`, `MarkPaying`, `Confirm` and
+`ReleaseForFailedPayment`, each a thin adapter over the same service methods as
+the HTTP API, and each safe to retry. Errors are gRPC status codes with a
+`google.rpc.ErrorInfo` reason (`INVALID_REQUEST`, `EVENT_NOT_PROVISIONED`,
+`HOLD_NOT_FOUND`, `HOLD_EXPIRED`).
+
 ## Error codes
 
 | Code | HTTP | Meaning |

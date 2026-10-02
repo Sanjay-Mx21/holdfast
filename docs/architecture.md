@@ -118,6 +118,14 @@ Valkey.
 
 Migrations are embedded SQL applied by `holdfastctl migrate` (ADR 0003).
 
+**Contracts** (from Phase 3). Service-to-service APIs and event payloads are
+Protobuf, in one Buf workspace (`buf.yaml`, `proto/`): `holdfast.inventory.v1`
+(inventory-svc's internal gRPC API) and `holdfast.events.v1` (the Kafka event
+payloads). Go code is generated into `internal/gen` by `make gen` and
+committed. CI lints them, checks formatting, refuses wire- or JSON-breaking
+changes against `main` (fields may be added, never renumbered or removed),
+and fails if the generated code is stale.
+
 **Kafka** (events between services, from Phase 3). Topics are created
 explicitly (`holdfastctl kafka topics`; auto-creation is off), each with a
 dead-letter topic:
@@ -129,7 +137,8 @@ dead-letter topic:
 | `holdfast.inventory.v1` | event ID | inventory-svc, informational snapshots |
 | `<topic>.dlq.v1` (for example `holdfast.booking.dlq.v1`) | original key | any consumer, after repeated failures |
 
-Every message carries CloudEvents attributes as headers (`ce_id`, the
+Payloads are Protobuf messages from `proto/holdfast/events/v1` (booking and
+payment events, each documented with its `ce_type`). Every message carries CloudEvents attributes as headers (`ce_id`, the
 deduplication key; `ce_type`; `ce_source`; `ce_time`). `internal/platform/kafka`
 produces with `acks=all` and idempotence, and consumes with manual commits:
 an offset is committed only after the handler finishes, so handlers must be

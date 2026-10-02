@@ -1,0 +1,17 @@
+# make gen: Go code for the contracts, committed in internal/gen. The
+# plugins are pinned as Go tools in go.mod, so generation needs no network.
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/Sanjay-Mx21/holdfast/internal/gen
+plugins:
+  - local: ["go", "tool", "protoc-gen-go"]
+    out: internal/gen
+    opt: paths=source_relative
+  - local: ["go", "tool", "protoc-gen-go-grpc"]
+    out: internal/gen
+    opt: paths=source_relative
+inputs:
+  - directory: proto

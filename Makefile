@@ -9,6 +9,7 @@ LDFLAGS  := -s -w -X $(PKG)/internal/platform/buildinfo.Version=$(VERSION) -X $(
 BINARIES := inventory queue holdfastctl contention fairness
 IMAGES   := inventory queue holdfastctl
 GOLANGCI_LINT_VERSION := v2.14.0
+BUF_VERSION           := v1.73.0
 
 # Local dependencies started by `make infra` / `make up`.
 export HOLDFAST_TEST_VALKEY_ADDR  ?= localhost:6379
@@ -27,8 +28,12 @@ deps: ## Resolve modules and write go.sum (run once after cloning, then commit g
 deps-upgrade: ## Upgrade every dependency to its latest release
 	$(GO) get -u ./... && $(GO) mod tidy
 
-tools: ## Install golangci-lint
+tools: ## Install golangci-lint and buf
 	$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	$(GO) install github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION)
+
+gen: ## Generate Go code from the protobuf contracts in proto/ (needs buf: make tools)
+	buf lint && buf format -w && buf generate
 
 fmt: ## Format all Go code
 	gofmt -w -s .
@@ -101,4 +106,4 @@ load-e2: ## Experiment E2: k6 stampede on the waiting room through the edge (nee
 docker: ## Build container images for the deployable binaries
 	@for s in $(IMAGES); do docker build --build-arg SERVICE=$$s --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) -t holdfast/$$s:$(VERSION) . || exit 1; done
 
-.PHONY: help deps deps-upgrade tools fmt vet lint test itest cover build keys infra up down clean migrate event token run-inventory e1 fairness-e6 load-e2 topics docker
+.PHONY: help deps deps-upgrade tools fmt vet lint test itest cover build keys infra up down clean migrate event token run-inventory e1 fairness-e6 load-e2 topics gen docker
