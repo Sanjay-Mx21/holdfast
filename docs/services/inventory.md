@@ -62,14 +62,42 @@ Operator token required. Body: `{"capacity":1000,"perUserLimit":4}`. Returns
 201 when created and 200 when already provisioned with identical settings;
 different settings return 409 `PROVISION_CONFLICT`.
 
-### Internal gRPC API (contract defined; served from task 3.4)
+### Internal gRPC API (`GRPC_ADDR`, default `:7070`)
 
 `holdfast.inventory.v1.InventoryService` (`proto/holdfast/inventory/v1/inventory.proto`)
-is the API booking-svc will call: `GetHold`, `MarkPaying`, `Confirm` and
+is booking-svc's API: `GetHold`, `MarkPaying`, `Confirm` and
 `ReleaseForFailedPayment`, each a thin adapter over the same service methods as
-the HTTP API, and each safe to retry. Errors are gRPC status codes with a
-`google.rpc.ErrorInfo` reason (`INVALID_REQUEST`, `EVENT_NOT_PROVISIONED`,
-`HOLD_NOT_FOUND`, `HOLD_EXPIRED`).
+the HTTP API (`internal/inventory/grpc.go`), and each safe to retry. Errors are
+gRPC status codes with a `google.rpc.ErrorInfo` reason (`INVALID_REQUEST`,
+`EVENT_NOT_PROVISIONED`, `HOLD_NOT_FOUND`, `HOLD_EXPIRED`); `inventory.Client`
+turns them back into the domain errors, so callers never see protobuf.
+
+- Every call needs a service token from a trusted caller (below) and a
+  deadline; only `booking` may call these methods. The standard gRPC health
+  service needs neither, for probes.
+- Locally, Compose maps it to host port 7071 for services run on the host.
+  It is internal: never expose it.
+
+## Decisions: service-to-service authentication (task 3.4)
+
+**Per-service tokens, not mTLS.** A calling service signs a short-lived
+(5-minute) Ed25519 JWT with its own key: issuer and subject
+`service:<caller>`, audience `service:inventory`, header `typ: svc+jwt`.
+inventory-svc trusts the public keys listed in `GRPC_TRUSTED_CALLERS`
+(`booking=/keys/booking.pub`), and lets each caller use only the methods it
+needs (`inventory.GRPCAllow`, deny by default).
+
+- It reuses the Ed25519 machinery of admission tokens, needs no certificate
+  authority, and identifies the caller on every call, so access is per method,
+  not just "inside the network".
+- A service token and an admission token can never pass for each other:
+  audiences, the type header and the trusted keys all differ (tested).
+- The client signs a token once and reuses it until a third of its life is
+  left, so signing costs nothing per call.
+- Not covered: encryption in transit. Traffic is plaintext on the internal
+  network; TLS or a service mesh is a deployment concern for Phase 6. A
+  stolen service key lets its thief call as that service until the key is
+  removed from `GRPC_TRUSTED_CALLERS` (RB-INV-7).
 
 ## Error codes
 
@@ -144,6 +172,8 @@ are defined in `internal/platform/config`. Service settings:
 | `TOKEN_LEEWAY` | `5s` | Clock skew tolerated on token times |
 | `ADMIN_TOKEN` | required | Operator token, at least 32 characters; removed from the environment after loading |
 | `HTTP_ACCESS_LOG_SUCCESS` | `true` | Log successful requests; set to `false` for load tests |
+| `GRPC_ADDR` | `:7070` | Internal gRPC API |
+| `GRPC_TRUSTED_CALLERS` | none | Callers allowed to use it, as `service=/path/to/key.pub`, comma-separated. With none, every call is refused (a warning at start-up) |
 
 ## Metrics
 
@@ -159,3 +189,5 @@ are defined in `internal/platform/config`. Service settings:
 | `holdfast_authn_jwks_fetches_total` | `result` | Key-set fetches: ok, error |
 | `holdfast_http_requests_total` | `route`, `code` | RED metrics per route pattern |
 | `holdfast_http_request_duration_seconds` | `route` | Latency per route pattern |
+| `holdfast_grpc_server_handled_total` | `method`, `code` | gRPC calls by full method name and status code |
+| `holdfast_grpc_server_handling_seconds` | `method` | gRPC latency by full method name |

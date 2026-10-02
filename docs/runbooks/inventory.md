@@ -75,3 +75,26 @@ With key files only (`ADMISSION_PUBLIC_KEY_FILES`):
   `SELECT capacity, sold FROM booking.event_inventory WHERE event_id = 'E'`,
   and open an incident. PostgreSQL is authoritative; rebuild with RB-INV-4 after
   the investigation. E1 runs on every CI build to keep this case impossible.
+
+## RB-INV-7 booking-svc's gRPC calls are refused
+
+**Symptom:** booking-svc logs `Unauthenticated` or `PermissionDenied` from
+inventory, and `holdfast_grpc_server_handled_total{code="Unauthenticated"}`
+(or `PermissionDenied`) rises on inventory-svc.
+
+1. `Unauthenticated`: the token is missing, expired or signed by a key
+   inventory-svc does not trust. Check that `GRPC_TRUSTED_CALLERS` lists
+   `booking=` with the public half of the key booking-svc signs with, and that
+   the two hosts' clocks agree within `TOKEN_LEEWAY`. inventory-svc logs each
+   refusal (`grpc call failed`, with the method and reason).
+2. `PermissionDenied`: the caller is trusted but may not call that method
+   (`inventory.GRPCAllow`). A new caller or method is a code change, not a
+   configuration change.
+3. **Rotating booking-svc's key:** inventory-svc trusts one key per caller,
+   so a rotation is not seamless. Generate a new pair, then restart
+   inventory-svc trusting the new public key and booking-svc signing with the
+   new private key as close together as possible: calls signed with the old
+   key are refused until booking-svc runs with the new one. (Trusting two keys
+   per caller during a rotation would remove the gap; not built yet.) If a key
+   is compromised, remove it at once: the refusals are the point.
+

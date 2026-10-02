@@ -35,7 +35,7 @@ sells exactly 1,000 (never 1,001) and stays up while doing it.
 Requirements: Go 1.27+, Docker with Compose v2, make.
 
 ```bash
-make up                                          # dev keys, PostgreSQL, Valkey, Kafka and its topics, migrations, inventory-svc, queue-svc, the NGINX edge, Prometheus, Grafana, OTel Collector, Jaeger
+make up                                          # dev keys (admission tokens, booking-svc), PostgreSQL, Valkey, Kafka and its topics, migrations, inventory-svc, queue-svc, the NGINX edge, Prometheus, Grafana, OTel Collector, Jaeger
 make event NAME="Coldplay Mumbai" CAPACITY=1000  # the event, its inventory and its waiting room (opens now); prints the event ID
 export EVENT=<event id>
 export ME=$(cat /proc/sys/kernel/random/uuid)    # your buyer ID (development identity until Phase 4)

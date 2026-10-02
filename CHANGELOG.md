@@ -28,6 +28,14 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
   payloads in `holdfast.events.v1`; generated Go in `internal/gen`
   (`make gen`); CI runs `buf lint`, `buf format`, `buf breaking` against
   `main` and a generated-code check.
+- **inventory over gRPC** (task 3.4): inventory-svc serves
+  `holdfast.inventory.v1.InventoryService` on `GRPC_ADDR` (`:7070`), for
+  booking-svc only. Service-to-service authentication with per-service
+  Ed25519 tokens (`authn.ServiceTokenSource`, `authn.ServiceVerifier`);
+  `internal/platform/grpcx` with tracing, metrics, required deadlines,
+  per-method allowlists, and clients with default deadlines and bounded
+  retries; a typed `inventory.Client`. `make keys` creates booking-svc's dev
+  key. Runbook RB-INV-7.
 
 ## [0.2.0] - 2026-10-02
 
@@ -120,6 +128,9 @@ and E6, and the decision records behind them (ADRs 0005 to 0007).
 
 ### Fixed
 
+- `holdfast_queue_status_age_seconds` is measured by Valkey's clock, so clock
+  skew between queue-svc and Valkey no longer shows up as staleness; its test
+  no longer fails when the wall clock steps.
 - Claiming a turn whose session slot had expired, before the leader's next
   tick removed it, returned 500 instead of 409 `TURN_EXPIRED`; `admit.lua`
   now judges the slot by Valkey's clock.
