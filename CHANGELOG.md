@@ -78,6 +78,10 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
   state, size, admission, sessions, leader and status-document age at a
   glance (`--json` too). Runbook RB-Q-8: putting a queue back after Valkey
   lost it.
+- ADRs 0005 (lottery before T0, FIFO after), 0006 (cached status polling
+  instead of WebSockets or SSE) and 0007 (leader election with PostgreSQL
+  advisory locks plus fencing epochs); the buyer's journey in
+  `docs/architecture.md` (task 2.14).
 - **Experiments E6 and E2** (task 2.12): `make fairness-e6` (`cmd/fairness`)
   checks that join time does not predict a lottery position and that
   positions after T0 are the arrival order; `make load-e2` (`loadtest/e2`)

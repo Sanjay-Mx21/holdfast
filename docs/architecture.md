@@ -6,10 +6,12 @@ where Drop 1 deviates from it, ADRs 0003 and 0004 record why.
 
 ## 1. Summary
 
-HoldFast sells scarce inventory during extreme demand spikes. Drop 1 contains
+HoldFast sells scarce inventory during extreme demand spikes. Built so far:
 the hot path (inventory-svc: atomic holds in Valkey), the durable backstop (the
-PostgreSQL final guard), the operator CLI and a contention experiment that
-proves the no-oversell property on every CI run.
+PostgreSQL final guard), the waiting room in front of them (queue-svc and the
+NGINX edge, Phase 2), the operator CLI, and experiments that prove no oversell
+on every CI run (E1), a fair queue order (E6) and a flat origin under a
+stampede (E2).
 
 ## 2. Invariants
 
@@ -22,14 +24,15 @@ IDs match section 2.3 of the design doc.
 | I3 | Money safety: every captured payment ends CONFIRMED or REFUNDED | Booking and payment saga, Phase 3; reconciler, Phase 5 |
 | I4 | Per-user cap: held plus sold units per user per event never exceed the limit | Per-user counter in `hold.lua`; conditional upsert in the guard |
 | I5 | No lost units: every hold ends SOLD or RELEASED | Expiry index plus sweeper; `release.lua` and `confirm.lua` |
-| F1 | Fairness: random order before T0, FIFO after, one slot per identity | Waiting room, Phase 2 |
+| F1 | Fairness: random order before T0, FIFO after, one slot per identity | `join.lua`: `ZADD NX` with a `crypto/rand` score before T0 and an arrival number after, T0 judged by Valkey's clock (ADR 0005); checked by the F1 model test and experiment E6 |
 
 ## 3. Services and ownership
 
 | Service | Status | Owns | Talks to |
 |---|---|---|---|
 | inventory-svc (`cmd/inventory`) | Built | Valkey keys `inv:*` | Valkey |
-| queue-svc (`cmd/queue`) | Phase 2 in progress: provisioning, joining, the T0 transition, positions, admission, the status document and admission tokens built | Valkey keys `q:*`, `adm:*`, `rl:*` | Valkey; PostgreSQL for leader election only |
+| queue-svc (`cmd/queue`) | Built (Phase 2): provisioning, joining, the T0 transition, positions, admission, the status document, admission tokens and their JWKS | Valkey keys `q:*`, `adm:*`, `rl:*` | Valkey; PostgreSQL for leader election only |
+| NGINX edge (`deploy/nginx`) | Built (Phase 2) | Nothing | queue-svc, inventory-svc |
 | booking final guard (`internal/booking`) | Built as a library | `booking` schema | PostgreSQL |
 | holdfastctl (`cmd/holdfastctl`) | Built | Nothing (operator tool) | PostgreSQL, Valkey |
 | booking, payment, auth | Planned | See design doc | |
@@ -59,7 +62,28 @@ door, the role a CDN plays in production:
 - overwrites `X-Forwarded-For`, `X-Real-IP` and `X-Request-Id`. It sits on its
   own network at a fixed address that queue-svc trusts (`TRUSTED_PROXIES`).
 
-## 5. Request lifecycle: `POST /v1/events/{eventID}/holds`
+## 5. Request lifecycles
+
+### The buyer's journey (through the edge)
+
+1. Before or after T0: `POST /v1/queue/{id}/join`. `join.lua` gives a lottery
+   score before T0 (by Valkey's clock), an arrival number after, and never a
+   second place (ADR 0005).
+2. After T0: `GET /v1/queue/{id}/me` once, for the buyer's rank.
+3. Every few seconds: `GET /v1/events/{id}/status`, answered by the edge's
+   one-second cache; the origin sees about one request every second or two
+   per event, whatever the crowd (ADR 0006, experiment E2).
+4. Meanwhile one admission leader per event (ADR 0007) runs `advance.lua`
+   every 250 ms: it moves `admittedUpTo` at the event's rate, gives each newly
+   admitted rank a session slot for the session TTL, and never exceeds the
+   session budget.
+5. Once `admittedUpTo` reaches the buyer's rank: `POST /v1/queue/{id}/admit`.
+   `admit.lua` checks the rank and that the slot is alive by Valkey's clock;
+   queue-svc signs an Ed25519 admission token that expires with the slot.
+6. With the token: `POST /v1/events/{id}/holds` at inventory-svc, which
+   verifies it against queue-svc's JWKS (below).
+
+### `POST /v1/events/{eventID}/holds`
 
 1. Global middleware, outermost first: request ID, access log, metrics, panic
    recovery, security headers, body limit, request timeout.
@@ -79,7 +103,10 @@ door, the role a CDN plays in production:
 
 **Valkey** (hot, rebuildable). Every key of an event shares the hash tag
 `{eventID}`; see `docs/services/inventory.md` (`inv:*`) and
-`docs/services/queue.md` (`q:*`) for the keyspace.
+`docs/services/queue.md` (`q:*`, `adm:*`, `rl:*`) for the keyspace. Inventory
+can be rebuilt from PostgreSQL; a queue's settings can be put back
+(`holdfastctl queue provision`, RB-Q-8), but who had joined lives only in
+Valkey.
 
 **PostgreSQL** (truth), schema `booking`:
 
@@ -144,7 +171,11 @@ connection; every 250 ms it runs `advance.lua`, which refuses a stale epoch
   `holdfast_hold_script_duration_seconds`, `holdfast_hold_releases_total{mode}`,
   `holdfast_hold_confirms_total{outcome}`, `holdfast_inventory_available{event}`,
   `holdfast_sweeper_*`, `holdfast_http_*` (labelled by route pattern, never
-  raw paths) and `holdfast_build_info`.
+  raw paths) and `holdfast_build_info`. queue-svc adds `holdfast_queue_*`:
+  join, position, claim, tick and opener outcomes, and per-event gauges for
+  queue size, `admittedUpTo`, sessions, the session budget, the leader's epoch
+  and the status document's age (`docs/services/queue.md`).
+- **Dashboards:** Grafana, HoldFast / Inventory and HoldFast / Queue.
 - **Health:** `/livez` never checks dependencies. `/readyz` checks Valkey (and,
   on inventory-svc with a JWKS URL, that some admission-token key is known) and
   returns 503 from the moment SIGTERM arrives.
@@ -168,7 +199,12 @@ connection; every 250 ms it runs `advance.lua`, which refuses a stale epoch
 - Integration tests (`make itest`) run real Lua scripts and SQL: lifecycle
   scenarios, 2,000-goroutine contention, a randomized model check (1,500
   steps against an executable specification), guard concurrency and
-  migration-runner guarantees.
+  migration-runner guarantees. For the queue: every script against real
+  Valkey, an F1 model test (random joins, ticks, claims, expiries, T0 and
+  freezes against a reference model) and a failover test with two real
+  admission controllers.
+- Fake-clock tests (`testing/synctest`) drive the admission leader's tick loop
+  through seconds of ticking with exact timings, in microseconds.
 - E1 (`make e1`, and every CI run): 50,000 buyers for 1,000 units, plus
   10,000 concurrent confirmations through the guard.
 - E6 (`make fairness-e6`): 100,000 joins before T0 and 20,000 after,

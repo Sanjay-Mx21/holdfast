@@ -3,10 +3,13 @@
 The waiting room: decides who may enter the purchase path, in what order and
 how fast. Binary: `cmd/queue`. Code: `internal/queue`.
 
-**Status:** Phase 2 in progress. Built: provisioning (task 2.1), joining
-(task 2.2), the T0 transition (task 2.3), positions (task 2.4), the admission
-controller (task 2.5), the status document (task 2.6) and admission tokens
-(task 2.7). Task 2.8 decided how inventory-svc trusts those tokens (below).
+**Status:** built in Phase 2 (tasks 2.1 to 2.14): provisioning, joining, the
+T0 transition, positions, the admission controller, the status document,
+admission tokens and their trust by inventory-svc, the edge, metrics and a
+dashboard, tests, experiments E2 and E6, and operator commands. Not built:
+oversubscription and `SOLD_OUT` (below). Decisions: ADR 0005 (lottery before
+T0, FIFO after), ADR 0006 (cached status polling), ADR 0007 (leader election
+with fencing).
 
 ## Responsibilities
 
@@ -45,7 +48,7 @@ Cache-Control: no-store
   It never re-rolls the lottery and never creates a second place.
 - Joins are accepted while the sale is `FROZEN` (arrival order); `SOLD_OUT` and
   `CLOSED` refuse them.
-- Rank lookups arrive with task 2.4.
+- Your rank: `GET /v1/queue/{eventID}/me` (below).
 
 **Rate limits.** Each join takes a token from two buckets, and the first
 empty one refuses the request with 429 `RATE_LIMITED` and `Retry-After`:
@@ -89,8 +92,8 @@ Cache-Control: private, no-store
 - A queue still marked `PRE` after T0 (nobody has flipped it yet) is reported
   as `OPEN` with a rank: T0 is the clock's call. The lookup itself is read-only.
 - Ranks are still reported in `FROZEN`, `SOLD_OUT` and `CLOSED`, with that state.
-- Clients should ask once after T0 and then follow the shared status document
-  (task 2.6), comparing their rank with `admittedUpTo`. A per-user bucket
+- Clients should ask once after T0 and then follow the shared status document,
+  comparing their rank with `admittedUpTo`. A per-user bucket
   (`rl:position-user:<user id>`, default burst 10, 1 per second) refuses
   polling with 429 `RATE_LIMITED` and `Retry-After`.
 - A user who never joined gets 404 `NOT_IN_QUEUE`.
@@ -109,7 +112,7 @@ Cache-Control: public, max-age=1
 ```
 
 - A buyer whose rank (from `/me`) is at most `admittedUpTo` may claim their
-  turn (task 2.7).
+  turn (`POST /v1/queue/{eventID}/admit`).
 - The admission leader rewrites it on every tick, inside the fenced
   `advance.lua`, in every state: it is always consistent with `admittedUpTo`,
   and a stale leader cannot overwrite it. `updatedAt` says how fresh it is.
@@ -233,9 +236,9 @@ after T0 the opener got to it) and counted in `holdfast_queue_opened_total`.
 ## Admission
 
 Admission moves `admittedUpTo` (`q:{E}:admitted`), the highest rank allowed
-into the purchase path. Buyers will compare their rank with it through the
-status document (task 2.6) and exchange their turn for an admission token
-(task 2.7).
+into the purchase path. Buyers compare their rank with it through the status
+document and exchange their turn for an admission token. Why one leader, and
+how a stale one is stopped: ADR 0007.
 
 - **One leader per event.** Every queue-svc replica runs a controller for every
   event in `q:events`; they compete for a PostgreSQL advisory lock
@@ -262,9 +265,14 @@ status document (task 2.6) and exchange their turn for an admission token
 - PostgreSQL is used only for elections. Readiness does not depend on it: if it
   is down, admissions pause and joining and positions keep working.
 
-Not built yet: limiting admissions by the units left in inventory
-(oversubscription) and marking the queue `SOLD_OUT` (see the progress log,
-issue P17); adaptive admission (AIMD) is Phase 5.
+Not built: limiting admissions by the units left in inventory
+(oversubscription) and marking the queue `SOLD_OUT` (progress log P17). Both
+need inventory's state, which queue-svc may only get through inventory-svc's
+API, and the units in active holds are not exposed there yet. Recommended at
+the end of Phase 2: build them in Phase 3, alongside booking-svc's
+cross-service calls. Until then the queue keeps admitting (within the session
+budget) after the last unit is held, and those buyers get 409 `SOLD_OUT` from
+inventory: nothing oversells. Adaptive admission (AIMD) is Phase 5.
 
 ## Decisions: how admission tokens are trusted (task 2.8)
 
@@ -275,7 +283,7 @@ breaking the rule that every request can be retried. Reuse is bounded instead:
 
 - the token is bound to one user and one event;
 - it expires at the earlier of `ADMISSION_TOKEN_TTL` (10 minutes) and the
-  buyer's session slot (task 2.7);
+  buyer's session slot;
 - holds are idempotent: a retried request returns the original hold;
 - the per-user cap (I4) bounds the units any token can hold, whatever it does.
 
@@ -346,7 +354,8 @@ switch is task 4.3; `SOLD_OUT` and `CLOSED` come with the admission controller.
 | `q:events` | set | Provisioned events: the opener's and the admission controllers' work list (one global key, never used inside multi-key scripts) |
 | `rl:SCOPE:ID` | hash | Token bucket: `tokens`, `ts_ms`; expires once the bucket would be full again |
 
-The remaining key in the design doc (section 8.2), `jti:*`, arrives with task 2.8.
+The design doc's `jti:*` key (single-use admission tokens, section 8.2) is not
+built: task 2.8 decided that tokens stay reusable within their session (below).
 
 ## Scripts
 

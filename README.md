@@ -3,7 +3,7 @@
 A surge-proof booking engine. When 500,000 people chase 1,000 seats, HoldFast
 sells exactly 1,000 (never 1,001) and stays up while doing it.
 
-> **Status: [v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0) released: Drop 1, foundation and inventory (build plan phases 0-1, brought up and proven in M1.5). Next: Phase 2, the waiting room.**
+> **Status: [v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0) released: Drop 1, foundation and inventory (build plan phases 0-1, brought up and proven in M1.5). Phase 2, the waiting room, is built on `main` and awaiting review before v0.2.0.**
 > The full design lives in [`docs/design/holdfast-design-and-build-plan.mdx`](docs/design/holdfast-design-and-build-plan.mdx).
 
 ## What works today
@@ -14,7 +14,7 @@ sells exactly 1,000 (never 1,001) and stays up while doing it.
   protection and late payment confirmations.
 - **The PostgreSQL final guard** makes overselling a constraint violation,
   whatever the fast path believes.
-- **queue-svc** (Phase 2, in progress) stores each event's waiting-room
+- **queue-svc** (Phase 2) stores each event's waiting-room
   settings and lets buyers join: a random lottery position before the sale
   opens, arrival order after, behind per-IP and per-user rate limits. The
   switch at the opening time follows Valkey's clock, buyers can look up their
@@ -89,7 +89,7 @@ docs/                  architecture, service reference, runbooks, ADRs, design
 scripts/               repository checks
 ```
 
-Next drops, following the design doc: the rest of `queue` (Phase 2); `booking`, `payment`
+Next drops, following the design doc: `booking`, `payment`
 and `mockpsp` with gRPC, the outbox and tracing (Phase 3); `auth` and the web
 client (Phase 4); then chaos drills, load tests and benchmarks (Phases 5-7).
 

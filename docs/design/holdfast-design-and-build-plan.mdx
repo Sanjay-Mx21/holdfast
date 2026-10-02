@@ -1674,9 +1674,9 @@ Write one ADR per significant decision in `docs/adr/`, starting from `0000-templ
 | 0002 | Holds in Valkey, truth in PostgreSQL | 1 | ✅ Written |
 | 0003 | Embedded migration runner | 0 | ✅ Written |
 | 0004 | Add gRPC and tracing with the first cross-service call | 1 | ✅ Written |
-| 0005 | Lottery before T0, FIFO after | 2 | ⏳ |
-| 0006 | Cached status polling instead of WebSockets or SSE | 2 | ⏳ |
-| 0007 | Leader election with PostgreSQL advisory locks plus fencing epochs | 2 | ⏳ |
+| 0005 | Lottery before T0, FIFO after | 2 | ✅ |
+| 0006 | Cached status polling instead of WebSockets or SSE | 2 | ✅ |
+| 0007 | Leader election with PostgreSQL advisory locks plus fencing epochs | 2 | ✅ |
 | 0008 | gRPC for synchronous calls, Kafka for asynchronous events | 3 | ⏳ |
 | 0009 | Transactional outbox with a polling relay (CDC later) | 3 | ⏳ |
 | 0010 | Orchestrated saga in booking-svc, instead of choreography or Temporal | 3 | ⏳ |
@@ -2060,7 +2060,7 @@ The dates are illustrative. The gates are not.
 - [x] 2.11 **Tests.** Unit: admission math, token bucket, rank, the Spearman helper. Integration: join idempotency and no re-roll, the T0 switch, a stale epoch rejected by `advance.lua`, session expiry. A model test for F1 (nobody is admitted ahead of a lower rank). A failover test (two controllers, one killed). `testing/synctest` for the tick loop. *Built with the Spearman helper in `internal/stats`; the token bucket and rank tested against real Valkey, since they are Lua; the tests are listed in `docs/services/queue.md`. Designing the model test exposed that a claim on a slot past its expiry but not yet swept returned 500, and the timing review found controllers outliving their events; both fixed.*
 - [x] 2.12 **Experiments.** E2: k6 ramps joins from 0 to maximum in 10 s while 50,000 virtual users poll status every 3 s with jitter; compare origin and edge request counts. E6: 100,000 pre-T0 joins with recorded join times; Spearman correlation close to 0 before T0 and exactly 1 after. *Built as `make fairness-e6` (`cmd/fairness`) and `make load-e2` (`loadtest/e2`). E6 passed (ρ = −0.0008 before T0, exactly 1 after). E2 models users as arrival rates rather than virtual users; the origin answered about 0.5 status requests per second whatever the edge served, and 50,000 users flowed from join to token at 30-second polling. The 3-second design load did not fit on the laptop with k6 alongside, and join p99 missed the 150 ms SLO; see `loadtest/results/README.md`.*
 - [x] 2.13 **`holdfastctl`.** `queue provision` and `queue status`; extend `event create`. *`event create` has provisioned the queue since task 2.1. `queue provision` takes the opening time from PostgreSQL by default; `queue status` (with `--json`) shows state, size, `admittedUpTo`, live sessions against the budget, the leader's epoch, the status document's age and work-list membership. Runbook RB-Q-8 covers putting a queue back after Valkey loses it.*
-- [ ] 2.14 **Docs.** Queue service doc and runbook; ADR 0005 (lottery before T0, FIFO after), ADR 0006 (cached status polling instead of WebSockets or SSE), ADR 0007 (leader election with advisory locks plus fencing epochs); README status; architecture sections 3 to 5.
+- [x] 2.14 **Docs.** Queue service doc and runbook; ADR 0005 (lottery before T0, FIFO after), ADR 0006 (cached status polling instead of WebSockets or SSE), ADR 0007 (leader election with advisory locks plus fencing epochs); README status; architecture sections 3 to 5. *The service doc and runbook grew with every task; 2.14 removed what had gone stale, wrote the three ADRs (`docs/adr/0005` to `0007`), added the buyer's journey to the architecture doc, and recorded the recommendation to build oversubscription and `SOLD_OUT` (P17) in Phase 3.*
 
 **Exit criteria:**
 
