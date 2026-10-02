@@ -22,6 +22,12 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
   producer's trace; Valkey spans inside traces; `trace_id` and `span_id` on
   log lines. inventory-svc and queue-svc are traced. Compose adds the
   OpenTelemetry Collector and Jaeger (http://localhost:16686).
+- **Contracts** (task 3.3): a Buf workspace with
+  `holdfast.inventory.v1.InventoryService` (`GetHold`, `MarkPaying`,
+  `Confirm`, `ReleaseForFailedPayment`) and the booking and payment event
+  payloads in `holdfast.events.v1`; generated Go in `internal/gen`
+  (`make gen`); CI runs `buf lint`, `buf format`, `buf breaking` against
+  `main` and a generated-code check.
 
 ## [0.2.0] - 2026-10-02
 
