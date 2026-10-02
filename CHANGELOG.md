@@ -73,6 +73,12 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
   freezes against a reference model; the leader's tick loop tested under
   `testing/synctest`; `internal/stats` with Spearman's rank correlation for
   experiment E6.
+- **Experiments E6 and E2** (task 2.12): `make fairness-e6` (`cmd/fairness`)
+  checks that join time does not predict a lottery position and that
+  positions after T0 are the arrival order; `make load-e2` (`loadtest/e2`)
+  runs a k6 stampede through the edge and compares edge and origin status
+  traffic. Results in `loadtest/results/`. `queue.Store.Purge` removes an
+  event's queue keys.
 
 ### Fixed
 
@@ -100,6 +106,8 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
 
 - `ADMISSION_PUBLIC_KEY_FILES` is no longer required by inventory-svc when
   `ADMISSION_JWKS_URL` is set; Compose uses the JWKS.
+- The edge's per-IP zone lives in `deploy/nginx/edge-limits.conf`, included by
+  `nginx.conf`, so a load test can replace it without forking the config.
 - `prometheus/client_golang` upgraded from 1.23.2 to 1.24.1, proposed by
   Dependabot (#1).
 

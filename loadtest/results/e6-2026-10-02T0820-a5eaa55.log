@@ -1,0 +1,29 @@
+go run ./cmd/fairness -valkey "localhost:6379" -json e6-results.json
+
+E6 fairness, event 01a0fbb3-413c-7ba5-9aae-0ce655f050c6
+  before T0 (concurrent)
+    joins            100000 in 6839 ms (14621 joins/s, concurrency 256)
+    join latency     p50 14.86 ms | p95 33.55 ms | p99 57.46 ms | max 200.56 ms
+    positions        1 to 100000
+    Spearman rho     -0.000775
+    first decile     10.2% of the earliest tenth stand in the first tenth (lottery: 10%, FIFO: 100%)
+  after T0 (one at a time)
+    joins            10000 in 2384 ms (4195 joins/s, concurrency 1)
+    join latency     p50 0.21 ms | p95 0.41 ms | p99 0.55 ms | max 4.82 ms
+    positions        100001 to 110000
+    Spearman rho     1.000000
+    first decile     100.0% of the earliest tenth stand in the first tenth (lottery: 10%, FIFO: 100%)
+  after T0 (concurrent, reported only)
+    joins            10000 in 350 ms (28539 joins/s, concurrency 256)
+    join latency     p50 8.49 ms | p95 13.63 ms | p99 15.97 ms | max 20.90 ms
+    positions        110001 to 120000
+    Spearman rho     0.999637
+    first decile     99.3% of the earliest tenth stand in the first tenth (lottery: 10%, FIFO: 100%)
+  checks
+    ok   every join succeeded: 0 errors
+    ok   every pre-T0 joiner got a lottery position
+    ok   every post-T0 joiner got an arrival-order position
+    ok   pre-T0: join time does not predict position: Spearman -0.00078, want |rho| < 0.01265 (4 standard errors for n = 100000)
+    ok   post-T0: position is exactly the arrival order: Spearman 1, want exactly 1
+    ok   every post-T0 joiner stands behind every pre-T0 joiner: pre-T0 ranks 1 to 100000, post-T0 ranks from 100001
+RESULT: PASS - lottery before T0, arrival order after it

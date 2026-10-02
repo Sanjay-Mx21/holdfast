@@ -1,0 +1,23 @@
+# Experiment E2 only (make load-e2): every request comes from one load
+# generator, so the per-IP limits, which would see one client, are lifted.
+# The per-user limits stay as they are. make load-e2 restores the normal
+# stack afterwards.
+services:
+  queue:
+    environment:
+      JOIN_IP_PER_SECOND: "1000000"
+      JOIN_IP_BURST: "1000000"
+  nginx:
+    volumes:
+      - ./loadtest/e2/edge-limits.conf:/etc/nginx/edge-limits.conf:ro
+  # The load generator, inside Compose: it reaches the edge as nginx:80, as a
+  # CDN would, instead of through Docker Desktop's port forwarding, which
+  # costs a lot of CPU at thousands of requests per second. It joins the
+  # default network too, to read queue-svc's metrics (queue:9090).
+  k6:
+    image: grafana/k6:2.3.0
+    profiles: [e2]
+    networks: [default, edge]
+    volumes:
+      - ./loadtest:/loadtest
+    working_dir: /loadtest

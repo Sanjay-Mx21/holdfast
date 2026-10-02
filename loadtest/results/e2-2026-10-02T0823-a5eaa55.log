@@ -1,0 +1,1334 @@
+E2 2026-10-02T0823-a5eaa55: USERS=50000 JOIN_PEAK=1000 ADMIT_RATE=500 POLL_EVERY=30 event=01a0fbb6-3344-7696-b85d-bcd98ebb0947
+host: 12 CPUs and 7 GB in WSL2, shared by the stack and the load generator (k6 in a container on the edge network)
+ Container holdfast-k6-run-17c5528d8e63 Creating 
+ Container holdfast-k6-run-17c5528d8e63 Created 
+
+         /\      Grafana   /‾‾/  
+    /\  /  \     |\  __   /  /   
+   /  \/    \    | |/ /  /   ‾‾\ 
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/ 
+
+
+     execution: local
+        script: e2/waiting-room.js
+        output: -
+
+     scenarios: (100.00%) 4 scenarios, 8001 max VUs, 3m30s max duration (incl. graceful stop):
+              * joins: Up to 1000.00 iterations/s for 56s over 2 stages (maxVUs: 200-2000, exec: join, gracefulStop: 30s)
+              * origin: 1 looping VUs for 3m0s (exec: sample, gracefulStop: 30s)
+              * polls: Up to 1667.00 iterations/s for 3m0s over 2 stages (maxVUs: 300-3000, exec: poll, gracefulStop: 30s)
+              * claims: 500.00 iterations/s for 1m40s (maxVUs: 300-3000, exec: claim, startTime: 1m1s, gracefulStop: 30s)
+
+
+running (0m00.6s), 0001/0801 VUs, 17 complete and 0 interrupted iterations
+joins    [   1% ] 0000/0200 VUs  00.6s/56s     0051.95 iters/s
+origin   [   0% ] 1 VUs          0m00.6s/3m0s 
+polls    [   0% ] 0000/0300 VUs  0m00.5s/3m0s  0016.34 iters/s
+claims • [   0% ] waiting        1m00.4s      
+
+running (0m01.6s), 0001/0801 VUs, 149 complete and 0 interrupted iterations
+joins    [   3% ] 0000/0200 VUs  01.6s/56s     0151.99 iters/s
+origin   [   1% ] 1 VUs          0m01.6s/3m0s 
+polls    [   1% ] 0000/0300 VUs  0m01.5s/3m0s  0045.32 iters/s
+claims • [   0% ] waiting        0m59.4s      
+
+running (0m02.6s), 0001/0801 VUs, 412 complete and 0 interrupted iterations
+joins    [   5% ] 0000/0200 VUs  02.6s/56s     0251.99 iters/s
+origin   [   1% ] 1 VUs          0m02.6s/3m0s 
+polls    [   1% ] 0000/0300 VUs  0m02.5s/3m0s  0075.01 iters/s
+claims • [   0% ] waiting        0m58.4s      
+
+running (0m03.6s), 0003/0801 VUs, 803 complete and 0 interrupted iterations
+joins    [   6% ] 0001/0200 VUs  03.6s/56s     0351.71 iters/s
+origin   [   2% ] 1 VUs          0m03.6s/3m0s 
+polls    [   2% ] 0001/0300 VUs  0m03.5s/3m0s  0104.81 iters/s
+claims • [   0% ] waiting        0m57.4s      
+
+running (0m04.6s), 0002/0801 VUs, 1327 complete and 0 interrupted iterations
+joins    [   8% ] 0001/0200 VUs  04.6s/56s     0451.77 iters/s
+origin   [   3% ] 1 VUs          0m04.6s/3m0s 
+polls    [   3% ] 0000/0300 VUs  0m04.5s/3m0s  0134.64 iters/s
+claims • [   0% ] waiting        0m56.4s      
+
+running (0m05.6s), 0004/0801 VUs, 1977 complete and 0 interrupted iterations
+joins    [  10% ] 0003/0200 VUs  05.6s/56s     0551.82 iters/s
+origin   [   3% ] 1 VUs          0m05.6s/3m0s 
+polls    [   3% ] 0000/0300 VUs  0m05.5s/3m0s  0164.32 iters/s
+claims • [   0% ] waiting        0m55.4s      
+
+running (0m06.6s), 0005/0801 VUs, 2759 complete and 0 interrupted iterations
+joins    [  12% ] 0003/0200 VUs  06.6s/56s     0651.84 iters/s
+origin   [   4% ] 1 VUs          0m06.6s/3m0s 
+polls    [   4% ] 0001/0300 VUs  0m06.5s/3m0s  0194.21 iters/s
+claims • [   0% ] waiting        0m54.4s      
+
+running (0m07.6s), 0005/0801 VUs, 3669 complete and 0 interrupted iterations
+joins    [  13% ] 0004/0200 VUs  07.6s/56s     0751.73 iters/s
+origin   [   4% ] 1 VUs          0m07.6s/3m0s 
+polls    [   4% ] 0001/0300 VUs  0m07.5s/3m0s  0223.96 iters/s
+claims • [   0% ] waiting        0m53.4s      
+
+running (0m08.6s), 0006/0801 VUs, 4710 complete and 0 interrupted iterations
+joins    [  15% ] 0005/0200 VUs  08.6s/56s     0851.76 iters/s
+origin   [   5% ] 1 VUs          0m08.6s/3m0s 
+polls    [   5% ] 0000/0300 VUs  0m08.5s/3m0s  0253.63 iters/s
+claims • [   0% ] waiting        0m52.4s      
+
+running (0m09.6s), 0006/0801 VUs, 5881 complete and 0 interrupted iterations
+joins    [  17% ] 0004/0200 VUs  09.6s/56s     0951.68 iters/s
+origin   [   5% ] 1 VUs          0m09.6s/3m0s 
+polls    [   5% ] 0001/0300 VUs  0m09.5s/3m0s  0283.45 iters/s
+claims • [   0% ] waiting        0m51.4s      
+
+running (0m10.6s), 0007/0801 VUs, 7168 complete and 0 interrupted iterations
+joins    [  19% ] 0006/0200 VUs  10.6s/56s     1000.00 iters/s
+origin   [   6% ] 1 VUs          0m10.6s/3m0s 
+polls    [   6% ] 0000/0300 VUs  0m10.5s/3m0s  0313.19 iters/s
+claims • [   0% ] waiting        0m50.4s      
+
+running (0m11.6s), 0007/0801 VUs, 8497 complete and 0 interrupted iterations
+joins    [  21% ] 0006/0200 VUs  11.6s/56s     1000.00 iters/s
+origin   [   6% ] 1 VUs          0m11.6s/3m0s 
+polls    [   6% ] 0000/0300 VUs  0m11.5s/3m0s  0342.95 iters/s
+claims • [   0% ] waiting        0m49.4s      
+
+running (0m12.6s), 0206/0811 VUs, 9574 complete and 0 interrupted iterations
+joins    [  22% ] 0205/0210 VUs  12.6s/56s     1000.00 iters/s
+origin   [   7% ] 1 VUs          0m12.6s/3m0s 
+polls    [   7% ] 0000/0300 VUs  0m12.5s/3m0s  0372.73 iters/s
+claims • [   0% ] waiting        0m48.4s      
+
+running (0m13.6s), 0010/0819 VUs, 11126 complete and 0 interrupted iterations
+joins    [  24% ] 0007/0218 VUs  13.6s/56s     1000.00 iters/s
+origin   [   8% ] 1 VUs          0m13.6s/3m0s 
+polls    [   8% ] 0002/0300 VUs  0m13.5s/3m0s  0402.60 iters/s
+claims • [   0% ] waiting        0m47.4s      
+
+running (0m14.6s), 0007/0819 VUs, 12542 complete and 0 interrupted iterations
+joins    [  26% ] 0005/0218 VUs  14.6s/56s     1000.00 iters/s
+origin   [   8% ] 1 VUs          0m14.6s/3m0s 
+polls    [   8% ] 0000/0300 VUs  0m14.5s/3m0s  0432.26 iters/s
+claims • [   0% ] waiting        0m46.4s      
+
+running (0m15.6s), 0005/0819 VUs, 13992 complete and 0 interrupted iterations
+joins    [  28% ] 0004/0218 VUs  15.6s/56s     1000.00 iters/s
+origin   [   9% ] 1 VUs          0m15.6s/3m0s 
+polls    [   9% ] 0000/0300 VUs  0m15.5s/3m0s  0462.02 iters/s
+claims • [   0% ] waiting        0m45.4s      
+
+running (0m16.6s), 0006/0819 VUs, 15469 complete and 0 interrupted iterations
+joins    [  30% ] 0005/0218 VUs  16.6s/56s     1000.00 iters/s
+origin   [   9% ] 1 VUs          0m16.6s/3m0s 
+polls    [   9% ] 0000/0300 VUs  0m16.5s/3m0s  0491.80 iters/s
+claims • [   0% ] waiting        0m44.4s      
+
+running (0m17.6s), 0010/0819 VUs, 16972 complete and 0 interrupted iterations
+joins    [  31% ] 0007/0218 VUs  17.6s/56s     1000.00 iters/s
+origin   [  10% ] 1 VUs          0m17.6s/3m0s 
+polls    [  10% ] 0002/0300 VUs  0m17.5s/3m0s  0521.58 iters/s
+claims • [   0% ] waiting        0m43.4s      
+
+running (0m18.6s), 0005/0819 VUs, 18515 complete and 0 interrupted iterations
+joins    [  33% ] 0004/0218 VUs  18.6s/56s     1000.00 iters/s
+origin   [  10% ] 1 VUs          0m18.6s/3m0s 
+polls    [  10% ] 0000/0300 VUs  0m18.5s/3m0s  0551.33 iters/s
+claims • [   0% ] waiting        0m42.4s      
+
+running (0m19.6s), 0011/0819 VUs, 20077 complete and 0 interrupted iterations
+joins    [  35% ] 0008/0218 VUs  19.6s/56s     1000.00 iters/s
+origin   [  11% ] 1 VUs          0m19.6s/3m0s 
+polls    [  11% ] 0002/0300 VUs  0m19.5s/3m0s  0581.13 iters/s
+claims • [   0% ] waiting        0m41.4s      
+
+running (0m20.6s), 0009/0819 VUs, 21675 complete and 0 interrupted iterations
+joins    [  37% ] 0007/0218 VUs  20.6s/56s     1000.00 iters/s
+origin   [  11% ] 1 VUs          0m20.6s/3m0s 
+polls    [  11% ] 0001/0300 VUs  0m20.5s/3m0s  0610.85 iters/s
+claims • [   0% ] waiting        0m40.4s      
+
+running (0m21.6s), 0007/0819 VUs, 23304 complete and 0 interrupted iterations
+joins    [  38% ] 0005/0218 VUs  21.6s/56s     1000.00 iters/s
+origin   [  12% ] 1 VUs          0m21.6s/3m0s 
+polls    [  12% ] 0001/0300 VUs  0m21.5s/3m0s  0640.63 iters/s
+claims • [   0% ] waiting        0m39.4s      
+
+running (0m22.6s), 0006/0819 VUs, 24962 complete and 0 interrupted iterations
+joins    [  40% ] 0004/0218 VUs  22.6s/56s     1000.00 iters/s
+origin   [  13% ] 1 VUs          0m22.6s/3m0s 
+polls    [  13% ] 0001/0300 VUs  0m22.5s/3m0s  0670.42 iters/s
+claims • [   0% ] waiting        0m38.4s      
+
+running (0m23.6s), 0008/0819 VUs, 26646 complete and 0 interrupted iterations
+joins    [  42% ] 0006/0218 VUs  23.6s/56s     1000.00 iters/s
+origin   [  13% ] 1 VUs          0m23.6s/3m0s 
+polls    [  13% ] 0001/0300 VUs  0m23.5s/3m0s  0700.18 iters/s
+claims • [   0% ] waiting        0m37.4s      
+
+running (0m24.6s), 0008/0819 VUs, 28362 complete and 0 interrupted iterations
+joins    [  44% ] 0007/0218 VUs  24.6s/56s     1000.00 iters/s
+origin   [  14% ] 1 VUs          0m24.6s/3m0s 
+polls    [  14% ] 0000/0300 VUs  0m24.5s/3m0s  0729.90 iters/s
+claims • [   0% ] waiting        0m36.4s      
+
+running (0m25.6s), 0007/0819 VUs, 30109 complete and 0 interrupted iterations
+joins    [  46% ] 0005/0218 VUs  25.6s/56s     1000.00 iters/s
+origin   [  14% ] 1 VUs          0m25.6s/3m0s 
+polls    [  14% ] 0001/0300 VUs  0m25.5s/3m0s  0759.72 iters/s
+claims • [   0% ] waiting        0m35.4s      
+
+running (0m26.6s), 0006/0819 VUs, 31886 complete and 0 interrupted iterations
+joins    [  47% ] 0004/0218 VUs  26.6s/56s     1000.00 iters/s
+origin   [  15% ] 1 VUs          0m26.6s/3m0s 
+polls    [  15% ] 0001/0300 VUs  0m26.5s/3m0s  0789.50 iters/s
+claims • [   0% ] waiting        0m34.4s      
+
+running (0m27.6s), 0011/0819 VUs, 33684 complete and 0 interrupted iterations
+joins    [  49% ] 0009/0218 VUs  27.6s/56s     1000.00 iters/s
+origin   [  15% ] 1 VUs          0m27.6s/3m0s 
+polls    [  15% ] 0002/0300 VUs  0m27.5s/3m0s  0819.22 iters/s
+claims • [   0% ] waiting        0m33.4s      
+
+running (0m28.6s), 0007/0819 VUs, 35524 complete and 0 interrupted iterations
+joins    [  51% ] 0005/0218 VUs  28.6s/56s     1000.00 iters/s
+origin   [  16% ] 1 VUs          0m28.6s/3m0s 
+polls    [  16% ] 0001/0300 VUs  0m28.5s/3m0s  0849.02 iters/s
+claims • [   0% ] waiting        0m32.4s      
+
+running (0m29.6s), 0006/0819 VUs, 37391 complete and 0 interrupted iterations
+joins    [  53% ] 0004/0218 VUs  29.6s/56s     1000.00 iters/s
+origin   [  16% ] 1 VUs          0m29.6s/3m0s 
+polls    [  16% ] 0001/0300 VUs  0m29.5s/3m0s  0878.79 iters/s
+claims • [   0% ] waiting        0m31.4s      
+
+running (0m30.6s), 0007/0819 VUs, 39285 complete and 0 interrupted iterations
+joins    [  55% ] 0004/0218 VUs  30.6s/56s     1000.00 iters/s
+origin   [  17% ] 1 VUs          0m30.6s/3m0s 
+polls    [  17% ] 0002/0300 VUs  0m30.5s/3m0s  0908.57 iters/s
+claims • [   0% ] waiting        0m30.4s      
+
+running (0m31.6s), 0007/0819 VUs, 41209 complete and 0 interrupted iterations
+joins    [  56% ] 0005/0218 VUs  31.6s/56s     1000.00 iters/s
+origin   [  18% ] 1 VUs          0m31.6s/3m0s 
+polls    [  18% ] 0001/0300 VUs  0m31.5s/3m0s  0938.32 iters/s
+claims • [   0% ] waiting        0m29.4s      
+
+running (0m32.6s), 0012/0819 VUs, 43158 complete and 0 interrupted iterations
+joins    [  58% ] 0008/0218 VUs  32.6s/56s     1000.00 iters/s
+origin   [  18% ] 1 VUs          0m32.6s/3m0s 
+polls    [  18% ] 0003/0300 VUs  0m32.5s/3m0s  0968.08 iters/s
+claims • [   0% ] waiting        0m28.4s      
+
+running (0m33.6s), 0006/0819 VUs, 45148 complete and 0 interrupted iterations
+joins    [  60% ] 0004/0218 VUs  33.6s/56s     1000.00 iters/s
+origin   [  19% ] 1 VUs          0m33.6s/3m0s 
+polls    [  19% ] 0001/0300 VUs  0m33.5s/3m0s  0997.85 iters/s
+claims • [   0% ] waiting        0m27.4s      
+
+running (0m34.6s), 0006/0819 VUs, 47162 complete and 0 interrupted iterations
+joins    [  62% ] 0004/0218 VUs  34.6s/56s     1000.00 iters/s
+origin   [  19% ] 1 VUs          0m34.6s/3m0s 
+polls    [  19% ] 0001/0300 VUs  0m34.5s/3m0s  1027.63 iters/s
+claims • [   0% ] waiting        0m26.4s      
+
+running (0m35.6s), 0007/0819 VUs, 49204 complete and 0 interrupted iterations
+joins    [  63% ] 0005/0218 VUs  35.6s/56s     1000.00 iters/s
+origin   [  20% ] 1 VUs          0m35.6s/3m0s 
+polls    [  20% ] 0001/0300 VUs  0m35.5s/3m0s  1057.38 iters/s
+claims • [   0% ] waiting        0m25.4s      
+
+running (0m36.6s), 0042/0819 VUs, 51266 complete and 0 interrupted iterations
+joins    [  65% ] 0029/0218 VUs  36.6s/56s     1000.00 iters/s
+origin   [  20% ] 1 VUs          0m36.6s/3m0s 
+polls    [  20% ] 0012/0300 VUs  0m36.6s/3m0s  1087.50 iters/s
+claims • [   0% ] waiting        0m24.4s      
+
+running (0m37.6s), 0106/0822 VUs, 53279 complete and 0 interrupted iterations
+joins    [  67% ] 0083/0221 VUs  37.6s/56s     1000.00 iters/s
+origin   [  21% ] 1 VUs          0m37.6s/3m0s 
+polls    [  21% ] 0022/0300 VUs  0m37.5s/3m0s  1116.93 iters/s
+claims • [   0% ] waiting        0m23.4s      
+
+running (0m38.7s), 0172/0823 VUs, 55438 complete and 0 interrupted iterations
+joins    [  69% ] 0128/0222 VUs  38.6s/56s     1000.00 iters/s
+origin   [  21% ] 1 VUs          0m38.6s/3m0s 
+polls    [  21% ] 0044/0300 VUs  0m38.6s/3m0s  1149.04 iters/s
+claims • [   0% ] waiting        0m22.4s      
+
+running (0m39.6s), 0009/0823 VUs, 57666 complete and 0 interrupted iterations
+joins    [  71% ] 0006/0222 VUs  39.6s/56s     1000.00 iters/s
+origin   [  22% ] 1 VUs          0m39.6s/3m0s 
+polls    [  22% ] 0002/0300 VUs  0m39.5s/3m0s  1176.46 iters/s
+claims • [   0% ] waiting        0m21.4s      
+
+running (0m40.6s), 0008/0823 VUs, 59860 complete and 0 interrupted iterations
+joins    [  72% ] 0005/0222 VUs  40.6s/56s     1000.00 iters/s
+origin   [  23% ] 1 VUs          0m40.6s/3m0s 
+polls    [  23% ] 0002/0300 VUs  0m40.5s/3m0s  1206.24 iters/s
+claims • [   0% ] waiting        0m20.4s      
+
+running (0m41.6s), 0006/0823 VUs, 62084 complete and 0 interrupted iterations
+joins    [  74% ] 0003/0222 VUs  41.6s/56s     1000.00 iters/s
+origin   [  23% ] 1 VUs          0m41.6s/3m0s 
+polls    [  23% ] 0002/0300 VUs  0m41.5s/3m0s  1236.01 iters/s
+claims • [   0% ] waiting        0m19.4s      
+
+running (0m42.6s), 0006/0823 VUs, 64335 complete and 0 interrupted iterations
+joins    [  76% ] 0004/0222 VUs  42.6s/56s     1000.00 iters/s
+origin   [  24% ] 1 VUs          0m42.6s/3m0s 
+polls    [  24% ] 0002/0300 VUs  0m42.5s/3m0s  1265.78 iters/s
+claims • [   0% ] waiting        0m18.4s      
+
+running (0m43.6s), 0011/0823 VUs, 66611 complete and 0 interrupted iterations
+joins    [  78% ] 0007/0222 VUs  43.6s/56s     1000.00 iters/s
+origin   [  24% ] 1 VUs          0m43.6s/3m0s 
+polls    [  24% ] 0003/0300 VUs  0m43.5s/3m0s  1295.53 iters/s
+claims • [   0% ] waiting        0m17.4s      
+
+running (0m44.6s), 0006/0823 VUs, 68927 complete and 0 interrupted iterations
+joins    [  80% ] 0004/0222 VUs  44.6s/56s     1000.00 iters/s
+origin   [  25% ] 1 VUs          0m44.6s/3m0s 
+polls    [  25% ] 0001/0300 VUs  0m44.5s/3m0s  1325.29 iters/s
+claims • [   0% ] waiting        0m16.4s      
+
+running (0m45.6s), 0007/0823 VUs, 71269 complete and 0 interrupted iterations
+joins    [  81% ] 0004/0222 VUs  45.6s/56s     1000.00 iters/s
+origin   [  25% ] 1 VUs          0m45.6s/3m0s 
+polls    [  25% ] 0002/0300 VUs  0m45.5s/3m0s  1355.08 iters/s
+claims • [   0% ] waiting        0m15.4s      
+
+running (0m46.6s), 0009/0823 VUs, 73638 complete and 0 interrupted iterations
+joins    [  83% ] 0006/0222 VUs  46.6s/56s     1000.00 iters/s
+origin   [  26% ] 1 VUs          0m46.6s/3m0s 
+polls    [  26% ] 0002/0300 VUs  0m46.5s/3m0s  1384.85 iters/s
+claims • [   0% ] waiting        0m14.4s      
+
+running (0m47.7s), 0036/0823 VUs, 76242 complete and 0 interrupted iterations
+joins    [  85% ] 0026/0222 VUs  47.7s/56s     1000.00 iters/s
+origin   [  27% ] 1 VUs          0m47.7s/3m0s 
+polls    [  27% ] 0009/0300 VUs  0m47.7s/3m0s  1417.98 iters/s
+claims • [   0% ] waiting        0m13.3s      
+
+running (0m48.6s), 0007/0823 VUs, 78471 complete and 0 interrupted iterations
+joins    [  87% ] 0005/0222 VUs  48.6s/56s     1000.00 iters/s
+origin   [  27% ] 1 VUs          0m48.6s/3m0s 
+polls    [  27% ] 0001/0300 VUs  0m48.5s/3m0s  1444.38 iters/s
+claims • [   0% ] waiting        0m12.4s      
+
+running (0m49.6s), 0010/0823 VUs, 80933 complete and 0 interrupted iterations
+joins    [  88% ] 0005/0222 VUs  49.6s/56s     1000.00 iters/s
+origin   [  28% ] 1 VUs          0m49.6s/3m0s 
+polls    [  28% ] 0004/0300 VUs  0m49.5s/3m0s  1474.20 iters/s
+claims • [   0% ] waiting        0m11.4s      
+
+running (0m50.6s), 0012/0823 VUs, 83417 complete and 0 interrupted iterations
+joins    [  90% ] 0008/0222 VUs  50.6s/56s     1000.00 iters/s
+origin   [  28% ] 1 VUs          0m50.6s/3m0s 
+polls    [  28% ] 0003/0300 VUs  0m50.5s/3m0s  1503.93 iters/s
+claims • [   0% ] waiting        0m10.4s      
+
+running (0m51.6s), 0006/0823 VUs, 85941 complete and 0 interrupted iterations
+joins    [  92% ] 0004/0222 VUs  51.6s/56s     1000.00 iters/s
+origin   [  29% ] 1 VUs          0m51.6s/3m0s 
+polls    [  29% ] 0001/0300 VUs  0m51.5s/3m0s  1533.66 iters/s
+claims • [   0% ] waiting        0m09.4s      
+
+running (0m52.6s), 0007/0823 VUs, 88491 complete and 0 interrupted iterations
+joins    [  94% ] 0004/0222 VUs  52.6s/56s     1000.00 iters/s
+origin   [  29% ] 1 VUs          0m52.6s/3m0s 
+polls    [  29% ] 0002/0300 VUs  0m52.5s/3m0s  1563.45 iters/s
+claims • [   0% ] waiting        0m08.4s      
+
+running (0m53.6s), 0008/0823 VUs, 91069 complete and 0 interrupted iterations
+joins    [  96% ] 0005/0222 VUs  53.6s/56s     1000.00 iters/s
+origin   [  30% ] 1 VUs          0m53.6s/3m0s 
+polls    [  30% ] 0002/0300 VUs  0m53.5s/3m0s  1593.22 iters/s
+claims • [   0% ] waiting        0m07.4s      
+
+running (0m54.6s), 0009/0823 VUs, 93677 complete and 0 interrupted iterations
+joins    [  97% ] 0005/0222 VUs  54.6s/56s     1000.00 iters/s
+origin   [  30% ] 1 VUs          0m54.6s/3m0s 
+polls    [  30% ] 0003/0300 VUs  0m54.5s/3m0s  1622.98 iters/s
+claims • [   0% ] waiting        0m06.4s      
+
+running (0m55.6s), 0003/0823 VUs, 96322 complete and 0 interrupted iterations
+joins    [  99% ] 0000/0222 VUs  55.6s/56s     1000.00 iters/s
+origin   [  31% ] 1 VUs          0m55.6s/3m0s 
+polls    [  31% ] 0002/0300 VUs  0m55.5s/3m0s  1652.75 iters/s
+claims • [   0% ] waiting        0m05.4s      
+
+running (0m56.6s), 0002/0823 VUs, 98436 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s           1000.00 iters/s
+origin   [  31% ] 1 VUs          0m56.6s/3m0s 
+polls    [  31% ] 0001/0300 VUs  0m56.5s/3m0s  1667.00 iters/s
+claims • [   0% ] waiting        0m04.4s      
+
+running (0m57.6s), 0003/0823 VUs, 100104 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s           1000.00 iters/s
+origin   [  32% ] 1 VUs          0m57.6s/3m0s 
+polls    [  32% ] 0002/0300 VUs  0m57.5s/3m0s  1667.00 iters/s
+claims • [   0% ] waiting        0m03.4s      
+
+running (0m58.6s), 0002/0823 VUs, 101772 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s           1000.00 iters/s
+origin   [  33% ] 1 VUs          0m58.6s/3m0s 
+polls    [  33% ] 0002/0300 VUs  0m58.5s/3m0s  1667.00 iters/s
+claims • [   0% ] waiting        0m02.4s      
+
+running (0m59.6s), 0004/0823 VUs, 103439 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s           1000.00 iters/s
+origin   [  33% ] 1 VUs          0m59.6s/3m0s 
+polls    [  33% ] 0002/0300 VUs  0m59.5s/3m0s  1667.00 iters/s
+claims • [   0% ] waiting        0m01.4s      
+
+running (1m00.6s), 0001/0823 VUs, 105108 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s           1000.00 iters/s
+origin   [  34% ] 1 VUs          1m00.6s/3m0s 
+polls    [  34% ] 0000/0300 VUs  1m00.5s/3m0s  1667.00 iters/s
+claims • [   0% ] waiting        0m00.4s      
+
+running (1m01.6s), 0005/0823 VUs, 107049 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  34% ] 1 VUs          1m01.6s/3m0s  
+polls    [  34% ] 0003/0300 VUs  1m01.5s/3m0s   1667.00 iters/s
+claims   [   1% ] 0001/0300 VUs  0m00.6s/1m40s  500.00 iters/s
+
+running (1m02.6s), 0005/0823 VUs, 109217 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  35% ] 1 VUs          1m02.6s/3m0s  
+polls    [  35% ] 0004/0300 VUs  1m02.5s/3m0s   1667.00 iters/s
+claims   [   2% ] 0001/0300 VUs  0m01.6s/1m40s  500.00 iters/s
+
+running (1m03.6s), 0005/0823 VUs, 111386 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  35% ] 1 VUs          1m03.6s/3m0s  
+polls    [  35% ] 0002/0300 VUs  1m03.5s/3m0s   1667.00 iters/s
+claims   [   3% ] 0002/0300 VUs  0m02.6s/1m40s  500.00 iters/s
+
+running (1m04.6s), 0017/0823 VUs, 113545 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  36% ] 1 VUs          1m04.6s/3m0s  
+polls    [  36% ] 0013/0300 VUs  1m04.5s/3m0s   1667.00 iters/s
+claims   [   4% ] 0002/0300 VUs  0m03.6s/1m40s  500.00 iters/s
+
+running (1m05.6s), 0004/0823 VUs, 115722 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  36% ] 1 VUs          1m05.6s/3m0s  
+polls    [  36% ] 0001/0300 VUs  1m05.5s/3m0s   1667.00 iters/s
+claims   [   5% ] 0002/0300 VUs  0m04.6s/1m40s  500.00 iters/s
+
+running (1m06.6s), 0005/0823 VUs, 117890 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  37% ] 1 VUs          1m06.6s/3m0s  
+polls    [  37% ] 0002/0300 VUs  1m06.5s/3m0s   1667.00 iters/s
+claims   [   6% ] 0002/0300 VUs  0m05.6s/1m40s  500.00 iters/s
+
+running (1m07.6s), 0037/0823 VUs, 120029 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  38% ] 1 VUs          1m07.6s/3m0s  
+polls    [  38% ] 0009/0300 VUs  1m07.6s/3m0s   1667.00 iters/s
+claims   [   7% ] 0027/0300 VUs  0m06.6s/1m40s  500.00 iters/s
+
+running (1m08.6s), 0005/0823 VUs, 122226 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  38% ] 1 VUs          1m08.6s/3m0s  
+polls    [  38% ] 0002/0300 VUs  1m08.5s/3m0s   1667.00 iters/s
+claims   [   8% ] 0002/0300 VUs  0m07.6s/1m40s  500.00 iters/s
+
+running (1m09.6s), 0005/0823 VUs, 124393 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  39% ] 1 VUs          1m09.6s/3m0s  
+polls    [  39% ] 0002/0300 VUs  1m09.5s/3m0s   1667.00 iters/s
+claims   [   9% ] 0002/0300 VUs  0m08.6s/1m40s  500.00 iters/s
+
+running (1m10.6s), 0016/0823 VUs, 126551 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  39% ] 1 VUs          1m10.6s/3m0s  
+polls    [  39% ] 0007/0300 VUs  1m10.5s/3m0s   1667.00 iters/s
+claims   [  10% ] 0008/0300 VUs  0m09.6s/1m40s  500.00 iters/s
+
+running (1m11.6s), 0005/0823 VUs, 128730 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  40% ] 1 VUs          1m11.6s/3m0s  
+polls    [  40% ] 0002/0300 VUs  1m11.5s/3m0s   1667.00 iters/s
+claims   [  11% ] 0002/0300 VUs  0m10.6s/1m40s  500.00 iters/s
+
+running (1m12.6s), 0004/0823 VUs, 130898 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  40% ] 1 VUs          1m12.6s/3m0s  
+polls    [  40% ] 0001/0300 VUs  1m12.5s/3m0s   1667.00 iters/s
+claims   [  12% ] 0002/0300 VUs  0m11.6s/1m40s  500.00 iters/s
+
+running (1m13.6s), 0006/0823 VUs, 133065 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  41% ] 1 VUs          1m13.6s/3m0s  
+polls    [  41% ] 0002/0300 VUs  1m13.5s/3m0s   1667.00 iters/s
+claims   [  13% ] 0002/0300 VUs  0m12.6s/1m40s  500.00 iters/s
+
+running (1m14.6s), 0006/0823 VUs, 135233 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  41% ] 1 VUs          1m14.6s/3m0s  
+polls    [  41% ] 0002/0300 VUs  1m14.5s/3m0s   1667.00 iters/s
+claims   [  14% ] 0002/0300 VUs  0m13.6s/1m40s  500.00 iters/s
+
+running (1m15.6s), 0005/0823 VUs, 137401 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  42% ] 1 VUs          1m15.6s/3m0s  
+polls    [  42% ] 0001/0300 VUs  1m15.5s/3m0s   1667.00 iters/s
+claims   [  15% ] 0002/0300 VUs  0m14.6s/1m40s  500.00 iters/s
+
+running (1m16.6s), 0007/0823 VUs, 139567 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  43% ] 1 VUs          1m16.6s/3m0s  
+polls    [  43% ] 0004/0300 VUs  1m16.5s/3m0s   1667.00 iters/s
+claims   [  16% ] 0002/0300 VUs  0m15.6s/1m40s  500.00 iters/s
+
+running (1m17.6s), 0015/0823 VUs, 141730 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  43% ] 1 VUs          1m17.6s/3m0s  
+polls    [  43% ] 0007/0300 VUs  1m17.5s/3m0s   1667.00 iters/s
+claims   [  17% ] 0006/0300 VUs  0m16.6s/1m40s  500.00 iters/s
+
+running (1m18.6s), 0014/0823 VUs, 143895 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  44% ] 1 VUs          1m18.6s/3m0s  
+polls    [  44% ] 0007/0300 VUs  1m18.5s/3m0s   1667.00 iters/s
+claims   [  18% ] 0005/0300 VUs  0m17.6s/1m40s  500.00 iters/s
+
+running (1m19.6s), 0005/0823 VUs, 146074 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  44% ] 1 VUs          1m19.6s/3m0s  
+polls    [  44% ] 0003/0300 VUs  1m19.5s/3m0s   1667.00 iters/s
+claims   [  19% ] 0001/0300 VUs  0m18.6s/1m40s  500.00 iters/s
+
+running (1m20.6s), 0004/0823 VUs, 148242 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  45% ] 1 VUs          1m20.6s/3m0s  
+polls    [  45% ] 0002/0300 VUs  1m20.5s/3m0s   1667.00 iters/s
+claims   [  20% ] 0002/0300 VUs  0m19.6s/1m40s  500.00 iters/s
+
+running (1m21.6s), 0004/0823 VUs, 150410 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  45% ] 1 VUs          1m21.6s/3m0s  
+polls    [  45% ] 0002/0300 VUs  1m21.5s/3m0s   1667.00 iters/s
+claims   [  21% ] 0001/0300 VUs  0m20.6s/1m40s  500.00 iters/s
+
+running (1m22.6s), 0010/0823 VUs, 152572 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  46% ] 1 VUs          1m22.6s/3m0s  
+polls    [  46% ] 0006/0300 VUs  1m22.5s/3m0s   1667.00 iters/s
+claims   [  22% ] 0003/0300 VUs  0m21.6s/1m40s  500.00 iters/s
+
+running (1m23.6s), 0004/0823 VUs, 154746 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  46% ] 1 VUs          1m23.6s/3m0s  
+polls    [  46% ] 0001/0300 VUs  1m23.5s/3m0s   1667.00 iters/s
+claims   [  23% ] 0002/0300 VUs  0m22.6s/1m40s  500.00 iters/s
+
+running (1m24.6s), 0005/0823 VUs, 156914 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  47% ] 1 VUs          1m24.6s/3m0s  
+polls    [  47% ] 0002/0300 VUs  1m24.5s/3m0s   1667.00 iters/s
+claims   [  24% ] 0002/0300 VUs  0m23.6s/1m40s  500.00 iters/s
+
+running (1m25.6s), 0004/0823 VUs, 159082 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  48% ] 1 VUs          1m25.6s/3m0s  
+polls    [  48% ] 0003/0300 VUs  1m25.5s/3m0s   1667.00 iters/s
+claims   [  25% ] 0001/0300 VUs  0m24.6s/1m40s  500.00 iters/s
+
+running (1m26.6s), 0005/0823 VUs, 161250 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  48% ] 1 VUs          1m26.6s/3m0s  
+polls    [  48% ] 0002/0300 VUs  1m26.5s/3m0s   1667.00 iters/s
+claims   [  26% ] 0003/0300 VUs  0m25.6s/1m40s  500.00 iters/s
+
+running (1m27.6s), 0005/0823 VUs, 163417 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  49% ] 1 VUs          1m27.6s/3m0s  
+polls    [  49% ] 0001/0300 VUs  1m27.5s/3m0s   1667.00 iters/s
+claims   [  27% ] 0002/0300 VUs  0m26.6s/1m40s  500.00 iters/s
+
+running (1m28.6s), 0005/0823 VUs, 165585 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  49% ] 1 VUs          1m28.6s/3m0s  
+polls    [  49% ] 0002/0300 VUs  1m28.5s/3m0s   1667.00 iters/s
+claims   [  28% ] 0001/0300 VUs  0m27.6s/1m40s  500.00 iters/s
+
+running (1m29.6s), 0005/0823 VUs, 167752 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  50% ] 1 VUs          1m29.6s/3m0s  
+polls    [  50% ] 0002/0300 VUs  1m29.5s/3m0s   1667.00 iters/s
+claims   [  29% ] 0002/0300 VUs  0m28.6s/1m40s  500.00 iters/s
+
+running (1m30.6s), 0003/0823 VUs, 169923 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  50% ] 1 VUs          1m30.6s/3m0s  
+polls    [  50% ] 0001/0300 VUs  1m30.5s/3m0s   1667.00 iters/s
+claims   [  30% ] 0001/0300 VUs  0m29.6s/1m40s  500.00 iters/s
+
+running (1m31.6s), 0004/0823 VUs, 172090 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  51% ] 1 VUs          1m31.6s/3m0s  
+polls    [  51% ] 0002/0300 VUs  1m31.5s/3m0s   1667.00 iters/s
+claims   [  31% ] 0002/0300 VUs  0m30.6s/1m40s  500.00 iters/s
+
+running (1m32.6s), 0004/0823 VUs, 174259 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  51% ] 1 VUs          1m32.6s/3m0s  
+polls    [  51% ] 0002/0300 VUs  1m32.5s/3m0s   1667.00 iters/s
+claims   [  32% ] 0001/0300 VUs  0m31.6s/1m40s  500.00 iters/s
+
+running (1m33.6s), 0006/0823 VUs, 176425 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  52% ] 1 VUs          1m33.6s/3m0s  
+polls    [  52% ] 0003/0300 VUs  1m33.5s/3m0s   1667.00 iters/s
+claims   [  33% ] 0002/0300 VUs  0m32.6s/1m40s  500.00 iters/s
+
+running (1m34.6s), 0005/0823 VUs, 178595 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  53% ] 1 VUs          1m34.6s/3m0s  
+polls    [  53% ] 0001/0300 VUs  1m34.5s/3m0s   1667.00 iters/s
+claims   [  34% ] 0002/0300 VUs  0m33.6s/1m40s  500.00 iters/s
+
+running (1m35.6s), 0004/0823 VUs, 180763 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  53% ] 1 VUs          1m35.6s/3m0s  
+polls    [  53% ] 0002/0300 VUs  1m35.5s/3m0s   1667.00 iters/s
+claims   [  35% ] 0001/0300 VUs  0m34.6s/1m40s  500.00 iters/s
+
+running (1m36.6s), 0004/0823 VUs, 182931 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  54% ] 1 VUs          1m36.6s/3m0s  
+polls    [  54% ] 0002/0300 VUs  1m36.5s/3m0s   1667.00 iters/s
+claims   [  36% ] 0001/0300 VUs  0m35.6s/1m40s  500.00 iters/s
+
+running (1m37.5s), 0007/0823 VUs, 185096 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  54% ] 1 VUs          1m37.6s/3m0s  
+polls    [  54% ] 0004/0300 VUs  1m37.5s/3m0s   1667.00 iters/s
+claims   [  37% ] 0002/0300 VUs  0m36.6s/1m40s  500.00 iters/s
+
+running (1m38.5s), 0004/0823 VUs, 187266 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  55% ] 1 VUs          1m38.6s/3m0s  
+polls    [  55% ] 0001/0300 VUs  1m38.5s/3m0s   1667.00 iters/s
+claims   [  38% ] 0002/0300 VUs  0m37.6s/1m40s  500.00 iters/s
+
+running (1m39.5s), 0005/0823 VUs, 189433 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  55% ] 1 VUs          1m39.6s/3m0s  
+polls    [  55% ] 0002/0300 VUs  1m39.5s/3m0s   1667.00 iters/s
+claims   [  39% ] 0002/0300 VUs  0m38.6s/1m40s  500.00 iters/s
+
+running (1m40.5s), 0006/0823 VUs, 191601 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  56% ] 1 VUs          1m40.6s/3m0s  
+polls    [  56% ] 0003/0300 VUs  1m40.5s/3m0s   1667.00 iters/s
+claims   [  40% ] 0002/0300 VUs  0m39.6s/1m40s  500.00 iters/s
+
+running (1m41.5s), 0004/0823 VUs, 193770 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  56% ] 1 VUs          1m41.6s/3m0s  
+polls    [  56% ] 0001/0300 VUs  1m41.5s/3m0s   1667.00 iters/s
+claims   [  41% ] 0001/0300 VUs  0m40.6s/1m40s  500.00 iters/s
+
+running (1m42.5s), 0003/0823 VUs, 195939 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  57% ] 1 VUs          1m42.6s/3m0s  
+polls    [  57% ] 0001/0300 VUs  1m42.5s/3m0s   1667.00 iters/s
+claims   [  42% ] 0001/0300 VUs  0m41.6s/1m40s  500.00 iters/s
+
+running (1m43.5s), 0004/0823 VUs, 198106 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  58% ] 1 VUs          1m43.6s/3m0s  
+polls    [  58% ] 0001/0300 VUs  1m43.5s/3m0s   1667.00 iters/s
+claims   [  43% ] 0002/0300 VUs  0m42.6s/1m40s  500.00 iters/s
+
+running (1m44.5s), 0005/0823 VUs, 200274 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  58% ] 1 VUs          1m44.6s/3m0s  
+polls    [  58% ] 0002/0300 VUs  1m44.5s/3m0s   1667.00 iters/s
+claims   [  44% ] 0002/0300 VUs  0m43.6s/1m40s  500.00 iters/s
+
+running (1m45.5s), 0005/0823 VUs, 202442 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  59% ] 1 VUs          1m45.6s/3m0s  
+polls    [  59% ] 0002/0300 VUs  1m45.5s/3m0s   1667.00 iters/s
+claims   [  45% ] 0001/0300 VUs  0m44.6s/1m40s  500.00 iters/s
+
+running (1m46.5s), 0006/0823 VUs, 204608 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  59% ] 1 VUs          1m46.6s/3m0s  
+polls    [  59% ] 0003/0300 VUs  1m46.5s/3m0s   1667.00 iters/s
+claims   [  46% ] 0002/0300 VUs  0m45.6s/1m40s  500.00 iters/s
+
+running (1m47.5s), 0010/0823 VUs, 206779 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  60% ] 1 VUs          1m47.6s/3m0s  
+polls    [  60% ] 0005/0300 VUs  1m47.5s/3m0s   1667.00 iters/s
+claims   [  47% ] 0004/0300 VUs  0m46.6s/1m40s  500.00 iters/s
+
+running (1m48.5s), 0006/0823 VUs, 208944 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  60% ] 1 VUs          1m48.6s/3m0s  
+polls    [  60% ] 0003/0300 VUs  1m48.5s/3m0s   1667.00 iters/s
+claims   [  48% ] 0002/0300 VUs  0m47.6s/1m40s  500.00 iters/s
+
+running (1m49.5s), 0006/0823 VUs, 211114 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  61% ] 1 VUs          1m49.6s/3m0s  
+polls    [  61% ] 0003/0300 VUs  1m49.5s/3m0s   1667.00 iters/s
+claims   [  49% ] 0002/0300 VUs  0m48.6s/1m40s  500.00 iters/s
+
+running (1m50.5s), 0004/0823 VUs, 213283 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  61% ] 1 VUs          1m50.6s/3m0s  
+polls    [  61% ] 0002/0300 VUs  1m50.5s/3m0s   1667.00 iters/s
+claims   [  50% ] 0001/0300 VUs  0m49.6s/1m40s  500.00 iters/s
+
+running (1m51.5s), 0005/0823 VUs, 215451 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  62% ] 1 VUs          1m51.6s/3m0s  
+polls    [  62% ] 0001/0300 VUs  1m51.5s/3m0s   1667.00 iters/s
+claims   [  51% ] 0002/0300 VUs  0m50.6s/1m40s  500.00 iters/s
+
+running (1m52.5s), 0006/0823 VUs, 217617 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  63% ] 1 VUs          1m52.6s/3m0s  
+polls    [  63% ] 0003/0300 VUs  1m52.5s/3m0s   1667.00 iters/s
+claims   [  52% ] 0002/0300 VUs  0m51.6s/1m40s  500.00 iters/s
+
+running (1m53.5s), 0004/0823 VUs, 219787 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  63% ] 1 VUs          1m53.6s/3m0s  
+polls    [  63% ] 0002/0300 VUs  1m53.5s/3m0s   1667.00 iters/s
+claims   [  53% ] 0001/0300 VUs  0m52.6s/1m40s  500.00 iters/s
+
+running (1m54.5s), 0004/0823 VUs, 221954 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  64% ] 1 VUs          1m54.6s/3m0s  
+polls    [  64% ] 0002/0300 VUs  1m54.5s/3m0s   1667.00 iters/s
+claims   [  54% ] 0001/0300 VUs  0m53.6s/1m40s  500.00 iters/s
+
+running (1m55.5s), 0003/0823 VUs, 224123 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  64% ] 1 VUs          1m55.6s/3m0s  
+polls    [  64% ] 0001/0300 VUs  1m55.5s/3m0s   1667.00 iters/s
+claims   [  55% ] 0001/0300 VUs  0m54.6s/1m40s  500.00 iters/s
+
+running (1m56.5s), 0006/0823 VUs, 226290 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  65% ] 1 VUs          1m56.6s/3m0s  
+polls    [  65% ] 0002/0300 VUs  1m56.5s/3m0s   1667.00 iters/s
+claims   [  56% ] 0003/0300 VUs  0m55.6s/1m40s  500.00 iters/s
+
+running (1m57.5s), 0007/0823 VUs, 228456 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  65% ] 1 VUs          1m57.6s/3m0s  
+polls    [  65% ] 0002/0300 VUs  1m57.5s/3m0s   1667.00 iters/s
+claims   [  57% ] 0004/0300 VUs  0m56.6s/1m40s  500.00 iters/s
+
+running (1m58.5s), 0005/0823 VUs, 230626 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  66% ] 1 VUs          1m58.6s/3m0s  
+polls    [  66% ] 0002/0300 VUs  1m58.5s/3m0s   1667.00 iters/s
+claims   [  58% ] 0001/0300 VUs  0m57.6s/1m40s  500.00 iters/s
+
+running (1m59.5s), 0004/0823 VUs, 232795 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  66% ] 1 VUs          1m59.6s/3m0s  
+polls    [  66% ] 0002/0300 VUs  1m59.5s/3m0s   1667.00 iters/s
+claims   [  59% ] 0001/0300 VUs  0m58.6s/1m40s  500.00 iters/s
+
+running (2m00.5s), 0003/0823 VUs, 234963 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  67% ] 1 VUs          2m00.6s/3m0s  
+polls    [  67% ] 0001/0300 VUs  2m00.5s/3m0s   1667.00 iters/s
+claims   [  60% ] 0001/0300 VUs  0m59.6s/1m40s  500.00 iters/s
+
+running (2m01.5s), 0003/0823 VUs, 237131 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  68% ] 1 VUs          2m01.6s/3m0s  
+polls    [  68% ] 0002/0300 VUs  2m01.5s/3m0s   1667.00 iters/s
+claims   [  61% ] 0001/0300 VUs  1m00.6s/1m40s  500.00 iters/s
+
+running (2m02.5s), 0004/0823 VUs, 239298 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  68% ] 1 VUs          2m02.6s/3m0s  
+polls    [  68% ] 0001/0300 VUs  2m02.5s/3m0s   1667.00 iters/s
+claims   [  62% ] 0002/0300 VUs  1m01.6s/1m40s  500.00 iters/s
+
+running (2m03.5s), 0003/0823 VUs, 241467 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  69% ] 1 VUs          2m03.6s/3m0s  
+polls    [  69% ] 0001/0300 VUs  2m03.5s/3m0s   1667.00 iters/s
+claims   [  63% ] 0001/0300 VUs  1m02.6s/1m40s  500.00 iters/s
+
+running (2m04.5s), 0004/0823 VUs, 243635 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  69% ] 1 VUs          2m04.6s/3m0s  
+polls    [  69% ] 0001/0300 VUs  2m04.5s/3m0s   1667.00 iters/s
+claims   [  64% ] 0002/0300 VUs  1m03.6s/1m40s  500.00 iters/s
+
+running (2m05.5s), 0004/0823 VUs, 245803 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  70% ] 1 VUs          2m05.6s/3m0s  
+polls    [  70% ] 0002/0300 VUs  2m05.5s/3m0s   1667.00 iters/s
+claims   [  65% ] 0001/0300 VUs  1m04.6s/1m40s  500.00 iters/s
+
+running (2m06.5s), 0006/0823 VUs, 247969 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  70% ] 1 VUs          2m06.6s/3m0s  
+polls    [  70% ] 0003/0300 VUs  2m06.5s/3m0s   1667.00 iters/s
+claims   [  66% ] 0002/0300 VUs  1m05.6s/1m40s  500.00 iters/s
+
+running (2m07.6s), 0004/0823 VUs, 250138 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  71% ] 1 VUs          2m07.6s/3m0s  
+polls    [  71% ] 0001/0300 VUs  2m07.5s/3m0s   1667.00 iters/s
+claims   [  67% ] 0001/0300 VUs  1m06.6s/1m40s  500.00 iters/s
+
+running (2m08.6s), 0005/0823 VUs, 252305 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  71% ] 1 VUs          2m08.6s/3m0s  
+polls    [  71% ] 0002/0300 VUs  2m08.5s/3m0s   1667.00 iters/s
+claims   [  68% ] 0002/0300 VUs  1m07.6s/1m40s  500.00 iters/s
+
+running (2m09.6s), 0005/0823 VUs, 254474 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  72% ] 1 VUs          2m09.6s/3m0s  
+polls    [  72% ] 0003/0300 VUs  2m09.5s/3m0s   1667.00 iters/s
+claims   [  69% ] 0001/0300 VUs  1m08.6s/1m40s  500.00 iters/s
+
+running (2m10.6s), 0007/0823 VUs, 256640 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  73% ] 1 VUs          2m10.6s/3m0s  
+polls    [  73% ] 0003/0300 VUs  2m10.5s/3m0s   1667.00 iters/s
+claims   [  70% ] 0003/0300 VUs  1m09.6s/1m40s  500.00 iters/s
+
+running (2m11.6s), 0005/0823 VUs, 258810 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  73% ] 1 VUs          2m11.6s/3m0s  
+polls    [  73% ] 0002/0300 VUs  2m11.5s/3m0s   1667.00 iters/s
+claims   [  71% ] 0002/0300 VUs  1m10.6s/1m40s  500.00 iters/s
+
+running (2m12.6s), 0005/0823 VUs, 260978 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  74% ] 1 VUs          2m12.6s/3m0s  
+polls    [  74% ] 0002/0300 VUs  2m12.5s/3m0s   1667.00 iters/s
+claims   [  72% ] 0002/0300 VUs  1m11.6s/1m40s  500.00 iters/s
+
+running (2m13.6s), 0007/0823 VUs, 263143 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  74% ] 1 VUs          2m13.6s/3m0s  
+polls    [  74% ] 0003/0300 VUs  2m13.5s/3m0s   1667.00 iters/s
+claims   [  73% ] 0003/0300 VUs  1m12.6s/1m40s  500.00 iters/s
+
+running (2m14.6s), 0005/0823 VUs, 265313 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  75% ] 1 VUs          2m14.6s/3m0s  
+polls    [  75% ] 0002/0300 VUs  2m14.5s/3m0s   1667.00 iters/s
+claims   [  74% ] 0002/0300 VUs  1m13.6s/1m40s  500.00 iters/s
+
+running (2m15.6s), 0004/0823 VUs, 267482 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  75% ] 1 VUs          2m15.6s/3m0s  
+polls    [  75% ] 0001/0300 VUs  2m15.5s/3m0s   1667.00 iters/s
+claims   [  75% ] 0002/0300 VUs  1m14.6s/1m40s  500.00 iters/s
+
+running (2m16.6s), 0005/0823 VUs, 269651 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  76% ] 1 VUs          2m16.6s/3m0s  
+polls    [  76% ] 0002/0300 VUs  2m16.5s/3m0s   1667.00 iters/s
+claims   [  76% ] 0002/0300 VUs  1m15.6s/1m40s  500.00 iters/s
+
+running (2m17.6s), 0007/0823 VUs, 271815 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  76% ] 1 VUs          2m17.6s/3m0s  
+polls    [  76% ] 0005/0300 VUs  2m17.5s/3m0s   1667.00 iters/s
+claims   [  77% ] 0003/0300 VUs  1m16.6s/1m40s  500.00 iters/s
+
+running (2m18.6s), 0006/0823 VUs, 273985 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  77% ] 1 VUs          2m18.6s/3m0s  
+polls    [  77% ] 0003/0300 VUs  2m18.5s/3m0s   1667.00 iters/s
+claims   [  78% ] 0002/0300 VUs  1m17.6s/1m40s  500.00 iters/s
+
+running (2m19.6s), 0005/0823 VUs, 276154 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  78% ] 1 VUs          2m19.6s/3m0s  
+polls    [  78% ] 0003/0300 VUs  2m19.5s/3m0s   1667.00 iters/s
+claims   [  79% ] 0001/0300 VUs  1m18.6s/1m40s  500.00 iters/s
+
+running (2m20.6s), 0004/0823 VUs, 278322 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  78% ] 1 VUs          2m20.6s/3m0s  
+polls    [  78% ] 0001/0300 VUs  2m20.5s/3m0s   1667.00 iters/s
+claims   [  80% ] 0003/0300 VUs  1m19.6s/1m40s  500.00 iters/s
+
+running (2m21.6s), 0004/0823 VUs, 280490 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  79% ] 1 VUs          2m21.6s/3m0s  
+polls    [  79% ] 0002/0300 VUs  2m21.5s/3m0s   1667.00 iters/s
+claims   [  81% ] 0001/0300 VUs  1m20.6s/1m40s  500.00 iters/s
+
+running (2m22.6s), 0003/0823 VUs, 282659 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  79% ] 1 VUs          2m22.6s/3m0s  
+polls    [  79% ] 0001/0300 VUs  2m22.5s/3m0s   1667.00 iters/s
+claims   [  82% ] 0001/0300 VUs  1m21.6s/1m40s  500.00 iters/s
+
+running (2m23.6s), 0006/0823 VUs, 284825 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  80% ] 1 VUs          2m23.6s/3m0s  
+polls    [  80% ] 0003/0300 VUs  2m23.5s/3m0s   1667.00 iters/s
+claims   [  83% ] 0002/0300 VUs  1m22.6s/1m40s  500.00 iters/s
+
+running (2m24.6s), 0005/0823 VUs, 286993 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  80% ] 1 VUs          2m24.6s/3m0s  
+polls    [  80% ] 0002/0300 VUs  2m24.5s/3m0s   1667.00 iters/s
+claims   [  84% ] 0002/0300 VUs  1m23.6s/1m40s  500.00 iters/s
+
+running (2m25.6s), 0005/0823 VUs, 289161 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  81% ] 1 VUs          2m25.6s/3m0s  
+polls    [  81% ] 0002/0300 VUs  2m25.5s/3m0s   1667.00 iters/s
+claims   [  85% ] 0002/0300 VUs  1m24.6s/1m40s  500.00 iters/s
+
+running (2m26.6s), 0004/0823 VUs, 291331 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  81% ] 1 VUs          2m26.6s/3m0s  
+polls    [  81% ] 0002/0300 VUs  2m26.5s/3m0s   1667.00 iters/s
+claims   [  86% ] 0001/0300 VUs  1m25.6s/1m40s  500.00 iters/s
+
+running (2m27.6s), 0004/0823 VUs, 293499 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  82% ] 1 VUs          2m27.6s/3m0s  
+polls    [  82% ] 0002/0300 VUs  2m27.5s/3m0s   1667.00 iters/s
+claims   [  87% ] 0001/0300 VUs  1m26.6s/1m40s  500.00 iters/s
+
+running (2m28.6s), 0004/0823 VUs, 295667 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  83% ] 1 VUs          2m28.6s/3m0s  
+polls    [  83% ] 0002/0300 VUs  2m28.5s/3m0s   1667.00 iters/s
+claims   [  88% ] 0001/0300 VUs  1m27.6s/1m40s  500.00 iters/s
+
+running (2m29.6s), 0006/0823 VUs, 297834 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  83% ] 1 VUs          2m29.6s/3m0s  
+polls    [  83% ] 0002/0300 VUs  2m29.5s/3m0s   1667.00 iters/s
+claims   [  89% ] 0003/0300 VUs  1m28.6s/1m40s  500.00 iters/s
+
+running (2m30.6s), 0005/0823 VUs, 300001 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  84% ] 1 VUs          2m30.6s/3m0s  
+polls    [  84% ] 0002/0300 VUs  2m30.5s/3m0s   1667.00 iters/s
+claims   [  90% ] 0002/0300 VUs  1m29.6s/1m40s  500.00 iters/s
+
+running (2m31.6s), 0005/0823 VUs, 302169 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  84% ] 1 VUs          2m31.6s/3m0s  
+polls    [  84% ] 0002/0300 VUs  2m31.5s/3m0s   1667.00 iters/s
+claims   [  91% ] 0002/0300 VUs  1m30.6s/1m40s  500.00 iters/s
+
+running (2m32.6s), 0005/0823 VUs, 304337 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  85% ] 1 VUs          2m32.6s/3m0s  
+polls    [  85% ] 0002/0300 VUs  2m32.5s/3m0s   1667.00 iters/s
+claims   [  92% ] 0002/0300 VUs  1m31.6s/1m40s  500.00 iters/s
+
+running (2m33.6s), 0006/0823 VUs, 306505 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  85% ] 1 VUs          2m33.6s/3m0s  
+polls    [  85% ] 0003/0300 VUs  2m33.5s/3m0s   1667.00 iters/s
+claims   [  93% ] 0002/0300 VUs  1m32.6s/1m40s  500.00 iters/s
+
+running (2m34.6s), 0004/0823 VUs, 308674 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  86% ] 1 VUs          2m34.6s/3m0s  
+polls    [  86% ] 0002/0300 VUs  2m34.5s/3m0s   1667.00 iters/s
+claims   [  94% ] 0001/0300 VUs  1m33.6s/1m40s  500.00 iters/s
+
+running (2m35.6s), 0006/0823 VUs, 310842 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  86% ] 1 VUs          2m35.6s/3m0s  
+polls    [  86% ] 0003/0300 VUs  2m35.5s/3m0s   1667.00 iters/s
+claims   [  95% ] 0002/0300 VUs  1m34.6s/1m40s  500.00 iters/s
+
+running (2m36.6s), 0005/0823 VUs, 313008 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  87% ] 1 VUs          2m36.6s/3m0s  
+polls    [  87% ] 0002/0300 VUs  2m36.5s/3m0s   1667.00 iters/s
+claims   [  96% ] 0002/0300 VUs  1m35.6s/1m40s  500.00 iters/s
+
+running (2m37.6s), 0010/0823 VUs, 315170 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  88% ] 1 VUs          2m37.6s/3m0s  
+polls    [  88% ] 0005/0300 VUs  2m37.5s/3m0s   1667.00 iters/s
+claims   [  97% ] 0004/0300 VUs  1m36.6s/1m40s  500.00 iters/s
+
+running (2m38.6s), 0006/0823 VUs, 317346 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  88% ] 1 VUs          2m38.6s/3m0s  
+polls    [  88% ] 0003/0300 VUs  2m38.5s/3m0s   1667.00 iters/s
+claims   [  98% ] 0002/0300 VUs  1m37.6s/1m40s  500.00 iters/s
+
+running (2m39.6s), 0004/0823 VUs, 319514 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  89% ] 1 VUs          2m39.6s/3m0s  
+polls    [  89% ] 0002/0300 VUs  2m39.5s/3m0s   1667.00 iters/s
+claims   [  99% ] 0001/0300 VUs  1m38.6s/1m40s  500.00 iters/s
+
+running (2m40.6s), 0005/0823 VUs, 321681 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s            1000.00 iters/s
+origin   [  89% ] 1 VUs          2m40.6s/3m0s  
+polls    [  89% ] 0002/0300 VUs  2m40.5s/3m0s   1667.00 iters/s
+claims   [ 100% ] 0002/0300 VUs  1m39.6s/1m40s  500.00 iters/s
+
+running (2m41.6s), 0003/0823 VUs, 323576 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s           1000.00 iters/s
+origin   [  90% ] 1 VUs          2m41.6s/3m0s 
+polls    [  90% ] 0002/0300 VUs  2m41.5s/3m0s  1667.00 iters/s
+claims ✓ [ 100% ] 0000/0300 VUs  1m40s         500.00 iters/s
+
+running (2m42.6s), 0003/0823 VUs, 325243 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s           1000.00 iters/s
+origin   [  90% ] 1 VUs          2m42.6s/3m0s 
+polls    [  90% ] 0003/0300 VUs  2m42.5s/3m0s  1667.00 iters/s
+claims ✓ [ 100% ] 0000/0300 VUs  1m40s         500.00 iters/s
+
+running (2m43.6s), 0003/0823 VUs, 326912 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s           1000.00 iters/s
+origin   [  91% ] 1 VUs          2m43.6s/3m0s 
+polls    [  91% ] 0002/0300 VUs  2m43.5s/3m0s  1667.00 iters/s
+claims ✓ [ 100% ] 0000/0300 VUs  1m40s         500.00 iters/s
+
+running (2m44.6s), 0002/0823 VUs, 328581 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s           1000.00 iters/s
+origin   [  91% ] 1 VUs          2m44.6s/3m0s 
+polls    [  91% ] 0001/0300 VUs  2m44.5s/3m0s  1667.00 iters/s
+claims ✓ [ 100% ] 0000/0300 VUs  1m40s         500.00 iters/s
+
+running (2m45.6s), 0003/0823 VUs, 330247 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s           1000.00 iters/s
+origin   [  92% ] 1 VUs          2m45.6s/3m0s 
+polls    [  92% ] 0002/0300 VUs  2m45.5s/3m0s  1667.00 iters/s
+claims ✓ [ 100% ] 0000/0300 VUs  1m40s         500.00 iters/s
+
+running (2m46.6s), 0003/0823 VUs, 331916 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s           1000.00 iters/s
+origin   [  93% ] 1 VUs          2m46.6s/3m0s 
+polls    [  93% ] 0002/0300 VUs  2m46.5s/3m0s  1667.00 iters/s
+claims ✓ [ 100% ] 0000/0300 VUs  1m40s         500.00 iters/s
+
+running (2m47.6s), 0003/0823 VUs, 333583 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s           1000.00 iters/s
+origin   [  93% ] 1 VUs          2m47.6s/3m0s 
+polls    [  93% ] 0003/0300 VUs  2m47.5s/3m0s  1667.00 iters/s
+claims ✓ [ 100% ] 0000/0300 VUs  1m40s         500.00 iters/s
+
+running (2m48.6s), 0002/0823 VUs, 335252 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s           1000.00 iters/s
+origin   [  94% ] 1 VUs          2m48.6s/3m0s 
+polls    [  94% ] 0001/0300 VUs  2m48.5s/3m0s  1667.00 iters/s
+claims ✓ [ 100% ] 0000/0300 VUs  1m40s         500.00 iters/s
+
+running (2m49.6s), 0002/0823 VUs, 336920 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s           1000.00 iters/s
+origin   [  94% ] 1 VUs          2m49.6s/3m0s 
+polls    [  94% ] 0002/0300 VUs  2m49.5s/3m0s  1667.00 iters/s
+claims ✓ [ 100% ] 0000/0300 VUs  1m40s         500.00 iters/s
+
+running (2m50.6s), 0002/0823 VUs, 338588 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s           1000.00 iters/s
+origin   [  95% ] 1 VUs          2m50.6s/3m0s 
+polls    [  95% ] 0001/0300 VUs  2m50.5s/3m0s  1667.00 iters/s
+claims ✓ [ 100% ] 0000/0300 VUs  1m40s         500.00 iters/s
+
+running (2m51.6s), 0003/0823 VUs, 340255 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s           1000.00 iters/s
+origin   [  95% ] 1 VUs          2m51.6s/3m0s 
+polls    [  95% ] 0002/0300 VUs  2m51.5s/3m0s  1667.00 iters/s
+claims ✓ [ 100% ] 0000/0300 VUs  1m40s         500.00 iters/s
+
+running (2m52.6s), 0003/0823 VUs, 341923 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s           1000.00 iters/s
+origin   [  96% ] 1 VUs          2m52.6s/3m0s 
+polls    [  96% ] 0003/0300 VUs  2m52.5s/3m0s  1667.00 iters/s
+claims ✓ [ 100% ] 0000/0300 VUs  1m40s         500.00 iters/s
+
+running (2m53.6s), 0004/0823 VUs, 343591 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s           1000.00 iters/s
+origin   [  96% ] 1 VUs          2m53.6s/3m0s 
+polls    [  96% ] 0003/0300 VUs  2m53.5s/3m0s  1667.00 iters/s
+claims ✓ [ 100% ] 0000/0300 VUs  1m40s         500.00 iters/s
+
+running (2m54.6s), 0003/0823 VUs, 345260 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s           1000.00 iters/s
+origin   [  97% ] 1 VUs          2m54.6s/3m0s 
+polls    [  97% ] 0002/0300 VUs  2m54.5s/3m0s  1667.00 iters/s
+claims ✓ [ 100% ] 0000/0300 VUs  1m40s         500.00 iters/s
+
+running (2m55.6s), 0003/0823 VUs, 346927 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s           1000.00 iters/s
+origin   [  98% ] 1 VUs          2m55.6s/3m0s 
+polls    [  98% ] 0002/0300 VUs  2m55.5s/3m0s  1667.00 iters/s
+claims ✓ [ 100% ] 0000/0300 VUs  1m40s         500.00 iters/s
+
+running (2m56.6s), 0003/0823 VUs, 348595 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s           1000.00 iters/s
+origin   [  98% ] 1 VUs          2m56.6s/3m0s 
+polls    [  98% ] 0002/0300 VUs  2m56.5s/3m0s  1667.00 iters/s
+claims ✓ [ 100% ] 0000/0300 VUs  1m40s         500.00 iters/s
+
+running (2m57.6s), 0003/0823 VUs, 350264 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s           1000.00 iters/s
+origin   [  99% ] 1 VUs          2m57.6s/3m0s 
+polls    [  99% ] 0002/0300 VUs  2m57.5s/3m0s  1667.00 iters/s
+claims ✓ [ 100% ] 0000/0300 VUs  1m40s         500.00 iters/s
+
+running (2m58.6s), 0003/0823 VUs, 351932 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s           1000.00 iters/s
+origin   [  99% ] 1 VUs          2m58.6s/3m0s 
+polls    [  99% ] 0002/0300 VUs  2m58.5s/3m0s  1667.00 iters/s
+claims ✓ [ 100% ] 0000/0300 VUs  1m40s         500.00 iters/s
+
+running (2m59.6s), 0002/0823 VUs, 353600 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s           1000.00 iters/s
+origin   [ 100% ] 1 VUs          2m59.6s/3m0s 
+polls    [ 100% ] 0001/0300 VUs  2m59.5s/3m0s  1667.00 iters/s
+claims ✓ [ 100% ] 0000/0300 VUs  1m40s         500.00 iters/s
+
+running (3m00.6s), 0001/0823 VUs, 354360 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s    1000.00 iters/s
+origin ↓ [ 100% ] 1 VUs          3m0s  
+polls  ✓ [ 100% ] 0000/0300 VUs  3m0s   1667.00 iters/s
+claims ✓ [ 100% ] 0000/0300 VUs  1m40s  500.00 iters/s
+
+
+  █ THRESHOLDS 
+
+    edge_status_requests{win:0}
+    ✓ 'count>=0' count=1478
+
+    edge_status_requests{win:1}
+    ✓ 'count>=0' count=4455
+
+    edge_status_requests{win:10}
+    ✓ 'count>=0' count=16671
+
+    edge_status_requests{win:11}
+    ✓ 'count>=0' count=16669
+
+    edge_status_requests{win:12}
+    ✓ 'count>=0' count=16664
+
+    edge_status_requests{win:13}
+    ✓ 'count>=0' count=16669
+
+    edge_status_requests{win:14}
+    ✓ 'count>=0' count=16671
+
+    edge_status_requests{win:15}
+    ✓ 'count>=0' count=16660
+
+    edge_status_requests{win:16}
+    ✓ 'count>=0' count=16669
+
+    edge_status_requests{win:17}
+    ✓ 'count>=0' count=16678
+
+    edge_status_requests{win:2}
+    ✓ 'count>=0' count=7432
+
+    edge_status_requests{win:3}
+    ✓ 'count>=0' count=10400
+
+    edge_status_requests{win:4}
+    ✓ 'count>=0' count=13383
+
+    edge_status_requests{win:5}
+    ✓ 'count>=0' count=16128
+
+    edge_status_requests{win:6}
+    ✓ 'count>=0' count=16675
+
+    edge_status_requests{win:7}
+    ✓ 'count>=0' count=16670
+
+    edge_status_requests{win:8}
+    ✓ 'count>=0' count=16670
+
+    edge_status_requests{win:9}
+    ✓ 'count>=0' count=16701
+
+    http_req_duration{name:join}
+    ✗ 'p(99)<150' p(99)=203.28ms
+
+    http_req_failed{name:join}
+    ✓ 'rate<0.001' rate=0.00%
+
+    http_req_failed{name:status}
+    ✓ 'rate<0.001' rate=0.00%
+
+    origin_status_requests{win:0}
+    ✓ 'count>=0' count=5
+
+    origin_status_requests{win:1}
+    ✓ 'count>=0' count=5
+
+    origin_status_requests{win:10}
+    ✓ 'count>=0' count=5
+
+    origin_status_requests{win:11}
+    ✓ 'count>=0' count=5
+
+    origin_status_requests{win:12}
+    ✓ 'count>=0' count=5
+
+    origin_status_requests{win:13}
+    ✓ 'count>=0' count=5
+
+    origin_status_requests{win:14}
+    ✓ 'count>=0' count=5
+
+    origin_status_requests{win:15}
+    ✓ 'count>=0' count=5
+
+    origin_status_requests{win:16}
+    ✓ 'count>=0' count=5
+
+    origin_status_requests{win:17}
+    ✓ 'count>=0' count=5
+
+    origin_status_requests{win:2}
+    ✓ 'count>=0' count=5
+
+    origin_status_requests{win:3}
+    ✓ 'count>=0' count=5
+
+    origin_status_requests{win:4}
+    ✓ 'count>=0' count=5
+
+    origin_status_requests{win:5}
+    ✓ 'count>=0' count=5
+
+    origin_status_requests{win:6}
+    ✓ 'count>=0' count=5
+
+    origin_status_requests{win:7}
+    ✓ 'count>=0' count=5
+
+    origin_status_requests{win:8}
+    ✓ 'count>=0' count=5
+
+    origin_status_requests{win:9}
+    ✓ 'count>=0' count=5
+
+    tokens_issued
+    ✓ 'count>=50000' count=50000
+
+
+  █ TOTAL RESULTS 
+
+    checks_total.......: 303343  1678.535767/s
+    checks_succeeded...: 100.00% 303343 out of 303343
+    checks_failed......: 0.00%   0 out of 303343
+
+    ✓ join accepted
+    ✓ status ok
+
+    CUSTOM
+    edge_status_requests...........: 253343 1401.862864/s
+      { win:0 }....................: 1478   8.178451/s
+      { win:1 }....................: 4455   24.651556/s
+      { win:10 }...................: 16671  92.248279/s
+      { win:11 }...................: 16669  92.237212/s
+      { win:12 }...................: 16664  92.209545/s
+      { win:13 }...................: 16669  92.237212/s
+      { win:14 }...................: 16671  92.248279/s
+      { win:15 }...................: 16660  92.187411/s
+      { win:16 }...................: 16669  92.237212/s
+      { win:17 }...................: 16678  92.287013/s
+      { win:2 }....................: 7432   41.12466/s
+      { win:3 }....................: 10400  57.547964/s
+      { win:4 }....................: 13383  74.054269/s
+      { win:5 }....................: 16128  89.243612/s
+      { win:6 }....................: 16675  92.270413/s
+      { win:7 }....................: 16670  92.242746/s
+      { win:8 }....................: 16670  92.242746/s
+      { win:9 }....................: 16701  92.414283/s
+    origin_status_requests.........: 90     0.498011/s
+      { win:0 }....................: 5      0.027667/s
+      { win:1 }....................: 5      0.027667/s
+      { win:10 }...................: 5      0.027667/s
+      { win:11 }...................: 5      0.027667/s
+      { win:12 }...................: 5      0.027667/s
+      { win:13 }...................: 5      0.027667/s
+      { win:14 }...................: 5      0.027667/s
+      { win:15 }...................: 5      0.027667/s
+      { win:16 }...................: 5      0.027667/s
+      { win:17 }...................: 5      0.027667/s
+      { win:2 }....................: 5      0.027667/s
+      { win:3 }....................: 5      0.027667/s
+      { win:4 }....................: 5      0.027667/s
+      { win:5 }....................: 5      0.027667/s
+      { win:6 }....................: 5      0.027667/s
+      { win:7 }....................: 5      0.027667/s
+      { win:8 }....................: 5      0.027667/s
+      { win:9 }....................: 5      0.027667/s
+    tokens_issued..................: 50000  276.672903/s
+
+    HTTP
+    http_req_duration..............: avg=3.71ms  med=956.24µs p(95)=8.18ms  p(99)=50.75ms  max=431.1ms
+      { expected_response:true }...: avg=3.71ms  med=956.24µs p(95)=8.18ms  p(99)=50.75ms  max=431.1ms
+      { name:join }................: avg=15.43ms med=4.95ms   p(95)=83.93ms p(99)=203.28ms max=431.1ms
+    http_req_failed................: 0.00%  0 out of 353522
+      { name:join }................: 0.00%  0 out of 50000
+      { name:status }..............: 0.00%  0 out of 253343
+    http_reqs......................: 353522 1956.199159/s
+
+    EXECUTION
+    dropped_iterations.............: 128    0.708283/s
+    iteration_duration.............: avg=4.65ms  med=1.28ms   p(95)=8.99ms  p(99)=61.32ms  max=1.25s  
+    iterations.....................: 354361 1960.84173/s
+    vus............................: 1      min=1           max=206
+    vus_max........................: 823    min=801         max=823
+
+    NETWORK
+    data_received..................: 204 MB 1.1 MB/s
+    data_sent......................: 47 MB  262 kB/s
+
+
+
+
+running (3m00.7s), 0000/0823 VUs, 354361 complete and 0 interrupted iterations
+joins  ✓ [ 100% ] 0000/0222 VUs  56s    1000.00 iters/s
+origin ✓ [ 100% ] 1 VUs          3m0s  
+polls  ✓ [ 100% ] 0000/0300 VUs  3m0s   1667.00 iters/s
+claims ✓ [ 100% ] 0000/0300 VUs  1m40s  500.00 iters/s
+time="2026-10-02T08:26:45Z" level=error msg="thresholds on metrics 'http_req_duration{name:join}' have been crossed"
+
+
+Status polls per 10 s window: edge = answered to clients, origin = reached queue-svc
+    0- 10 s  edge     1,478  origin    5  295:1
+   10- 20 s  edge     4,455  origin    5  891:1
+   20- 30 s  edge     7,432  origin    5  1,486:1
+   30- 40 s  edge    10,400  origin    5  2,080:1
+   40- 50 s  edge    13,383  origin    5  2,676:1
+   50- 60 s  edge    16,128  origin    5  3,225:1
+   60- 70 s  edge    16,675  origin    5  3,335:1
+   70- 80 s  edge    16,670  origin    5  3,334:1
+   80- 90 s  edge    16,670  origin    5  3,334:1
+   90-100 s  edge    16,701  origin    5  3,340:1
+  100-110 s  edge    16,671  origin    5  3,334:1
+  110-120 s  edge    16,669  origin    5  3,333:1
+  120-130 s  edge    16,664  origin    5  3,332:1
+  130-140 s  edge    16,669  origin    5  3,333:1
+  140-150 s  edge    16,671  origin    5  3,334:1
+  150-160 s  edge    16,660  origin    5  3,332:1
+  160-170 s  edge    16,669  origin    5  3,333:1
+  170-180 s  edge    16,678  origin    5  3,335:1
+  total     edge   253,343  origin   90  2,814:1

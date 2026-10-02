@@ -8,6 +8,7 @@
 *.pprof
 coverage.*
 e1-results.json
+e6-results.json
 __debug_bin*
 /vendor/
 
