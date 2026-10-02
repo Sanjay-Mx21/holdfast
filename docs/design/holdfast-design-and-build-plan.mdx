@@ -1860,8 +1860,8 @@ Durations are the original **focused-work-day** estimates, which assumed learnin
 | M0 Foundation | 0 | ✅ Built (Drop 1) | v0.1.0, released 2026-10-01 | Platform packages built; `gofmt`, `go vet` and golangci-lint clean; race tests pass |
 | M1 Correctness core | 1 | ✅ Built (Drop 1) | v0.1.0, released 2026-10-01 | E1: 50,000 buyers → exactly 1,000 holds; 10,000 confirmations → exactly 1,000 sold |
 | M1.5 Bring-up and baseline | none | ✅ Complete (2026-10-01) | v0.1.0, released 2026-10-01 | CI green on `main`; E1 passes 100 of 100 runs on your hardware; hold p99 recorded |
-| M2 Fair waiting room | 2 | ⏳ **Next** | v0.2.0 | E2 collapse ratio, E6 fairness, leader-failover test |
-| M3 MVP backend | 3 | ⏳ Planned | v0.3.0 | One trace across every service; a 1,000-purchase fault run keeps I1, I2 and I4 at 0 |
+| M2 Fair waiting room | 2 | ✅ Complete (2026-10-02) | v0.2.0, released 2026-10-02 | E6 passed; leader-failover test passes; E2 accepted at 30-second polling, design load moved to task 6.1 (`loadtest/results/`) |
+| M3 MVP backend | 3 | ⏳ **Next** | v0.3.0 | One trace across every service; a 1,000-purchase fault run keeps I1, I2 and I4 at 0 |
 | M4 Resume-ready product | 4 | ⏳ Planned | v0.4.0 | Buy a ticket by hand during a k6 rush; README v1 and demo video v1 |
 | M5 Hardened | 5 | ⏳ Planned | v0.5.0 | E3 and E4 pass with every invariant at 0; recovery times documented |
 | M6 v1.0, proven at scale | 6 | ⏳ Planned | v1.0.0 | Every published number traces to a committed results file |
@@ -2064,10 +2064,10 @@ The dates are illustrative. The gates are not.
 
 **Exit criteria:**
 
-- [ ] 50,000 simulated users flow from join to admit, and origin status requests stay roughly flat while edge requests grow. *E2 results committed.* *Status 2026-10-02: met at 30-second polling (50,000 tokens; origin 5 requests per 10 s while the edge grew to 16,670); the 3-second design load needs a separate load generator, and join p99 was 203 ms against the 150 ms SLO. Left for the owner's review.*
-- [ ] Killing the leader hands over to the standby, and a test proves the stale leader's writes are rejected.
+- [x] 50,000 simulated users flow from join to admit, and origin status requests stay roughly flat while edge requests grow. *E2 results committed.* *Accepted by the owner on 2026-10-02 at 30-second polling (50,000 tokens; origin 5 requests per 10 s while the edge grew to 16,678). The 3-second design load, which needs a load generator on a separate machine, and the join p99 SLO (203 ms measured on the shared laptop) move to task 6.1.*
+- [x] Killing the leader hands over to the standby, and a test proves the stale leader's writes are rejected. *`TestOneLeaderAndFailover`, `TestStaleLeaderCannotOverwriteTheStatusDocument`.*
 - [x] E6 shows correlation close to 0 for pre-T0 joiners and exactly 1 after T0. *ρ = −0.0008 and exactly 1 (`loadtest/results/`, 2026-10-02).*
-- [ ] In the end-to-end test, inventory accepts only queue-issued tokens, and E1 still passes.
+- [x] In the end-to-end test, inventory accepts only queue-issued tokens, and E1 still passes. *Tokens verified against queue-svc's JWKS (task 2.8); E1 passes on every CI run.*
 
 **Demo checkpoint:** a 30-second clip of the k6 stampede with the queue draining on Grafana.
 
@@ -2166,7 +2166,7 @@ The dates are illustrative. The gates are not.
 
 **Tasks, in order:**
 
-- [ ] 6.1 **Scale.** The final k6 matrix and E5 scale-out (1, 2 and 4 instances); pprof-driven optimisation (pipelining, pool sizing, batching).
+- [ ] 6.1 **Scale.** The final k6 matrix and E5 scale-out (1, 2 and 4 instances); pprof-driven optimisation (pipelining, pool sizing, batching). *Includes E2 at the design load (50,000 users polling every 3 s) with k6 on a separate machine, and the join p99 SLO, deferred from M2 on 2026-10-02.*
 - [ ] 6.2 **Results.** A results README with hardware and method; the capacity model (section 3) updated with measured numbers.
 - [ ] 6.3 **Security pass.** A Trivy image scan in CI, `govulncheck`, a review of the section 11 threat model, and dependency upgrades (`make deps-upgrade`, then every test and experiment).
 - [ ] 6.4 **Packaging.** Every ADR complete; the architecture diagram; demo video v2; two blog posts (for example "How I proved zero oversells" and "Surviving lost payment webhooks").

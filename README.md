@@ -3,7 +3,7 @@
 A surge-proof booking engine. When 500,000 people chase 1,000 seats, HoldFast
 sells exactly 1,000 (never 1,001) and stays up while doing it.
 
-> **Status: [v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0) released: Drop 1, foundation and inventory (build plan phases 0-1, brought up and proven in M1.5). Phase 2, the waiting room, is built on `main` and awaiting review before v0.2.0.**
+> **Status: [v0.2.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.2.0) released: the fair waiting room (build plan Phase 2) in front of the inventory core of [v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0). Next: Phase 3, the booking saga and payments.**
 > The full design lives in [`docs/design/holdfast-design-and-build-plan.mdx`](docs/design/holdfast-design-and-build-plan.mdx).
 
 ## What works today
