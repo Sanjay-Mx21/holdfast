@@ -83,6 +83,8 @@ const (
 	RefundReason_REFUND_REASON_GUARD_REJECTED RefundReason = 1
 	// The capture arrived after the booking had expired or been cancelled.
 	RefundReason_REFUND_REASON_LATE_CAPTURE RefundReason = 2
+	// An operator asked again, with holdfastctl refund (runbook RB-4).
+	RefundReason_REFUND_REASON_OPERATOR RefundReason = 3
 )
 
 // Enum value maps for RefundReason.
@@ -91,11 +93,13 @@ var (
 		0: "REFUND_REASON_UNSPECIFIED",
 		1: "REFUND_REASON_GUARD_REJECTED",
 		2: "REFUND_REASON_LATE_CAPTURE",
+		3: "REFUND_REASON_OPERATOR",
 	}
 	RefundReason_value = map[string]int32{
 		"REFUND_REASON_UNSPECIFIED":    0,
 		"REFUND_REASON_GUARD_REJECTED": 1,
 		"REFUND_REASON_LATE_CAPTURE":   2,
+		"REFUND_REASON_OPERATOR":       3,
 	}
 )
 
@@ -609,11 +613,12 @@ const file_holdfast_events_v1_booking_proto_rawDesc = "" +
 	"\x12CancellationReason\x12#\n" +
 	"\x1fCANCELLATION_REASON_UNSPECIFIED\x10\x00\x12&\n" +
 	"\"CANCELLATION_REASON_PAYMENT_FAILED\x10\x01\x12'\n" +
-	"#CANCELLATION_REASON_PAYMENT_EXPIRED\x10\x02*o\n" +
+	"#CANCELLATION_REASON_PAYMENT_EXPIRED\x10\x02*\x8b\x01\n" +
 	"\fRefundReason\x12\x1d\n" +
 	"\x19REFUND_REASON_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cREFUND_REASON_GUARD_REJECTED\x10\x01\x12\x1e\n" +
-	"\x1aREFUND_REASON_LATE_CAPTURE\x10\x02B\xda\x01\n" +
+	"\x1aREFUND_REASON_LATE_CAPTURE\x10\x02\x12\x1a\n" +
+	"\x16REFUND_REASON_OPERATOR\x10\x03B\xda\x01\n" +
 	"\x16com.holdfast.events.v1B\fBookingProtoP\x01ZHgithub.com/Sanjay-Mx21/holdfast/internal/gen/holdfast/events/v1;eventsv1\xa2\x02\x03HEX\xaa\x02\x12Holdfast.Events.V1\xca\x02\x12Holdfast\\Events\\V1\xe2\x02\x1eHoldfast\\Events\\V1\\GPBMetadata\xea\x02\x14Holdfast::Events::V1b\x06proto3"
 
 var (

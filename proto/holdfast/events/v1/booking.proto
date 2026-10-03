@@ -64,6 +64,8 @@ enum RefundReason {
   REFUND_REASON_GUARD_REJECTED = 1;
   // The capture arrived after the booking had expired or been cancelled.
   REFUND_REASON_LATE_CAPTURE = 2;
+  // An operator asked again, with holdfastctl refund (runbook RB-4).
+  REFUND_REASON_OPERATOR = 3;
 }
 
 // BookingRefundRequired: money was captured but the booking cannot be

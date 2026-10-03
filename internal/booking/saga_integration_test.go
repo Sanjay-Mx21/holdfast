@@ -285,3 +285,56 @@ func TestSagaSkipsWhatItCannotUse(t *testing.T) {
 		t.Fatalf("a missing hold: %v, want permanent", err)
 	}
 }
+
+// published records events instead of sending them.
+type published struct{ events []kafka.Event }
+
+func (p *published) Publish(_ context.Context, events ...kafka.Event) error {
+	p.events = append(p.events, events...)
+	return nil
+}
+
+// TestRequestRefundAgain is runbook RB-4's command: a booking stuck in
+// REFUND_REQUIRED gets a new refund request through the normal path;
+// nothing else qualifies.
+func TestRequestRefundAgain(t *testing.T) {
+	f := newSagaFixture(t)
+	tiny, _ := catalog.Create(ctx, f.pool, catalog.NewEvent{Name: "rb4", SaleOpensAt: time.Now(), PerUserLimit: 4, UnitPricePaise: 100, Capacity: 1})
+	v, _ := f.book(t, tiny.String(), 2) // more than PostgreSQL has: refused at capture
+	f.handle(t, captured(v))
+	if s := f.statusOf(t, v.BookingID); s != StatusRefundRequired {
+		t.Fatalf("status %s", s)
+	}
+	pub := &published{}
+	b, err := RequestRefundAgain(ctx, f.pool, pub, uuid.MustParse(v.BookingID))
+	if err != nil || b.ID.String() != v.BookingID {
+		t.Fatalf("RequestRefundAgain: %v", err)
+	}
+	if len(pub.events) != 1 {
+		t.Fatalf("%d events published", len(pub.events))
+	}
+	e := pub.events[0]
+	var ev eventsv1.BookingRefundRequired
+	if err := proto.Unmarshal(e.Value, &ev); err != nil || e.Topic != kafka.TopicBooking || e.Key != v.BookingID || e.Type != "booking.refund_required.v1" ||
+		ev.GetReason() != eventsv1.RefundReason_REFUND_REASON_OPERATOR || ev.GetAmountPaise() != v.AmountPaise || ev.GetIntentId() != v.IntentID {
+		t.Fatalf("event %+v %+v %v", e, &ev, err)
+	}
+	if s := f.statusOf(t, v.BookingID); s != StatusRefundRequired {
+		t.Fatalf("the command changed the booking to %s", s)
+	}
+
+	confirmed, _ := f.book(t, f.event, 1)
+	f.handle(t, captured(confirmed))
+	pending, _ := f.book(t, f.event, 1)
+	for _, id := range []string{confirmed.BookingID, pending.BookingID} {
+		if _, err := RequestRefundAgain(ctx, f.pool, pub, uuid.MustParse(id)); !errors.Is(err, ErrNotRefundable) {
+			t.Fatalf("booking %s: %v, want ErrNotRefundable", id, err)
+		}
+	}
+	if _, err := RequestRefundAgain(ctx, f.pool, pub, uuid.New()); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown booking: %v", err)
+	}
+	if len(pub.events) != 1 {
+		t.Fatal("a refusal published an event")
+	}
+}

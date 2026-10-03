@@ -53,6 +53,8 @@ func commands() []command {
 		{"queue provision", "provision an event's waiting room (opening time from PostgreSQL by default)", cmdQueueProvision},
 		{"queue status", "show an event's waiting room: state, size, admission, sessions, leader", cmdQueueStatus},
 		{"kafka topics", "create every Kafka topic HoldFast uses (idempotent; auto-creation is off)", cmdKafkaTopics},
+		{"dlq replay", "publish a dead-letter topic's messages back to their topic (runbook RB-3)", cmdDLQReplay},
+		{"refund", "ask payment-svc again to refund a booking stuck in REFUND_REQUIRED (runbook RB-4)", cmdRefund},
 	}
 }
 
