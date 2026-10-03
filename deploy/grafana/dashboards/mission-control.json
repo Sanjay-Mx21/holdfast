@@ -389,7 +389,7 @@
       "id": 7,
       "type": "stat",
       "title": "Proof-of-work difficulty",
-      "description": "Bits of the last challenge issued; rises one bit per doubling of the challenge rate above the surge rate.",
+      "description": "Bits of the last challenge issued; rises one bit per doubling of the challenge rate above the surge rate. Off: POW_DIFFICULTY=0 (load tests).",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -423,8 +423,12 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#6e7079",
                 "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
               },
               {
                 "color": "orange",
@@ -435,7 +439,18 @@
                 "value": 22
               }
             ]
-          }
+          },
+          "noValue": "off",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "off"
+                }
+              }
+            }
+          ]
         },
         "overrides": []
       },
@@ -789,8 +804,12 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#6e7079",
                 "value": null
+              },
+              {
+                "color": "green",
+                "value": 0
               },
               {
                 "color": "orange",

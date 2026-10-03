@@ -1,0 +1,604 @@
+holdfast_authn_jwks_fetches_total{result="error"} 0
+holdfast_authn_jwks_fetches_total{result="ok"} 1
+holdfast_build_info{commit="unknown",go_version="go1.27.1",service="queue",version="dev"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /.well-known/jwks.json",le="0.001"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /.well-known/jwks.json",le="0.0025"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /.well-known/jwks.json",le="0.005"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /.well-known/jwks.json",le="0.01"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /.well-known/jwks.json",le="0.025"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /.well-known/jwks.json",le="0.05"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /.well-known/jwks.json",le="0.1"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /.well-known/jwks.json",le="0.25"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /.well-known/jwks.json",le="0.5"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /.well-known/jwks.json",le="1"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /.well-known/jwks.json",le="2.5"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /.well-known/jwks.json",le="5"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /.well-known/jwks.json",le="+Inf"} 1
+holdfast_http_request_duration_seconds_sum{route="GET /.well-known/jwks.json"} 0.000137122
+holdfast_http_request_duration_seconds_count{route="GET /.well-known/jwks.json"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/events/{eventID}/status",le="0.001"} 0
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/events/{eventID}/status",le="0.0025"} 6
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/events/{eventID}/status",le="0.005"} 8
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/events/{eventID}/status",le="0.01"} 14
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/events/{eventID}/status",le="0.025"} 21
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/events/{eventID}/status",le="0.05"} 30
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/events/{eventID}/status",le="0.1"} 35
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/events/{eventID}/status",le="0.25"} 43
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/events/{eventID}/status",le="0.5"} 47
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/events/{eventID}/status",le="1"} 49
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/events/{eventID}/status",le="2.5"} 50
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/events/{eventID}/status",le="5"} 50
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/events/{eventID}/status",le="+Inf"} 50
+holdfast_http_request_duration_seconds_sum{route="GET /v1/events/{eventID}/status"} 5.680052365
+holdfast_http_request_duration_seconds_count{route="GET /v1/events/{eventID}/status"} 50
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/queue/{eventID}/challenge",le="0.001"} 0
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/queue/{eventID}/challenge",le="0.0025"} 0
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/queue/{eventID}/challenge",le="0.005"} 0
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/queue/{eventID}/challenge",le="0.01"} 0
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/queue/{eventID}/challenge",le="0.025"} 0
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/queue/{eventID}/challenge",le="0.05"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/queue/{eventID}/challenge",le="0.1"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/queue/{eventID}/challenge",le="0.25"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/queue/{eventID}/challenge",le="0.5"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/queue/{eventID}/challenge",le="1"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/queue/{eventID}/challenge",le="2.5"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/queue/{eventID}/challenge",le="5"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/queue/{eventID}/challenge",le="+Inf"} 1
+holdfast_http_request_duration_seconds_sum{route="GET /v1/queue/{eventID}/challenge"} 0.038282879
+holdfast_http_request_duration_seconds_count{route="GET /v1/queue/{eventID}/challenge"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/queue/{eventID}/me",le="0.001"} 0
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/queue/{eventID}/me",le="0.0025"} 0
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/queue/{eventID}/me",le="0.005"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/queue/{eventID}/me",le="0.01"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/queue/{eventID}/me",le="0.025"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/queue/{eventID}/me",le="0.05"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/queue/{eventID}/me",le="0.1"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/queue/{eventID}/me",le="0.25"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/queue/{eventID}/me",le="0.5"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/queue/{eventID}/me",le="1"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/queue/{eventID}/me",le="2.5"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/queue/{eventID}/me",le="5"} 1
+holdfast_http_request_duration_seconds_bucket{route="GET /v1/queue/{eventID}/me",le="+Inf"} 1
+holdfast_http_request_duration_seconds_sum{route="GET /v1/queue/{eventID}/me"} 0.002793679
+holdfast_http_request_duration_seconds_count{route="GET /v1/queue/{eventID}/me"} 1
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/admit",le="0.001"} 0
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/admit",le="0.0025"} 59
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/admit",le="0.005"} 145
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/admit",le="0.01"} 307
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/admit",le="0.025"} 838
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/admit",le="0.05"} 1530
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/admit",le="0.1"} 2577
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/admit",le="0.25"} 3723
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/admit",le="0.5"} 4284
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/admit",le="1"} 4807
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/admit",le="2.5"} 4983
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/admit",le="5"} 4988
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/admit",le="+Inf"} 4988
+holdfast_http_request_duration_seconds_sum{route="POST /v1/queue/{eventID}/admit"} 1115.1043111490008
+holdfast_http_request_duration_seconds_count{route="POST /v1/queue/{eventID}/admit"} 4988
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/join",le="0.001"} 0
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/join",le="0.0025"} 1
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/join",le="0.005"} 52
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/join",le="0.01"} 128
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/join",le="0.025"} 256
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/join",le="0.05"} 389
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/join",le="0.1"} 561
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/join",le="0.25"} 825
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/join",le="0.5"} 1249
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/join",le="1"} 2483
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/join",le="2.5"} 3188
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/join",le="5"} 3188
+holdfast_http_request_duration_seconds_bucket{route="POST /v1/queue/{eventID}/join",le="+Inf"} 3188
+holdfast_http_request_duration_seconds_sum{route="POST /v1/queue/{eventID}/join"} 2068.452406255
+holdfast_http_request_duration_seconds_count{route="POST /v1/queue/{eventID}/join"} 3188
+holdfast_http_requests_in_flight 0
+holdfast_http_requests_total{code="200",route="GET /.well-known/jwks.json"} 1
+holdfast_http_requests_total{code="200",route="GET /v1/events/{eventID}/status"} 50
+holdfast_http_requests_total{code="200",route="GET /v1/queue/{eventID}/challenge"} 1
+holdfast_http_requests_total{code="200",route="GET /v1/queue/{eventID}/me"} 1
+holdfast_http_requests_total{code="200",route="POST /v1/queue/{eventID}/admit"} 3187
+holdfast_http_requests_total{code="202",route="POST /v1/queue/{eventID}/join"} 3188
+holdfast_http_requests_total{code="404",route="POST /v1/queue/{eventID}/admit"} 1801
+holdfast_queue_active_sessions{event="01a0f963-17d2-74ab-9983-061aa7ae3fbc"} 0
+holdfast_queue_active_sessions{event="01a0f976-1161-7366-8228-dbdf767304a1"} 0
+holdfast_queue_active_sessions{event="01a0f977-6254-788c-b9d1-45cd50dc3360"} 0
+holdfast_queue_active_sessions{event="01a0f978-bf0f-7813-a93f-97be0582d6d4"} 0
+holdfast_queue_active_sessions{event="01a0f985-81b4-7177-97b6-cc5b03025f0b"} 0
+holdfast_queue_active_sessions{event="01a0f987-b7c9-7ab9-baae-c79bc1e84c84"} 0
+holdfast_queue_active_sessions{event="01a0f989-c188-7283-88ef-ffb208cff116"} 0
+holdfast_queue_active_sessions{event="01a0f98b-eee1-755b-8f4c-bd32d7c76782"} 0
+holdfast_queue_active_sessions{event="01a0f996-bbc4-70c0-9491-84be08adb452"} 0
+holdfast_queue_active_sessions{event="01a0fb09-0b2a-752f-9ec4-562151006139"} 0
+holdfast_queue_active_sessions{event="01a0fd9d-d253-78f9-8587-bce944c16ab6"} 0
+holdfast_queue_active_sessions{event="01a0fdc9-135f-7057-83f2-50235ce6f401"} 0
+holdfast_queue_active_sessions{event="01a0fdf2-b197-7360-a57e-d1a64f46a120"} 0
+holdfast_queue_active_sessions{event="01a0fdf6-53dc-776b-a8b1-ab505d92f65d"} 0
+holdfast_queue_active_sessions{event="01a0fdf8-99bd-7956-ae6e-75145668cace"} 0
+holdfast_queue_active_sessions{event="01a0fe06-0c13-70b0-a4dc-94667f916068"} 0
+holdfast_queue_active_sessions{event="01a10031-23e3-7da1-9e9e-b5d447911c4b"} 0
+holdfast_queue_active_sessions{event="01a10044-6db8-7bed-8785-a6b1963687c6"} 0
+holdfast_queue_active_sessions{event="01a1005b-94ce-78cd-a3e9-f7f132031a75"} 0
+holdfast_queue_active_sessions{event="01a1008e-4b37-7ef0-b8bb-9e68a9eb8846"} 0
+holdfast_queue_active_sessions{event="01a10098-1334-73ae-997b-54d2a3dcfa63"} 0
+holdfast_queue_active_sessions{event="01a1009a-d868-7b06-a9bf-de30063d85d8"} 0
+holdfast_queue_active_sessions{event="01a10112-4f9b-7804-86a3-0fd2789484f9"} 0
+holdfast_queue_active_sessions{event="01a101ab-8b50-7522-900f-2237e24805d7"} 0
+holdfast_queue_active_sessions{event="01a101cd-af3f-77b7-be3e-f28ad6791542"} 0
+holdfast_queue_active_sessions{event="01a10229-24a6-7538-9de9-4a9a230a2274"} 0
+holdfast_queue_active_sessions{event="01a10229-3a8f-783f-92d8-018dc3396971"} 0
+holdfast_queue_active_sessions{event="01a10329-ee7f-71e0-8372-74cbfaf6e732"} 0
+holdfast_queue_active_sessions{event="01a10341-7413-7099-ab2e-a6a34c3caad7"} 0
+holdfast_queue_active_sessions{event="01a10347-4836-7a6f-83b0-db72d0e2e281"} 0
+holdfast_queue_active_sessions{event="01a10356-3af3-79d5-82b2-69614eedb8bb"} 3188
+holdfast_queue_active_sessions{event="161bd02e-9dc9-47d3-a388-86106b129353"} 0
+holdfast_queue_active_sessions{event="4e4045f9-dca9-4c73-85a0-06568897b770"} 0
+holdfast_queue_active_sessions{event="bd9bb2f5-0f18-4816-82f7-e58f9de0d509"} 0
+holdfast_queue_active_sessions{event="c8e6eb0b-0a3c-499e-aa87-60377b14d747"} 0
+holdfast_queue_active_sessions{event="f716bf8d-8204-4c4b-a167-97966c908d7c"} 0
+holdfast_queue_active_sessions{event="fd215d69-c8c9-4a64-a062-915554c2e700"} 0
+holdfast_queue_admission_leader{event="01a0f963-17d2-74ab-9983-061aa7ae3fbc"} 1
+holdfast_queue_admission_leader{event="01a0f976-1161-7366-8228-dbdf767304a1"} 1
+holdfast_queue_admission_leader{event="01a0f977-6254-788c-b9d1-45cd50dc3360"} 1
+holdfast_queue_admission_leader{event="01a0f978-bf0f-7813-a93f-97be0582d6d4"} 1
+holdfast_queue_admission_leader{event="01a0f985-81b4-7177-97b6-cc5b03025f0b"} 1
+holdfast_queue_admission_leader{event="01a0f987-b7c9-7ab9-baae-c79bc1e84c84"} 1
+holdfast_queue_admission_leader{event="01a0f989-c188-7283-88ef-ffb208cff116"} 1
+holdfast_queue_admission_leader{event="01a0f98b-eee1-755b-8f4c-bd32d7c76782"} 1
+holdfast_queue_admission_leader{event="01a0f996-bbc4-70c0-9491-84be08adb452"} 1
+holdfast_queue_admission_leader{event="01a0fb09-0b2a-752f-9ec4-562151006139"} 1
+holdfast_queue_admission_leader{event="01a0fd9d-d253-78f9-8587-bce944c16ab6"} 1
+holdfast_queue_admission_leader{event="01a0fdc9-135f-7057-83f2-50235ce6f401"} 1
+holdfast_queue_admission_leader{event="01a0fdf2-b197-7360-a57e-d1a64f46a120"} 1
+holdfast_queue_admission_leader{event="01a0fdf6-53dc-776b-a8b1-ab505d92f65d"} 1
+holdfast_queue_admission_leader{event="01a0fdf8-99bd-7956-ae6e-75145668cace"} 1
+holdfast_queue_admission_leader{event="01a0fe06-0c13-70b0-a4dc-94667f916068"} 1
+holdfast_queue_admission_leader{event="01a10031-23e3-7da1-9e9e-b5d447911c4b"} 1
+holdfast_queue_admission_leader{event="01a10044-6db8-7bed-8785-a6b1963687c6"} 1
+holdfast_queue_admission_leader{event="01a1005b-94ce-78cd-a3e9-f7f132031a75"} 1
+holdfast_queue_admission_leader{event="01a1008e-4b37-7ef0-b8bb-9e68a9eb8846"} 1
+holdfast_queue_admission_leader{event="01a10098-1334-73ae-997b-54d2a3dcfa63"} 1
+holdfast_queue_admission_leader{event="01a1009a-d868-7b06-a9bf-de30063d85d8"} 1
+holdfast_queue_admission_leader{event="01a10112-4f9b-7804-86a3-0fd2789484f9"} 1
+holdfast_queue_admission_leader{event="01a101ab-8b50-7522-900f-2237e24805d7"} 1
+holdfast_queue_admission_leader{event="01a101cd-af3f-77b7-be3e-f28ad6791542"} 1
+holdfast_queue_admission_leader{event="01a10229-24a6-7538-9de9-4a9a230a2274"} 1
+holdfast_queue_admission_leader{event="01a10229-3a8f-783f-92d8-018dc3396971"} 1
+holdfast_queue_admission_leader{event="01a10329-ee7f-71e0-8372-74cbfaf6e732"} 1
+holdfast_queue_admission_leader{event="01a10341-7413-7099-ab2e-a6a34c3caad7"} 1
+holdfast_queue_admission_leader{event="01a10347-4836-7a6f-83b0-db72d0e2e281"} 1
+holdfast_queue_admission_leader{event="01a10356-3af3-79d5-82b2-69614eedb8bb"} 1
+holdfast_queue_admission_leader{event="161bd02e-9dc9-47d3-a388-86106b129353"} 1
+holdfast_queue_admission_leader{event="4e4045f9-dca9-4c73-85a0-06568897b770"} 1
+holdfast_queue_admission_leader{event="bd9bb2f5-0f18-4816-82f7-e58f9de0d509"} 1
+holdfast_queue_admission_leader{event="c8e6eb0b-0a3c-499e-aa87-60377b14d747"} 1
+holdfast_queue_admission_leader{event="f716bf8d-8204-4c4b-a167-97966c908d7c"} 1
+holdfast_queue_admission_leader{event="fd215d69-c8c9-4a64-a062-915554c2e700"} 1
+holdfast_queue_admission_ticks_total{result="advanced"} 108
+holdfast_queue_admission_ticks_total{result="error"} 0
+holdfast_queue_admission_ticks_total{result="fenced"} 0
+holdfast_queue_admission_ticks_total{result="idle"} 16937
+holdfast_queue_admits_total{result="closed"} 0
+holdfast_queue_admits_total{result="error"} 0
+holdfast_queue_admits_total{result="expired"} 0
+holdfast_queue_admits_total{result="invalid"} 0
+holdfast_queue_admits_total{result="issued"} 3187
+holdfast_queue_admits_total{result="not_found"} 0
+holdfast_queue_admits_total{result="not_in_queue"} 1801
+holdfast_queue_admits_total{result="not_your_turn"} 0
+holdfast_queue_admits_total{result="rate_limited"} 0
+holdfast_queue_admitted_total{event="01a10356-3af3-79d5-82b2-69614eedb8bb"} 3188
+holdfast_queue_admitted_up_to{event="01a0f963-17d2-74ab-9983-061aa7ae3fbc"} 6
+holdfast_queue_admitted_up_to{event="01a0f976-1161-7366-8228-dbdf767304a1"} 2
+holdfast_queue_admitted_up_to{event="01a0f977-6254-788c-b9d1-45cd50dc3360"} 1
+holdfast_queue_admitted_up_to{event="01a0f978-bf0f-7813-a93f-97be0582d6d4"} 1
+holdfast_queue_admitted_up_to{event="01a0f985-81b4-7177-97b6-cc5b03025f0b"} 2
+holdfast_queue_admitted_up_to{event="01a0f987-b7c9-7ab9-baae-c79bc1e84c84"} 3
+holdfast_queue_admitted_up_to{event="01a0f989-c188-7283-88ef-ffb208cff116"} 0
+holdfast_queue_admitted_up_to{event="01a0f98b-eee1-755b-8f4c-bd32d7c76782"} 1
+holdfast_queue_admitted_up_to{event="01a0f996-bbc4-70c0-9491-84be08adb452"} 25
+holdfast_queue_admitted_up_to{event="01a0fb09-0b2a-752f-9ec4-562151006139"} 3001
+holdfast_queue_admitted_up_to{event="01a0fd9d-d253-78f9-8587-bce944c16ab6"} 0
+holdfast_queue_admitted_up_to{event="01a0fdc9-135f-7057-83f2-50235ce6f401"} 0
+holdfast_queue_admitted_up_to{event="01a0fdf2-b197-7360-a57e-d1a64f46a120"} 0
+holdfast_queue_admitted_up_to{event="01a0fdf6-53dc-776b-a8b1-ab505d92f65d"} 0
+holdfast_queue_admitted_up_to{event="01a0fdf8-99bd-7956-ae6e-75145668cace"} 0
+holdfast_queue_admitted_up_to{event="01a0fe06-0c13-70b0-a4dc-94667f916068"} 0
+holdfast_queue_admitted_up_to{event="01a10031-23e3-7da1-9e9e-b5d447911c4b"} 0
+holdfast_queue_admitted_up_to{event="01a10044-6db8-7bed-8785-a6b1963687c6"} 0
+holdfast_queue_admitted_up_to{event="01a1005b-94ce-78cd-a3e9-f7f132031a75"} 0
+holdfast_queue_admitted_up_to{event="01a1008e-4b37-7ef0-b8bb-9e68a9eb8846"} 0
+holdfast_queue_admitted_up_to{event="01a10098-1334-73ae-997b-54d2a3dcfa63"} 0
+holdfast_queue_admitted_up_to{event="01a1009a-d868-7b06-a9bf-de30063d85d8"} 0
+holdfast_queue_admitted_up_to{event="01a10112-4f9b-7804-86a3-0fd2789484f9"} 0
+holdfast_queue_admitted_up_to{event="01a101ab-8b50-7522-900f-2237e24805d7"} 1
+holdfast_queue_admitted_up_to{event="01a101cd-af3f-77b7-be3e-f28ad6791542"} 1
+holdfast_queue_admitted_up_to{event="01a10229-24a6-7538-9de9-4a9a230a2274"} 1
+holdfast_queue_admitted_up_to{event="01a10229-3a8f-783f-92d8-018dc3396971"} 0
+holdfast_queue_admitted_up_to{event="01a10329-ee7f-71e0-8372-74cbfaf6e732"} 1
+holdfast_queue_admitted_up_to{event="01a10341-7413-7099-ab2e-a6a34c3caad7"} 1
+holdfast_queue_admitted_up_to{event="01a10347-4836-7a6f-83b0-db72d0e2e281"} 1
+holdfast_queue_admitted_up_to{event="01a10356-3af3-79d5-82b2-69614eedb8bb"} 3188
+holdfast_queue_admitted_up_to{event="161bd02e-9dc9-47d3-a388-86106b129353"} 35
+holdfast_queue_admitted_up_to{event="4e4045f9-dca9-4c73-85a0-06568897b770"} 2000
+holdfast_queue_admitted_up_to{event="bd9bb2f5-0f18-4816-82f7-e58f9de0d509"} 500
+holdfast_queue_admitted_up_to{event="c8e6eb0b-0a3c-499e-aa87-60377b14d747"} 300
+holdfast_queue_admitted_up_to{event="f716bf8d-8204-4c4b-a167-97966c908d7c"} 2
+holdfast_queue_admitted_up_to{event="fd215d69-c8c9-4a64-a062-915554c2e700"} 6
+holdfast_queue_inventory_reads_total{result="error"} 1346
+holdfast_queue_inventory_reads_total{result="not_provisioned"} 2553
+holdfast_queue_inventory_reads_total{result="ok"} 13147
+holdfast_queue_joins_total{result="agent_lockout"} 0
+holdfast_queue_joins_total{result="already_joined"} 0
+holdfast_queue_joins_total{result="closed"} 0
+holdfast_queue_joins_total{result="error"} 0
+holdfast_queue_joins_total{result="invalid"} 0
+holdfast_queue_joins_total{result="joined"} 3188
+holdfast_queue_joins_total{result="not_found"} 0
+holdfast_queue_joins_total{result="pow_expired"} 0
+holdfast_queue_joins_total{result="pow_invalid"} 0
+holdfast_queue_joins_total{result="pow_required"} 0
+holdfast_queue_joins_total{result="rate_limited_ip"} 0
+holdfast_queue_joins_total{result="rate_limited_user"} 0
+holdfast_queue_joins_total{result="verified_only"} 0
+holdfast_queue_leader_epoch{event="01a0f963-17d2-74ab-9983-061aa7ae3fbc"} 48
+holdfast_queue_leader_epoch{event="01a0f976-1161-7366-8228-dbdf767304a1"} 47
+holdfast_queue_leader_epoch{event="01a0f977-6254-788c-b9d1-45cd50dc3360"} 45
+holdfast_queue_leader_epoch{event="01a0f978-bf0f-7813-a93f-97be0582d6d4"} 43
+holdfast_queue_leader_epoch{event="01a0f985-81b4-7177-97b6-cc5b03025f0b"} 40
+holdfast_queue_leader_epoch{event="01a0f987-b7c9-7ab9-baae-c79bc1e84c84"} 40
+holdfast_queue_leader_epoch{event="01a0f989-c188-7283-88ef-ffb208cff116"} 40
+holdfast_queue_leader_epoch{event="01a0f98b-eee1-755b-8f4c-bd32d7c76782"} 40
+holdfast_queue_leader_epoch{event="01a0f996-bbc4-70c0-9491-84be08adb452"} 39
+holdfast_queue_leader_epoch{event="01a0fb09-0b2a-752f-9ec4-562151006139"} 37
+holdfast_queue_leader_epoch{event="01a0fd9d-d253-78f9-8587-bce944c16ab6"} 15
+holdfast_queue_leader_epoch{event="01a0fdc9-135f-7057-83f2-50235ce6f401"} 14
+holdfast_queue_leader_epoch{event="01a0fdf2-b197-7360-a57e-d1a64f46a120"} 13
+holdfast_queue_leader_epoch{event="01a0fdf6-53dc-776b-a8b1-ab505d92f65d"} 13
+holdfast_queue_leader_epoch{event="01a0fdf8-99bd-7956-ae6e-75145668cace"} 13
+holdfast_queue_leader_epoch{event="01a0fe06-0c13-70b0-a4dc-94667f916068"} 13
+holdfast_queue_leader_epoch{event="01a10031-23e3-7da1-9e9e-b5d447911c4b"} 13
+holdfast_queue_leader_epoch{event="01a10044-6db8-7bed-8785-a6b1963687c6"} 13
+holdfast_queue_leader_epoch{event="01a1005b-94ce-78cd-a3e9-f7f132031a75"} 13
+holdfast_queue_leader_epoch{event="01a1008e-4b37-7ef0-b8bb-9e68a9eb8846"} 12
+holdfast_queue_leader_epoch{event="01a10098-1334-73ae-997b-54d2a3dcfa63"} 12
+holdfast_queue_leader_epoch{event="01a1009a-d868-7b06-a9bf-de30063d85d8"} 12
+holdfast_queue_leader_epoch{event="01a10112-4f9b-7804-86a3-0fd2789484f9"} 12
+holdfast_queue_leader_epoch{event="01a101ab-8b50-7522-900f-2237e24805d7"} 8
+holdfast_queue_leader_epoch{event="01a101cd-af3f-77b7-be3e-f28ad6791542"} 7
+holdfast_queue_leader_epoch{event="01a10229-24a6-7538-9de9-4a9a230a2274"} 5
+holdfast_queue_leader_epoch{event="01a10229-3a8f-783f-92d8-018dc3396971"} 5
+holdfast_queue_leader_epoch{event="01a10329-ee7f-71e0-8372-74cbfaf6e732"} 2
+holdfast_queue_leader_epoch{event="01a10341-7413-7099-ab2e-a6a34c3caad7"} 2
+holdfast_queue_leader_epoch{event="01a10347-4836-7a6f-83b0-db72d0e2e281"} 2
+holdfast_queue_leader_epoch{event="01a10356-3af3-79d5-82b2-69614eedb8bb"} 1
+holdfast_queue_leader_epoch{event="161bd02e-9dc9-47d3-a388-86106b129353"} 51
+holdfast_queue_leader_epoch{event="4e4045f9-dca9-4c73-85a0-06568897b770"} 50
+holdfast_queue_leader_epoch{event="bd9bb2f5-0f18-4816-82f7-e58f9de0d509"} 50
+holdfast_queue_leader_epoch{event="c8e6eb0b-0a3c-499e-aa87-60377b14d747"} 49
+holdfast_queue_leader_epoch{event="f716bf8d-8204-4c4b-a167-97966c908d7c"} 51
+holdfast_queue_leader_epoch{event="fd215d69-c8c9-4a64-a062-915554c2e700"} 51
+holdfast_queue_leader_terms_total 37
+holdfast_queue_max_sessions{event="01a0f963-17d2-74ab-9983-061aa7ae3fbc"} 100
+holdfast_queue_max_sessions{event="01a0f976-1161-7366-8228-dbdf767304a1"} 10000
+holdfast_queue_max_sessions{event="01a0f977-6254-788c-b9d1-45cd50dc3360"} 10000
+holdfast_queue_max_sessions{event="01a0f978-bf0f-7813-a93f-97be0582d6d4"} 10000
+holdfast_queue_max_sessions{event="01a0f985-81b4-7177-97b6-cc5b03025f0b"} 10000
+holdfast_queue_max_sessions{event="01a0f987-b7c9-7ab9-baae-c79bc1e84c84"} 10000
+holdfast_queue_max_sessions{event="01a0f989-c188-7283-88ef-ffb208cff116"} 10000
+holdfast_queue_max_sessions{event="01a0f98b-eee1-755b-8f4c-bd32d7c76782"} 10000
+holdfast_queue_max_sessions{event="01a0f996-bbc4-70c0-9491-84be08adb452"} 500
+holdfast_queue_max_sessions{event="01a0fb09-0b2a-752f-9ec4-562151006139"} 500
+holdfast_queue_max_sessions{event="01a0fd9d-d253-78f9-8587-bce944c16ab6"} 10000
+holdfast_queue_max_sessions{event="01a0fdc9-135f-7057-83f2-50235ce6f401"} 10000
+holdfast_queue_max_sessions{event="01a0fdf2-b197-7360-a57e-d1a64f46a120"} 10000
+holdfast_queue_max_sessions{event="01a0fdf6-53dc-776b-a8b1-ab505d92f65d"} 10000
+holdfast_queue_max_sessions{event="01a0fdf8-99bd-7956-ae6e-75145668cace"} 10000
+holdfast_queue_max_sessions{event="01a0fe06-0c13-70b0-a4dc-94667f916068"} 10000
+holdfast_queue_max_sessions{event="01a10031-23e3-7da1-9e9e-b5d447911c4b"} 10000
+holdfast_queue_max_sessions{event="01a10044-6db8-7bed-8785-a6b1963687c6"} 10000
+holdfast_queue_max_sessions{event="01a1005b-94ce-78cd-a3e9-f7f132031a75"} 10000
+holdfast_queue_max_sessions{event="01a1008e-4b37-7ef0-b8bb-9e68a9eb8846"} 10000
+holdfast_queue_max_sessions{event="01a10098-1334-73ae-997b-54d2a3dcfa63"} 10000
+holdfast_queue_max_sessions{event="01a1009a-d868-7b06-a9bf-de30063d85d8"} 10000
+holdfast_queue_max_sessions{event="01a10112-4f9b-7804-86a3-0fd2789484f9"} 10000
+holdfast_queue_max_sessions{event="01a101ab-8b50-7522-900f-2237e24805d7"} 10000
+holdfast_queue_max_sessions{event="01a101cd-af3f-77b7-be3e-f28ad6791542"} 100
+holdfast_queue_max_sessions{event="01a10229-24a6-7538-9de9-4a9a230a2274"} 10000
+holdfast_queue_max_sessions{event="01a10229-3a8f-783f-92d8-018dc3396971"} 10000
+holdfast_queue_max_sessions{event="01a10329-ee7f-71e0-8372-74cbfaf6e732"} 10000
+holdfast_queue_max_sessions{event="01a10341-7413-7099-ab2e-a6a34c3caad7"} 10000
+holdfast_queue_max_sessions{event="01a10347-4836-7a6f-83b0-db72d0e2e281"} 10000
+holdfast_queue_max_sessions{event="01a10356-3af3-79d5-82b2-69614eedb8bb"} 5000
+holdfast_queue_max_sessions{event="161bd02e-9dc9-47d3-a388-86106b129353"} 50
+holdfast_queue_max_sessions{event="4e4045f9-dca9-4c73-85a0-06568897b770"} 10000
+holdfast_queue_max_sessions{event="bd9bb2f5-0f18-4816-82f7-e58f9de0d509"} 50
+holdfast_queue_max_sessions{event="c8e6eb0b-0a3c-499e-aa87-60377b14d747"} 10000
+holdfast_queue_max_sessions{event="f716bf8d-8204-4c4b-a167-97966c908d7c"} 10000
+holdfast_queue_max_sessions{event="fd215d69-c8c9-4a64-a062-915554c2e700"} 10000
+holdfast_queue_opened_total{by="join"} 0
+holdfast_queue_opened_total{by="opener"} 1
+holdfast_queue_opener_duration_seconds_bucket{le="0.0005"} 0
+holdfast_queue_opener_duration_seconds_bucket{le="0.001"} 0
+holdfast_queue_opener_duration_seconds_bucket{le="0.002"} 0
+holdfast_queue_opener_duration_seconds_bucket{le="0.004"} 0
+holdfast_queue_opener_duration_seconds_bucket{le="0.008"} 0
+holdfast_queue_opener_duration_seconds_bucket{le="0.016"} 0
+holdfast_queue_opener_duration_seconds_bucket{le="0.032"} 2
+holdfast_queue_opener_duration_seconds_bucket{le="0.064"} 14
+holdfast_queue_opener_duration_seconds_bucket{le="0.128"} 95
+holdfast_queue_opener_duration_seconds_bucket{le="0.256"} 204
+holdfast_queue_opener_duration_seconds_bucket{le="0.512"} 241
+holdfast_queue_opener_duration_seconds_bucket{le="1.024"} 264
+holdfast_queue_opener_duration_seconds_bucket{le="+Inf"} 285
+holdfast_queue_opener_duration_seconds_sum 111.74294862399995
+holdfast_queue_opener_duration_seconds_count 285
+holdfast_queue_opener_runs_total{result="error"} 0
+holdfast_queue_opener_runs_total{result="ok"} 285
+holdfast_queue_position_lookups_total{result="error"} 0
+holdfast_queue_position_lookups_total{result="invalid"} 0
+holdfast_queue_position_lookups_total{result="not_found"} 0
+holdfast_queue_position_lookups_total{result="not_in_queue"} 0
+holdfast_queue_position_lookups_total{result="randomizing"} 0
+holdfast_queue_position_lookups_total{result="ranked"} 1
+holdfast_queue_position_lookups_total{result="rate_limited"} 0
+holdfast_queue_pow_challenges_total 0
+holdfast_queue_pow_difficulty 0
+holdfast_queue_size{event="01a0f963-17d2-74ab-9983-061aa7ae3fbc"} 6
+holdfast_queue_size{event="01a0f976-1161-7366-8228-dbdf767304a1"} 2
+holdfast_queue_size{event="01a0f977-6254-788c-b9d1-45cd50dc3360"} 1
+holdfast_queue_size{event="01a0f978-bf0f-7813-a93f-97be0582d6d4"} 1
+holdfast_queue_size{event="01a0f985-81b4-7177-97b6-cc5b03025f0b"} 2
+holdfast_queue_size{event="01a0f987-b7c9-7ab9-baae-c79bc1e84c84"} 3
+holdfast_queue_size{event="01a0f989-c188-7283-88ef-ffb208cff116"} 0
+holdfast_queue_size{event="01a0f98b-eee1-755b-8f4c-bd32d7c76782"} 1
+holdfast_queue_size{event="01a0f996-bbc4-70c0-9491-84be08adb452"} 25
+holdfast_queue_size{event="01a0fb09-0b2a-752f-9ec4-562151006139"} 3001
+holdfast_queue_size{event="01a0fd9d-d253-78f9-8587-bce944c16ab6"} 0
+holdfast_queue_size{event="01a0fdc9-135f-7057-83f2-50235ce6f401"} 0
+holdfast_queue_size{event="01a0fdf2-b197-7360-a57e-d1a64f46a120"} 0
+holdfast_queue_size{event="01a0fdf6-53dc-776b-a8b1-ab505d92f65d"} 0
+holdfast_queue_size{event="01a0fdf8-99bd-7956-ae6e-75145668cace"} 0
+holdfast_queue_size{event="01a0fe06-0c13-70b0-a4dc-94667f916068"} 0
+holdfast_queue_size{event="01a10031-23e3-7da1-9e9e-b5d447911c4b"} 0
+holdfast_queue_size{event="01a10044-6db8-7bed-8785-a6b1963687c6"} 0
+holdfast_queue_size{event="01a1005b-94ce-78cd-a3e9-f7f132031a75"} 0
+holdfast_queue_size{event="01a1008e-4b37-7ef0-b8bb-9e68a9eb8846"} 0
+holdfast_queue_size{event="01a10098-1334-73ae-997b-54d2a3dcfa63"} 0
+holdfast_queue_size{event="01a1009a-d868-7b06-a9bf-de30063d85d8"} 0
+holdfast_queue_size{event="01a10112-4f9b-7804-86a3-0fd2789484f9"} 0
+holdfast_queue_size{event="01a101ab-8b50-7522-900f-2237e24805d7"} 1
+holdfast_queue_size{event="01a101cd-af3f-77b7-be3e-f28ad6791542"} 9
+holdfast_queue_size{event="01a10229-24a6-7538-9de9-4a9a230a2274"} 1
+holdfast_queue_size{event="01a10229-3a8f-783f-92d8-018dc3396971"} 0
+holdfast_queue_size{event="01a10329-ee7f-71e0-8372-74cbfaf6e732"} 1
+holdfast_queue_size{event="01a10341-7413-7099-ab2e-a6a34c3caad7"} 1
+holdfast_queue_size{event="01a10347-4836-7a6f-83b0-db72d0e2e281"} 1
+holdfast_queue_size{event="01a10356-3af3-79d5-82b2-69614eedb8bb"} 3188
+holdfast_queue_size{event="161bd02e-9dc9-47d3-a388-86106b129353"} 35
+holdfast_queue_size{event="4e4045f9-dca9-4c73-85a0-06568897b770"} 2000
+holdfast_queue_size{event="bd9bb2f5-0f18-4816-82f7-e58f9de0d509"} 500
+holdfast_queue_size{event="c8e6eb0b-0a3c-499e-aa87-60377b14d747"} 300
+holdfast_queue_size{event="f716bf8d-8204-4c4b-a167-97966c908d7c"} 2
+holdfast_queue_size{event="fd215d69-c8c9-4a64-a062-915554c2e700"} 6
+holdfast_queue_state{event="01a0f963-17d2-74ab-9983-061aa7ae3fbc",state="CLOSED"} 0
+holdfast_queue_state{event="01a0f963-17d2-74ab-9983-061aa7ae3fbc",state="FROZEN"} 0
+holdfast_queue_state{event="01a0f963-17d2-74ab-9983-061aa7ae3fbc",state="OPEN"} 1
+holdfast_queue_state{event="01a0f963-17d2-74ab-9983-061aa7ae3fbc",state="PRE"} 0
+holdfast_queue_state{event="01a0f963-17d2-74ab-9983-061aa7ae3fbc",state="SOLD_OUT"} 0
+holdfast_queue_state{event="01a0f976-1161-7366-8228-dbdf767304a1",state="CLOSED"} 0
+holdfast_queue_state{event="01a0f976-1161-7366-8228-dbdf767304a1",state="FROZEN"} 0
+holdfast_queue_state{event="01a0f976-1161-7366-8228-dbdf767304a1",state="OPEN"} 1
+holdfast_queue_state{event="01a0f976-1161-7366-8228-dbdf767304a1",state="PRE"} 0
+holdfast_queue_state{event="01a0f976-1161-7366-8228-dbdf767304a1",state="SOLD_OUT"} 0
+holdfast_queue_state{event="01a0f977-6254-788c-b9d1-45cd50dc3360",state="CLOSED"} 0
+holdfast_queue_state{event="01a0f977-6254-788c-b9d1-45cd50dc3360",state="FROZEN"} 0
+holdfast_queue_state{event="01a0f977-6254-788c-b9d1-45cd50dc3360",state="OPEN"} 1
+holdfast_queue_state{event="01a0f977-6254-788c-b9d1-45cd50dc3360",state="PRE"} 0
+holdfast_queue_state{event="01a0f977-6254-788c-b9d1-45cd50dc3360",state="SOLD_OUT"} 0
+holdfast_queue_state{event="01a0f978-bf0f-7813-a93f-97be0582d6d4",state="CLOSED"} 0
+holdfast_queue_state{event="01a0f978-bf0f-7813-a93f-97be0582d6d4",state="FROZEN"} 0
+holdfast_queue_state{event="01a0f978-bf0f-7813-a93f-97be0582d6d4",state="OPEN"} 1
+holdfast_queue_state{event="01a0f978-bf0f-7813-a93f-97be0582d6d4",state="PRE"} 0
+holdfast_queue_state{event="01a0f978-bf0f-7813-a93f-97be0582d6d4",state="SOLD_OUT"} 0
+holdfast_queue_state{event="01a0f985-81b4-7177-97b6-cc5b03025f0b",state="CLOSED"} 0
+holdfast_queue_state{event="01a0f985-81b4-7177-97b6-cc5b03025f0b",state="FROZEN"} 0
+holdfast_queue_state{event="01a0f985-81b4-7177-97b6-cc5b03025f0b",state="OPEN"} 1
+holdfast_queue_state{event="01a0f985-81b4-7177-97b6-cc5b03025f0b",state="PRE"} 0
+holdfast_queue_state{event="01a0f985-81b4-7177-97b6-cc5b03025f0b",state="SOLD_OUT"} 0
+holdfast_queue_state{event="01a0f987-b7c9-7ab9-baae-c79bc1e84c84",state="CLOSED"} 0
+holdfast_queue_state{event="01a0f987-b7c9-7ab9-baae-c79bc1e84c84",state="FROZEN"} 0
+holdfast_queue_state{event="01a0f987-b7c9-7ab9-baae-c79bc1e84c84",state="OPEN"} 1
+holdfast_queue_state{event="01a0f987-b7c9-7ab9-baae-c79bc1e84c84",state="PRE"} 0
+holdfast_queue_state{event="01a0f987-b7c9-7ab9-baae-c79bc1e84c84",state="SOLD_OUT"} 0
+holdfast_queue_state{event="01a0f989-c188-7283-88ef-ffb208cff116",state="CLOSED"} 0
+holdfast_queue_state{event="01a0f989-c188-7283-88ef-ffb208cff116",state="FROZEN"} 0
+holdfast_queue_state{event="01a0f989-c188-7283-88ef-ffb208cff116",state="OPEN"} 1
+holdfast_queue_state{event="01a0f989-c188-7283-88ef-ffb208cff116",state="PRE"} 0
+holdfast_queue_state{event="01a0f989-c188-7283-88ef-ffb208cff116",state="SOLD_OUT"} 0
+holdfast_queue_state{event="01a0f98b-eee1-755b-8f4c-bd32d7c76782",state="CLOSED"} 0
+holdfast_queue_state{event="01a0f98b-eee1-755b-8f4c-bd32d7c76782",state="FROZEN"} 0
+holdfast_queue_state{event="01a0f98b-eee1-755b-8f4c-bd32d7c76782",state="OPEN"} 1
+holdfast_queue_state{event="01a0f98b-eee1-755b-8f4c-bd32d7c76782",state="PRE"} 0
+holdfast_queue_state{event="01a0f98b-eee1-755b-8f4c-bd32d7c76782",state="SOLD_OUT"} 0
+holdfast_queue_state{event="01a0f996-bbc4-70c0-9491-84be08adb452",state="CLOSED"} 0
+holdfast_queue_state{event="01a0f996-bbc4-70c0-9491-84be08adb452",state="FROZEN"} 0
+holdfast_queue_state{event="01a0f996-bbc4-70c0-9491-84be08adb452",state="OPEN"} 1
+holdfast_queue_state{event="01a0f996-bbc4-70c0-9491-84be08adb452",state="PRE"} 0
+holdfast_queue_state{event="01a0f996-bbc4-70c0-9491-84be08adb452",state="SOLD_OUT"} 0
+holdfast_queue_state{event="01a0fb09-0b2a-752f-9ec4-562151006139",state="CLOSED"} 0
+holdfast_queue_state{event="01a0fb09-0b2a-752f-9ec4-562151006139",state="FROZEN"} 0
+holdfast_queue_state{event="01a0fb09-0b2a-752f-9ec4-562151006139",state="OPEN"} 1
+holdfast_queue_state{event="01a0fb09-0b2a-752f-9ec4-562151006139",state="PRE"} 0
+holdfast_queue_state{event="01a0fb09-0b2a-752f-9ec4-562151006139",state="SOLD_OUT"} 0
+holdfast_queue_state{event="01a0fd9d-d253-78f9-8587-bce944c16ab6",state="CLOSED"} 0
+holdfast_queue_state{event="01a0fd9d-d253-78f9-8587-bce944c16ab6",state="FROZEN"} 0
+holdfast_queue_state{event="01a0fd9d-d253-78f9-8587-bce944c16ab6",state="OPEN"} 1
+holdfast_queue_state{event="01a0fd9d-d253-78f9-8587-bce944c16ab6",state="PRE"} 0
+holdfast_queue_state{event="01a0fd9d-d253-78f9-8587-bce944c16ab6",state="SOLD_OUT"} 0
+holdfast_queue_state{event="01a0fdc9-135f-7057-83f2-50235ce6f401",state="CLOSED"} 0
+holdfast_queue_state{event="01a0fdc9-135f-7057-83f2-50235ce6f401",state="FROZEN"} 0
+holdfast_queue_state{event="01a0fdc9-135f-7057-83f2-50235ce6f401",state="OPEN"} 1
+holdfast_queue_state{event="01a0fdc9-135f-7057-83f2-50235ce6f401",state="PRE"} 0
+holdfast_queue_state{event="01a0fdc9-135f-7057-83f2-50235ce6f401",state="SOLD_OUT"} 0
+holdfast_queue_state{event="01a0fdf2-b197-7360-a57e-d1a64f46a120",state="CLOSED"} 0
+holdfast_queue_state{event="01a0fdf2-b197-7360-a57e-d1a64f46a120",state="FROZEN"} 0
+holdfast_queue_state{event="01a0fdf2-b197-7360-a57e-d1a64f46a120",state="OPEN"} 1
+holdfast_queue_state{event="01a0fdf2-b197-7360-a57e-d1a64f46a120",state="PRE"} 0
+holdfast_queue_state{event="01a0fdf2-b197-7360-a57e-d1a64f46a120",state="SOLD_OUT"} 0
+holdfast_queue_state{event="01a0fdf6-53dc-776b-a8b1-ab505d92f65d",state="CLOSED"} 0
+holdfast_queue_state{event="01a0fdf6-53dc-776b-a8b1-ab505d92f65d",state="FROZEN"} 0
+holdfast_queue_state{event="01a0fdf6-53dc-776b-a8b1-ab505d92f65d",state="OPEN"} 1
+holdfast_queue_state{event="01a0fdf6-53dc-776b-a8b1-ab505d92f65d",state="PRE"} 0
+holdfast_queue_state{event="01a0fdf6-53dc-776b-a8b1-ab505d92f65d",state="SOLD_OUT"} 0
+holdfast_queue_state{event="01a0fdf8-99bd-7956-ae6e-75145668cace",state="CLOSED"} 0
+holdfast_queue_state{event="01a0fdf8-99bd-7956-ae6e-75145668cace",state="FROZEN"} 0
+holdfast_queue_state{event="01a0fdf8-99bd-7956-ae6e-75145668cace",state="OPEN"} 1
+holdfast_queue_state{event="01a0fdf8-99bd-7956-ae6e-75145668cace",state="PRE"} 0
+holdfast_queue_state{event="01a0fdf8-99bd-7956-ae6e-75145668cace",state="SOLD_OUT"} 0
+holdfast_queue_state{event="01a0fe06-0c13-70b0-a4dc-94667f916068",state="CLOSED"} 0
+holdfast_queue_state{event="01a0fe06-0c13-70b0-a4dc-94667f916068",state="FROZEN"} 0
+holdfast_queue_state{event="01a0fe06-0c13-70b0-a4dc-94667f916068",state="OPEN"} 1
+holdfast_queue_state{event="01a0fe06-0c13-70b0-a4dc-94667f916068",state="PRE"} 0
+holdfast_queue_state{event="01a0fe06-0c13-70b0-a4dc-94667f916068",state="SOLD_OUT"} 0
+holdfast_queue_state{event="01a10031-23e3-7da1-9e9e-b5d447911c4b",state="CLOSED"} 0
+holdfast_queue_state{event="01a10031-23e3-7da1-9e9e-b5d447911c4b",state="FROZEN"} 0
+holdfast_queue_state{event="01a10031-23e3-7da1-9e9e-b5d447911c4b",state="OPEN"} 1
+holdfast_queue_state{event="01a10031-23e3-7da1-9e9e-b5d447911c4b",state="PRE"} 0
+holdfast_queue_state{event="01a10031-23e3-7da1-9e9e-b5d447911c4b",state="SOLD_OUT"} 0
+holdfast_queue_state{event="01a10044-6db8-7bed-8785-a6b1963687c6",state="CLOSED"} 0
+holdfast_queue_state{event="01a10044-6db8-7bed-8785-a6b1963687c6",state="FROZEN"} 0
+holdfast_queue_state{event="01a10044-6db8-7bed-8785-a6b1963687c6",state="OPEN"} 1
+holdfast_queue_state{event="01a10044-6db8-7bed-8785-a6b1963687c6",state="PRE"} 0
+holdfast_queue_state{event="01a10044-6db8-7bed-8785-a6b1963687c6",state="SOLD_OUT"} 0
+holdfast_queue_state{event="01a1005b-94ce-78cd-a3e9-f7f132031a75",state="CLOSED"} 0
+holdfast_queue_state{event="01a1005b-94ce-78cd-a3e9-f7f132031a75",state="FROZEN"} 0
+holdfast_queue_state{event="01a1005b-94ce-78cd-a3e9-f7f132031a75",state="OPEN"} 1
+holdfast_queue_state{event="01a1005b-94ce-78cd-a3e9-f7f132031a75",state="PRE"} 0
+holdfast_queue_state{event="01a1005b-94ce-78cd-a3e9-f7f132031a75",state="SOLD_OUT"} 0
+holdfast_queue_state{event="01a1008e-4b37-7ef0-b8bb-9e68a9eb8846",state="CLOSED"} 0
+holdfast_queue_state{event="01a1008e-4b37-7ef0-b8bb-9e68a9eb8846",state="FROZEN"} 0
+holdfast_queue_state{event="01a1008e-4b37-7ef0-b8bb-9e68a9eb8846",state="OPEN"} 1
+holdfast_queue_state{event="01a1008e-4b37-7ef0-b8bb-9e68a9eb8846",state="PRE"} 0
+holdfast_queue_state{event="01a1008e-4b37-7ef0-b8bb-9e68a9eb8846",state="SOLD_OUT"} 0
+holdfast_queue_state{event="01a10098-1334-73ae-997b-54d2a3dcfa63",state="CLOSED"} 0
+holdfast_queue_state{event="01a10098-1334-73ae-997b-54d2a3dcfa63",state="FROZEN"} 0
+holdfast_queue_state{event="01a10098-1334-73ae-997b-54d2a3dcfa63",state="OPEN"} 1
+holdfast_queue_state{event="01a10098-1334-73ae-997b-54d2a3dcfa63",state="PRE"} 0
+holdfast_queue_state{event="01a10098-1334-73ae-997b-54d2a3dcfa63",state="SOLD_OUT"} 0
+holdfast_queue_state{event="01a1009a-d868-7b06-a9bf-de30063d85d8",state="CLOSED"} 0
+holdfast_queue_state{event="01a1009a-d868-7b06-a9bf-de30063d85d8",state="FROZEN"} 0
+holdfast_queue_state{event="01a1009a-d868-7b06-a9bf-de30063d85d8",state="OPEN"} 1
+holdfast_queue_state{event="01a1009a-d868-7b06-a9bf-de30063d85d8",state="PRE"} 0
+holdfast_queue_state{event="01a1009a-d868-7b06-a9bf-de30063d85d8",state="SOLD_OUT"} 0
+holdfast_queue_state{event="01a10112-4f9b-7804-86a3-0fd2789484f9",state="CLOSED"} 0
+holdfast_queue_state{event="01a10112-4f9b-7804-86a3-0fd2789484f9",state="FROZEN"} 0
+holdfast_queue_state{event="01a10112-4f9b-7804-86a3-0fd2789484f9",state="OPEN"} 1
+holdfast_queue_state{event="01a10112-4f9b-7804-86a3-0fd2789484f9",state="PRE"} 0
+holdfast_queue_state{event="01a10112-4f9b-7804-86a3-0fd2789484f9",state="SOLD_OUT"} 0
+holdfast_queue_state{event="01a101ab-8b50-7522-900f-2237e24805d7",state="CLOSED"} 0
+holdfast_queue_state{event="01a101ab-8b50-7522-900f-2237e24805d7",state="FROZEN"} 0
+holdfast_queue_state{event="01a101ab-8b50-7522-900f-2237e24805d7",state="OPEN"} 1
+holdfast_queue_state{event="01a101ab-8b50-7522-900f-2237e24805d7",state="PRE"} 0
+holdfast_queue_state{event="01a101ab-8b50-7522-900f-2237e24805d7",state="SOLD_OUT"} 0
+holdfast_queue_state{event="01a101cd-af3f-77b7-be3e-f28ad6791542",state="CLOSED"} 0
+holdfast_queue_state{event="01a101cd-af3f-77b7-be3e-f28ad6791542",state="FROZEN"} 0
+holdfast_queue_state{event="01a101cd-af3f-77b7-be3e-f28ad6791542",state="OPEN"} 0
+holdfast_queue_state{event="01a101cd-af3f-77b7-be3e-f28ad6791542",state="PRE"} 0
+holdfast_queue_state{event="01a101cd-af3f-77b7-be3e-f28ad6791542",state="SOLD_OUT"} 1
+holdfast_queue_state{event="01a10229-24a6-7538-9de9-4a9a230a2274",state="CLOSED"} 0
+holdfast_queue_state{event="01a10229-24a6-7538-9de9-4a9a230a2274",state="FROZEN"} 0
+holdfast_queue_state{event="01a10229-24a6-7538-9de9-4a9a230a2274",state="OPEN"} 1
+holdfast_queue_state{event="01a10229-24a6-7538-9de9-4a9a230a2274",state="PRE"} 0
+holdfast_queue_state{event="01a10229-24a6-7538-9de9-4a9a230a2274",state="SOLD_OUT"} 0
+holdfast_queue_state{event="01a10229-3a8f-783f-92d8-018dc3396971",state="CLOSED"} 0
+holdfast_queue_state{event="01a10229-3a8f-783f-92d8-018dc3396971",state="FROZEN"} 0
+holdfast_queue_state{event="01a10229-3a8f-783f-92d8-018dc3396971",state="OPEN"} 1
+holdfast_queue_state{event="01a10229-3a8f-783f-92d8-018dc3396971",state="PRE"} 0
+holdfast_queue_state{event="01a10229-3a8f-783f-92d8-018dc3396971",state="SOLD_OUT"} 0
+holdfast_queue_state{event="01a10329-ee7f-71e0-8372-74cbfaf6e732",state="CLOSED"} 0
+holdfast_queue_state{event="01a10329-ee7f-71e0-8372-74cbfaf6e732",state="FROZEN"} 0
+holdfast_queue_state{event="01a10329-ee7f-71e0-8372-74cbfaf6e732",state="OPEN"} 1
+holdfast_queue_state{event="01a10329-ee7f-71e0-8372-74cbfaf6e732",state="PRE"} 0
+holdfast_queue_state{event="01a10329-ee7f-71e0-8372-74cbfaf6e732",state="SOLD_OUT"} 0
+holdfast_queue_state{event="01a10341-7413-7099-ab2e-a6a34c3caad7",state="CLOSED"} 0
+holdfast_queue_state{event="01a10341-7413-7099-ab2e-a6a34c3caad7",state="FROZEN"} 0
+holdfast_queue_state{event="01a10341-7413-7099-ab2e-a6a34c3caad7",state="OPEN"} 1
+holdfast_queue_state{event="01a10341-7413-7099-ab2e-a6a34c3caad7",state="PRE"} 0
+holdfast_queue_state{event="01a10341-7413-7099-ab2e-a6a34c3caad7",state="SOLD_OUT"} 0
+holdfast_queue_state{event="01a10347-4836-7a6f-83b0-db72d0e2e281",state="CLOSED"} 0
+holdfast_queue_state{event="01a10347-4836-7a6f-83b0-db72d0e2e281",state="FROZEN"} 0
+holdfast_queue_state{event="01a10347-4836-7a6f-83b0-db72d0e2e281",state="OPEN"} 1
+holdfast_queue_state{event="01a10347-4836-7a6f-83b0-db72d0e2e281",state="PRE"} 0
+holdfast_queue_state{event="01a10347-4836-7a6f-83b0-db72d0e2e281",state="SOLD_OUT"} 0
+holdfast_queue_state{event="01a10356-3af3-79d5-82b2-69614eedb8bb",state="CLOSED"} 0
+holdfast_queue_state{event="01a10356-3af3-79d5-82b2-69614eedb8bb",state="FROZEN"} 0
+holdfast_queue_state{event="01a10356-3af3-79d5-82b2-69614eedb8bb",state="OPEN"} 1
+holdfast_queue_state{event="01a10356-3af3-79d5-82b2-69614eedb8bb",state="PRE"} 0
+holdfast_queue_state{event="01a10356-3af3-79d5-82b2-69614eedb8bb",state="SOLD_OUT"} 0
+holdfast_queue_state{event="161bd02e-9dc9-47d3-a388-86106b129353",state="CLOSED"} 0
+holdfast_queue_state{event="161bd02e-9dc9-47d3-a388-86106b129353",state="FROZEN"} 0
+holdfast_queue_state{event="161bd02e-9dc9-47d3-a388-86106b129353",state="OPEN"} 1
+holdfast_queue_state{event="161bd02e-9dc9-47d3-a388-86106b129353",state="PRE"} 0
+holdfast_queue_state{event="161bd02e-9dc9-47d3-a388-86106b129353",state="SOLD_OUT"} 0
+holdfast_queue_state{event="4e4045f9-dca9-4c73-85a0-06568897b770",state="CLOSED"} 0
+holdfast_queue_state{event="4e4045f9-dca9-4c73-85a0-06568897b770",state="FROZEN"} 0
+holdfast_queue_state{event="4e4045f9-dca9-4c73-85a0-06568897b770",state="OPEN"} 1
+holdfast_queue_state{event="4e4045f9-dca9-4c73-85a0-06568897b770",state="PRE"} 0
+holdfast_queue_state{event="4e4045f9-dca9-4c73-85a0-06568897b770",state="SOLD_OUT"} 0
+holdfast_queue_state{event="bd9bb2f5-0f18-4816-82f7-e58f9de0d509",state="CLOSED"} 0
+holdfast_queue_state{event="bd9bb2f5-0f18-4816-82f7-e58f9de0d509",state="FROZEN"} 0
+holdfast_queue_state{event="bd9bb2f5-0f18-4816-82f7-e58f9de0d509",state="OPEN"} 1
+holdfast_queue_state{event="bd9bb2f5-0f18-4816-82f7-e58f9de0d509",state="PRE"} 0
+holdfast_queue_state{event="bd9bb2f5-0f18-4816-82f7-e58f9de0d509",state="SOLD_OUT"} 0
+holdfast_queue_state{event="c8e6eb0b-0a3c-499e-aa87-60377b14d747",state="CLOSED"} 0
+holdfast_queue_state{event="c8e6eb0b-0a3c-499e-aa87-60377b14d747",state="FROZEN"} 0
+holdfast_queue_state{event="c8e6eb0b-0a3c-499e-aa87-60377b14d747",state="OPEN"} 1
+holdfast_queue_state{event="c8e6eb0b-0a3c-499e-aa87-60377b14d747",state="PRE"} 0
+holdfast_queue_state{event="c8e6eb0b-0a3c-499e-aa87-60377b14d747",state="SOLD_OUT"} 0
+holdfast_queue_state{event="f716bf8d-8204-4c4b-a167-97966c908d7c",state="CLOSED"} 0
+holdfast_queue_state{event="f716bf8d-8204-4c4b-a167-97966c908d7c",state="FROZEN"} 0
+holdfast_queue_state{event="f716bf8d-8204-4c4b-a167-97966c908d7c",state="OPEN"} 1
+holdfast_queue_state{event="f716bf8d-8204-4c4b-a167-97966c908d7c",state="PRE"} 0
+holdfast_queue_state{event="f716bf8d-8204-4c4b-a167-97966c908d7c",state="SOLD_OUT"} 0
+holdfast_queue_state{event="fd215d69-c8c9-4a64-a062-915554c2e700",state="CLOSED"} 0
+holdfast_queue_state{event="fd215d69-c8c9-4a64-a062-915554c2e700",state="FROZEN"} 0
+holdfast_queue_state{event="fd215d69-c8c9-4a64-a062-915554c2e700",state="OPEN"} 1
+holdfast_queue_state{event="fd215d69-c8c9-4a64-a062-915554c2e700",state="PRE"} 0
+holdfast_queue_state{event="fd215d69-c8c9-4a64-a062-915554c2e700",state="SOLD_OUT"} 0
+holdfast_queue_status_age_seconds{event="01a0f963-17d2-74ab-9983-061aa7ae3fbc"} 0.209726
+holdfast_queue_status_age_seconds{event="01a0f976-1161-7366-8228-dbdf767304a1"} 0.21129
+holdfast_queue_status_age_seconds{event="01a0f977-6254-788c-b9d1-45cd50dc3360"} 0.229596
+holdfast_queue_status_age_seconds{event="01a0f978-bf0f-7813-a93f-97be0582d6d4"} 0.238708
+holdfast_queue_status_age_seconds{event="01a0f985-81b4-7177-97b6-cc5b03025f0b"} 0.239838
+holdfast_queue_status_age_seconds{event="01a0f987-b7c9-7ab9-baae-c79bc1e84c84"} 0.004546
+holdfast_queue_status_age_seconds{event="01a0f989-c188-7283-88ef-ffb208cff116"} 0.212813
+holdfast_queue_status_age_seconds{event="01a0f98b-eee1-755b-8f4c-bd32d7c76782"} 0.004544
+holdfast_queue_status_age_seconds{event="01a0f996-bbc4-70c0-9491-84be08adb452"} 0.009319
+holdfast_queue_status_age_seconds{event="01a0fb09-0b2a-752f-9ec4-562151006139"} 0.025298
+holdfast_queue_status_age_seconds{event="01a0fd9d-d253-78f9-8587-bce944c16ab6"} 0.005554
+holdfast_queue_status_age_seconds{event="01a0fdc9-135f-7057-83f2-50235ce6f401"} 0.014801
+holdfast_queue_status_age_seconds{event="01a0fdf2-b197-7360-a57e-d1a64f46a120"} 0.009723
+holdfast_queue_status_age_seconds{event="01a0fdf6-53dc-776b-a8b1-ab505d92f65d"} 0.019364
+holdfast_queue_status_age_seconds{event="01a0fdf8-99bd-7956-ae6e-75145668cace"} 0.050971
+holdfast_queue_status_age_seconds{event="01a0fe06-0c13-70b0-a4dc-94667f916068"} 0.060624
+holdfast_queue_status_age_seconds{event="01a10031-23e3-7da1-9e9e-b5d447911c4b"} 0.063289
+holdfast_queue_status_age_seconds{event="01a10044-6db8-7bed-8785-a6b1963687c6"} 0.063257
+holdfast_queue_status_age_seconds{event="01a1005b-94ce-78cd-a3e9-f7f132031a75"} 0.065248
+holdfast_queue_status_age_seconds{event="01a1008e-4b37-7ef0-b8bb-9e68a9eb8846"} 0.065888
+holdfast_queue_status_age_seconds{event="01a10098-1334-73ae-997b-54d2a3dcfa63"} 0.058454
+holdfast_queue_status_age_seconds{event="01a1009a-d868-7b06-a9bf-de30063d85d8"} 0.063259
+holdfast_queue_status_age_seconds{event="01a10112-4f9b-7804-86a3-0fd2789484f9"} 0.064912
+holdfast_queue_status_age_seconds{event="01a101ab-8b50-7522-900f-2237e24805d7"} 0.066884
+holdfast_queue_status_age_seconds{event="01a101cd-af3f-77b7-be3e-f28ad6791542"} 0.065043
+holdfast_queue_status_age_seconds{event="01a10229-24a6-7538-9de9-4a9a230a2274"} 0.061777
+holdfast_queue_status_age_seconds{event="01a10229-3a8f-783f-92d8-018dc3396971"} 0.079021
+holdfast_queue_status_age_seconds{event="01a10329-ee7f-71e0-8372-74cbfaf6e732"} 0.078002
+holdfast_queue_status_age_seconds{event="01a10341-7413-7099-ab2e-a6a34c3caad7"} 0.082028
+holdfast_queue_status_age_seconds{event="01a10347-4836-7a6f-83b0-db72d0e2e281"} 0.100168
+holdfast_queue_status_age_seconds{event="01a10356-3af3-79d5-82b2-69614eedb8bb"} 0.110744
+holdfast_queue_status_age_seconds{event="161bd02e-9dc9-47d3-a388-86106b129353"} 0.211471
+holdfast_queue_status_age_seconds{event="4e4045f9-dca9-4c73-85a0-06568897b770"} 0.212072
+holdfast_queue_status_age_seconds{event="bd9bb2f5-0f18-4816-82f7-e58f9de0d509"} 0.209976
+holdfast_queue_status_age_seconds{event="c8e6eb0b-0a3c-499e-aa87-60377b14d747"} 0.212204
+holdfast_queue_status_age_seconds{event="f716bf8d-8204-4c4b-a167-97966c908d7c"} 0.192364
+holdfast_queue_status_age_seconds{event="fd215d69-c8c9-4a64-a062-915554c2e700"} 0.222417
