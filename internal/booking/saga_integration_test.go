@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	dto "github.com/prometheus/client_model/go"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -93,7 +94,9 @@ func message(typ string, m proto.Message) kafka.Message {
 }
 
 func captured(v View) kafka.Message {
-	return message(paymentCaptured, &eventsv1.PaymentCaptured{BookingId: v.BookingID, IntentId: uuid.NewString(), PspPaymentId: "pay_x", AmountPaise: v.AmountPaise})
+	m := message(paymentCaptured, &eventsv1.PaymentCaptured{BookingId: v.BookingID, IntentId: uuid.NewString(), PspPaymentId: "pay_x", AmountPaise: v.AmountPaise})
+	m.Headers[kafka.HeaderTime] = time.Now().Add(-2 * time.Second).UTC().Format(time.RFC3339Nano)
+	return m
 }
 
 func (f *sagaFixture) handle(t *testing.T, m kafka.Message) {
@@ -147,6 +150,13 @@ func TestSagaConfirmsACapture(t *testing.T) {
 	if f.sold(t, f.event) != 2 || f.inv.holds[hold].State != inventory.StateSold {
 		t.Fatalf("guard sold %d, hold %s", f.sold(t, f.event), f.inv.holds[hold].State)
 	}
+	// The capture was 2 s ago: one observation, of about 2 s.
+	if n := testutil.CollectAndCount(f.m.captureToConfirm); n != 1 {
+		t.Fatalf("capture-to-confirm series %d", n)
+	}
+	if sum := histogramSum(t, f.m); sum < 2 || sum > 10 {
+		t.Fatalf("capture-to-confirm observed %.2f s, want about 2", sum)
+	}
 	// Redelivered: no second sale; the idempotent inventory call repeats.
 	f.handle(t, m)
 	if f.sold(t, f.event) != 2 || f.inv.confirms != 2 {
@@ -163,6 +173,28 @@ func TestSagaConfirmsACapture(t *testing.T) {
 	if s := f.statusOf(t, v.BookingID); s != StatusConfirmed || f.inv.releases != 0 {
 		t.Fatalf("after a late failure: %s, releases %d", s, f.inv.releases)
 	}
+	// Only the confirmation was timed: redeliveries and duplicates were not.
+	if c := histogramCount(t, f.m); c != 1 {
+		t.Fatalf("capture-to-confirm observations %d, want 1", c)
+	}
+}
+
+func histogramCount(t *testing.T, m *Metrics) uint64 {
+	t.Helper()
+	var out dto.Metric
+	if err := m.captureToConfirm.Write(&out); err != nil {
+		t.Fatal(err)
+	}
+	return out.GetHistogram().GetSampleCount()
+}
+
+func histogramSum(t *testing.T, m *Metrics) float64 {
+	t.Helper()
+	var out dto.Metric
+	if err := m.captureToConfirm.Write(&out); err != nil {
+		t.Fatal(err)
+	}
+	return out.GetHistogram().GetSampleSum()
 }
 
 func TestSagaRefundsWhatTheGuardRefuses(t *testing.T) {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -74,7 +75,8 @@ func (s *Saga) Handle(ctx context.Context, msg kafka.Message) error {
 		if err != nil {
 			return err
 		}
-		return s.captured(ctx, msg.ID(), id, &ev)
+		capturedAt, _ := msg.Time()
+		return s.captured(ctx, msg.ID(), id, &ev, capturedAt)
 	case paymentFailed, paymentExpired:
 		reason := eventsv1.CancellationReason_CANCELLATION_REASON_PAYMENT_FAILED
 		var raw string
@@ -158,9 +160,12 @@ func (s *Saga) apply(ctx context.Context, msgID string, id uuid.UUID, fn func(q 
 // captured decides a captured booking: CONFIRMED if the final guard takes
 // the sale, REFUND_REQUIRED if it refuses. A capture after the booking was
 // cancelled is a late capture: honoured if the guard allows, refunded if
-// not (design doc 7.2).
-func (s *Saga) captured(ctx context.Context, msgID string, id uuid.UUID, ev *eventsv1.PaymentCaptured) error {
+// not (design doc 7.2). capturedAt, the capture event's time (zero if
+// unknown), times the confirmation for the capture-to-confirm SLO.
+func (s *Saga) captured(ctx context.Context, msgID string, id uuid.UUID, ev *eventsv1.PaymentCaptured, capturedAt time.Time) error {
+	confirmed := false
 	err := s.apply(ctx, msgID, id, func(q *bookingdb.Queries, tx pgx.Tx, b bookingdb.Booking) error {
+		confirmed = false
 		if b.Status != StatusPendingPayment && b.Status != StatusCancelled {
 			s.m.saga.WithLabelValues("already_decided").Inc()
 			return nil // confirmed or refunding already
@@ -178,6 +183,7 @@ func (s *Saga) captured(ctx context.Context, msgID string, id uuid.UUID, ev *eve
 				return fmt.Errorf("booking: confirm: %w", err)
 			}
 			s.m.decided(StatusConfirmed, late)
+			confirmed = true
 			return writeEvent(ctx, q, b.ID, eventConfirmed, &eventsv1.BookingConfirmed{
 				BookingId: b.ID.String(), EventId: b.EventID.String(), UserId: b.UserID.String(), HoldId: b.HoldID.String(),
 				Quantity: int32(b.Qty), ConfirmedAt: timestamppb.New(done.UpdatedAt),
@@ -206,6 +212,9 @@ func (s *Saga) captured(ctx context.Context, msgID string, id uuid.UUID, ev *eve
 	})
 	if err != nil {
 		return err
+	}
+	if confirmed && !capturedAt.IsZero() {
+		s.m.confirmedAfter(capturedAt) // committed: the buyer's booking is confirmed
 	}
 	return s.settle(ctx, id)
 }

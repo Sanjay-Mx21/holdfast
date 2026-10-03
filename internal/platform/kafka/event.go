@@ -90,6 +90,13 @@ func (m Message) ID() string { return m.Headers[HeaderID] }
 // Type is the event's CloudEvents type.
 func (m Message) Type() string { return m.Headers[HeaderType] }
 
+// Time is when the event happened (its CloudEvents time); ok is false when
+// the header is missing or malformed.
+func (m Message) Time() (t time.Time, ok bool) {
+	t, err := time.Parse(time.RFC3339Nano, m.Headers[HeaderTime])
+	return t, err == nil
+}
+
 func messageOf(r *kgo.Record, attempt int) Message {
 	h := make(map[string]string, len(r.Headers))
 	for _, kv := range r.Headers {

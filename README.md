@@ -119,8 +119,8 @@ stack with `DEV_IDENTITY=true make up` lets requests without an access token
 name their buyer in `X-Dev-User-Id` instead (the E2 load test does this for
 queue-svc); never in production.
 
-Dashboards: Grafana at http://localhost:3000 (HoldFast / Inventory and
-HoldFast / Queue) and Prometheus at http://localhost:9090. The service's own
+Dashboards: Grafana at http://localhost:3000 (HoldFast / Mission control,
+the whole sale on one screen; HoldFast / Inventory and HoldFast / Queue) and Prometheus at http://localhost:9090. The service's own
 metrics and health checks are on its admin port: http://localhost:9091/metrics
 and `/readyz` (queue-svc: http://localhost:9092). Prometheus and Grafana read
 their config and dashboards only at start-up; `make up` restarts both, so a
