@@ -23,6 +23,7 @@ identified by auth-svc's access tokens since task 4.2.
 - Settle the hold in inventory-svc after each decision.
 - Cancel bookings whose payment deadline passed.
 - Show buyers their own bookings, and nobody else's.
+- Publish the event catalog: what is on sale and when (task 4.5).
 
 ## API
 
@@ -83,6 +84,24 @@ or the payment provider is unreachable (retry with the same key).
 
 The buyer's own booking, in the same shape. Anyone else's, or one that does
 not exist, is 404 `BOOKING_NOT_FOUND`, so booking IDs cannot be probed.
+
+### `GET /v1/events` and `GET /v1/events/{eventID}`
+
+The event catalog (`internal/booking/catalog`), public, `Cache-Control:
+public, max-age=60` (the edge caches it). An event:
+
+```json
+{"eventId":"0196f0c1-...","name":"Coldplay, Mumbai","saleOpensAt":"2026-10-05T12:00:00Z",
+ "verifiedOnlyUntil":"2026-10-05T12:15:00Z","perUserLimit":4,"unitPricePaise":250000,"capacity":1000}
+```
+
+`verifiedOnlyUntil` and `agentLockoutUntil` are present only when the event
+has those policy windows. The list (`{"events":[...]}`) holds sales still to
+open, soonest first, then sales opened within the last week, most recent
+first, at most 50. Live state is not here: the queue's state comes from
+queue-svc's status document, units left from inventory-svc's availability.
+An unknown event is 404 `EVENT_NOT_FOUND`; a malformed ID 400
+`INVALID_REQUEST`.
 
 ## States
 

@@ -1,5 +1,5 @@
 // The page's side of proof of work: start a worker, wait for the nonce.
-import type { SolveMessage } from './pow.worker.ts';
+import type { SolveMessage } from './messages.ts';
 
 export interface Solving {
   /** Resolves with the nonce; rejects if the worker fails or is cancelled. */

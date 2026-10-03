@@ -4,16 +4,8 @@
 //   in:  { challenge: string, difficulty: number }
 //   out: { type: 'progress', hashes } every 65,536 hashes,
 //        then { type: 'done', nonce, hashes, ms }
+import type { SolveMessage, SolveRequest } from './messages.ts';
 import { solve } from './solve.ts';
-
-export interface SolveRequest {
-  challenge: string;
-  difficulty: number;
-}
-
-export type SolveMessage =
-  | { type: 'progress'; hashes: number }
-  | { type: 'done'; nonce: string; hashes: number; ms: number };
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
 

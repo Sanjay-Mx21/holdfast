@@ -288,6 +288,16 @@ services:
       auth: { condition: service_started }
     restart: unless-stopped
 
+  # The web app (task 4.5): a static export served by nginx, behind the edge.
+  # NEXT_PUBLIC_DEV_INBOX=1 adds a button that reads sign-in codes from
+  # auth-svc's development inbox.
+  web:
+    build:
+      context: ./web
+      args: { NEXT_PUBLIC_DEV_INBOX: "1" }
+    networks: [edge]
+    restart: unless-stopped
+
   # The edge: routes, micro-caches the status and availability documents for
   # one second, rate-limits the queue per client, and passes the client's
   # address to the services. It has a fixed address on the edge network so
@@ -301,7 +311,7 @@ services:
       edge: { ipv4_address: 10.250.0.10 }
     ports:
       - "${EDGE_PORT:-8088}:80"
-    depends_on: [queue, inventory, booking, auth]
+    depends_on: [queue, inventory, booking, auth, web]
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
       interval: 5s
