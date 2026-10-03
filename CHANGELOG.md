@@ -58,6 +58,27 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
   once, continuing each event's stored trace; booking-svc runs it. Metrics
   `holdfast_outbox_lag_seconds` and `holdfast_outbox_pending`; the Kafka
   consumer helper reports `holdfast_kafka_consumer_lag`.
+- **payment-svc** (task 3.9, `cmd/payment`):
+  - `holdfast.payment.v1.PaymentService.CreateIntent` over gRPC, for
+    booking-svc only: one intent per booking, the provider's order keyed by
+    the intent ID.
+  - A provider client (`internal/payment/psp`) with retries, backoff and
+    jitter, behind a circuit breaker (`internal/platform/breaker`).
+  - `POST /v1/webhooks/psp`: HMAC-SHA256 checked in constant time,
+    deduplicated by event ID, forward-only moves, each with its ledger
+    entries and event in one transaction.
+  - Status polling of quiet intents, and the payment outbox relay.
+  - Migration `payment/00002` adds the intent's event ID, for the ledger's
+    revenue account.
+  - booking-svc returns `intentId` and `checkoutUrl` when
+    `PAYMENT_GRPC_ADDR` is set. Compose runs payment-svc (ports 8084, 9094,
+    7072); service doc `docs/services/payment.md`.
+
+### Fixed
+
+- booking-svc's payment deadline is now the hold's protection minus
+  `PAYMENT_GRACE` (3 minutes; design doc 6.1). It used to equal the end of
+  the protection, leaving no grace for a late capture (P32).
 
 ## [0.2.0] - 2026-10-02
 

@@ -51,10 +51,19 @@ type Inventory interface {
 	MarkPaying(ctx context.Context, eventID, userID, holdID string) (time.Time, error)
 }
 
-// Intents creates payment intents (payment-svc, from task 3.9). The call
+// Intents creates payment intents (payment-svc, *payment.Client). The call
 // must be idempotent per booking: called again, it returns the same intent.
 type Intents interface {
-	CreateIntent(ctx context.Context, bookingID uuid.UUID, amountPaise int64, expiresAt time.Time) (intentID uuid.UUID, checkoutURL string, err error)
+	CreateIntent(ctx context.Context, bookingID, eventID uuid.UUID, amountPaise int64, expiresAt time.Time) (intentID uuid.UUID, checkoutURL string, err error)
+}
+
+// Config tunes the service.
+type Config struct {
+	// Grace is how long a PAYING hold outlives the booking's payment deadline,
+	// so a capture reported a little late still finds its units (design doc
+	// 6.1: a 7-minute deadline and 3 minutes' grace in a 10-minute payment
+	// window). The deadline is the hold's protected-until time minus Grace.
+	Grace time.Duration
 }
 
 // Service creates and reads bookings.
@@ -62,15 +71,16 @@ type Service struct {
 	pool    *pgxpool.Pool
 	q       *bookingdb.Queries
 	inv     Inventory
-	intents Intents // nil until payment-svc exists
+	intents Intents // nil: bookings are created without a payment intent
+	cfg     Config
 	m       *Metrics
 	log     *slog.Logger
 }
 
 // NewService returns the booking service. intents may be nil: bookings are
 // then created without a payment intent (and without a checkout URL).
-func NewService(pool *pgxpool.Pool, inv Inventory, intents Intents, m *Metrics, log *slog.Logger) *Service {
-	return &Service{pool: pool, q: bookingdb.New(pool), inv: inv, intents: intents, m: m, log: log}
+func NewService(pool *pgxpool.Pool, inv Inventory, intents Intents, cfg Config, m *Metrics, log *slog.Logger) *Service {
+	return &Service{pool: pool, q: bookingdb.New(pool), inv: inv, intents: intents, cfg: cfg, m: m, log: log}
 }
 
 // CreateRequest is POST /v1/bookings.
@@ -253,7 +263,7 @@ func (s *Service) create(ctx context.Context, user, event, hold uuid.UUID) (Resu
 	// Protect the hold for the payment window before the booking exists: if
 	// this succeeds and the insert below fails, a retry finds the hold PAYING
 	// and carries on; if the buyer never retries, the window simply runs out.
-	deadline, err := s.inv.MarkPaying(ctx, event.String(), user.String(), hold.String())
+	protected, err := s.inv.MarkPaying(ctx, event.String(), user.String(), hold.String())
 	if r, ok := s.holdProblem(err); ok {
 		return r, uuid.Nil, nil
 	}
@@ -261,6 +271,7 @@ func (s *Service) create(ctx context.Context, user, event, hold uuid.UUID) (Resu
 		return Result{}, uuid.Nil, fmt.Errorf("booking: protect hold: %w", err)
 	}
 
+	deadline := protected.Add(-s.cfg.Grace)
 	b, err = s.insert(ctx, bookingdb.CreateBookingParams{
 		ID: uuid.Must(uuid.NewV7()), EventID: event, UserID: user, HoldID: hold,
 		Qty: int16(h.Quantity), AmountPaise: int64(h.Quantity) * ev.UnitPricePaise, //nolint:gosec // 1 to 10
@@ -300,7 +311,7 @@ func (s *Service) insert(ctx context.Context, p bookingdb.CreateBookingParams) (
 func (s *Service) finish(ctx context.Context, b bookingdb.Booking) (Result, uuid.UUID, error) {
 	v := viewOf(b)
 	if s.intents != nil && b.Status == StatusPendingPayment {
-		intent, url, err := s.intents.CreateIntent(ctx, b.ID, b.AmountPaise, b.PaymentDeadline)
+		intent, url, err := s.intents.CreateIntent(ctx, b.ID, b.EventID, b.AmountPaise, b.PaymentDeadline)
 		if err != nil {
 			return Result{}, uuid.Nil, fmt.Errorf("booking: create payment intent: %w", err)
 		}

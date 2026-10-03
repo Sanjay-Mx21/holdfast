@@ -28,7 +28,7 @@ func pgCode(err error) string {
 
 func newIntent(t *testing.T, q *Queries, amount int64) Intent {
 	t.Helper()
-	in, err := q.CreateIntent(ctx, CreateIntentParams{ID: uuid.Must(uuid.NewV7()), BookingID: uuid.New(), AmountPaise: amount, ExpiresAt: time.Now().Add(10 * time.Minute)})
+	in, err := q.CreateIntent(ctx, CreateIntentParams{ID: uuid.Must(uuid.NewV7()), BookingID: uuid.New(), EventID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, AmountPaise: amount, ExpiresAt: time.Now().Add(10 * time.Minute)})
 	if err != nil {
 		t.Fatal(err)
 	}

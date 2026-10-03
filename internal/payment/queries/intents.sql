@@ -1,8 +1,8 @@
 -- name: CreateIntent :one
 -- One intent per booking: a second create for the same booking inserts
 -- nothing (no row), and the caller reads the existing one.
-INSERT INTO payment.payment_intents (id, booking_id, amount_paise, expires_at)
-VALUES ($1, $2, $3, $4)
+INSERT INTO payment.payment_intents (id, booking_id, event_id, amount_paise, expires_at)
+VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (booking_id) DO NOTHING
 RETURNING *;
 

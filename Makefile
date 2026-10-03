@@ -6,8 +6,8 @@ VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev
 COMMIT   ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 PKG      := github.com/Sanjay-Mx21/holdfast
 LDFLAGS  := -s -w -X $(PKG)/internal/platform/buildinfo.Version=$(VERSION) -X $(PKG)/internal/platform/buildinfo.Commit=$(COMMIT)
-BINARIES := inventory queue booking holdfastctl contention fairness
-IMAGES   := inventory queue booking holdfastctl
+BINARIES := inventory queue booking payment holdfastctl contention fairness
+IMAGES   := inventory queue booking payment holdfastctl
 GOLANGCI_LINT_VERSION := v2.14.0
 BUF_VERSION           := v1.73.0
 SQLC_VERSION          := v1.31.1

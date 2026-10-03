@@ -18,6 +18,7 @@ import (
 
 	"github.com/Sanjay-Mx21/holdfast/internal/booking"
 	"github.com/Sanjay-Mx21/holdfast/internal/inventory"
+	"github.com/Sanjay-Mx21/holdfast/internal/payment"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/app"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/authn"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/buildinfo"
@@ -51,6 +52,16 @@ type config struct {
 	ServicePrivateKeyFile string        `env:"SERVICE_PRIVATE_KEY_FILE,required"`
 	InventoryTimeout      time.Duration `env:"INVENTORY_TIMEOUT" envDefault:"800ms"`
 
+	// payment-svc's internal gRPC API. Empty: bookings are created without
+	// a payment intent or checkout URL. Its calls include the payment
+	// provider's, so they get a longer deadline.
+	PaymentGRPCAddr string        `env:"PAYMENT_GRPC_ADDR"`
+	PaymentTimeout  time.Duration `env:"PAYMENT_TIMEOUT" envDefault:"8s"`
+	// PaymentGrace: a PAYING hold outlives the booking's deadline by this
+	// much, to absorb late webhooks (design doc 6.1). Must stay below
+	// inventory-svc's PAYMENT_WINDOW.
+	PaymentGrace time.Duration `env:"PAYMENT_GRACE" envDefault:"3m"`
+
 	// The outbox relay publishes booking events to Kafka (one leader across
 	// replicas).
 	OutboxBatch    int           `env:"OUTBOX_BATCH" envDefault:"500"`
@@ -71,6 +82,12 @@ func (c *config) Validate() error {
 	}
 	if c.DevIdentity && c.Service.Environment == "production" {
 		errs = append(errs, errors.New("DEV_IDENTITY must not be enabled in production: anyone could claim any user ID"))
+	}
+	if c.PaymentTimeout < 100*time.Millisecond || c.PaymentTimeout > time.Minute {
+		errs = append(errs, errors.New("PAYMENT_TIMEOUT must be between 100ms and 1m"))
+	}
+	if c.PaymentGrace < 0 || c.PaymentGrace > 30*time.Minute {
+		errs = append(errs, errors.New("PAYMENT_GRACE must be between 0 and 30m"))
 	}
 	if c.InventoryTimeout < 50*time.Millisecond || c.InventoryTimeout > 30*time.Second {
 		errs = append(errs, errors.New("INVENTORY_TIMEOUT must be between 50ms and 30s"))
@@ -155,7 +172,22 @@ func run(ctx context.Context) error {
 	bm := booking.NewMetrics(reg)
 	// Payment intents arrive with payment-svc (task 3.9); until then bookings
 	// are created without one.
-	svc := booking.NewService(pool, inventory.NewClient(conn), nil, bm, log)
+	var intents booking.Intents
+	if cfg.PaymentGRPCAddr != "" {
+		pconn, err := grpcx.Dial(grpcx.ClientConfig{
+			Target: cfg.PaymentGRPCAddr, Tokens: authn.NewServiceTokenSource(key, serviceName, "payment"),
+			Timeout: cfg.PaymentTimeout,
+		})
+		if err != nil {
+			return err
+		}
+		defer func() { _ = pconn.Close() }()
+		intents = payment.NewClient(pconn)
+		log.Info("creating payment intents over gRPC", "addr", cfg.PaymentGRPCAddr)
+	} else {
+		log.Warn("PAYMENT_GRPC_ADDR is not set: bookings are created without a payment intent")
+	}
+	svc := booking.NewService(pool, inventory.NewClient(conn), intents, booking.Config{Grace: cfg.PaymentGrace}, bm, log)
 
 	hc := health.New(2*time.Second, postgres.Check(pool))
 	httpMetrics := httpx.NewHTTPMetrics(reg)

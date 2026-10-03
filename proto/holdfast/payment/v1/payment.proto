@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package holdfast.payment.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// PaymentService is payment-svc's internal API, for booking-svc. Calls carry a
+// service token and a deadline, like every internal gRPC call.
+//
+// Errors are gRPC status codes with a google.rpc.ErrorInfo reason:
+// INVALID_REQUEST (INVALID_ARGUMENT), INTENT_CONFLICT (FAILED_PRECONDITION:
+// the booking already has an intent for another amount), PSP_UNAVAILABLE
+// (UNAVAILABLE: the payment provider cannot be reached or its circuit
+// breaker is open; retry later).
+service PaymentService {
+  // CreateIntent returns the booking's payment intent and checkout URL,
+  // creating the intent and the provider's order on the first call. Every
+  // later call for the same booking returns the same intent and URL, so
+  // booking-svc can retry it freely.
+  rpc CreateIntent(CreateIntentRequest) returns (CreateIntentResponse);
+}
+
+message CreateIntentRequest {
+  string booking_id = 1;
+  string event_id = 2;
+  int64 amount_paise = 3;
+  // expires_at is the booking's payment deadline; the provider's order
+  // expires at the same instant.
+  google.protobuf.Timestamp expires_at = 4;
+}
+
+message CreateIntentResponse {
+  string intent_id = 1;
+  string checkout_url = 2;
+}
