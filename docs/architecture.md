@@ -273,7 +273,8 @@ provider about quiet intents, least recently polled first.
   (`docs/services/auth.md`). It issues 15-minute EdDSA access tokens, and
   refresh tokens in an httpOnly, SameSite=Strict cookie that rotate on every
   use; presenting a rotated one revokes the whole login. Phones, codes and
-  refresh tokens are stored only as HMACs or hashes.
+  refresh tokens are stored only as HMACs or hashes. Why short-lived access
+  tokens and rotating refresh tokens: ADR 0012.
 - queue-svc and booking-svc identify buyers by those access tokens
   (`authn.RequireUser`), verified against auth-svc's JWKS
   (`ACCESS_JWKS_URL`); a token that fails is refused, with no fallback. With
@@ -282,7 +283,8 @@ provider about quiet intents, least recently polled first.
   `X-Dev-User-Id`.
 - The policy windows (`internal/policy`) use the access token's `role` and
   `vrf` (verified) claims: verified buyers only, and no agents, until each
-  window ends. A development-header caller is never verified.
+  window ends. A development-header caller is never verified. Every sale
+  rule, and where it is enforced: `docs/services/policy.md`.
 - Joining passes per-IP (IPv6 per /64) and per-user token buckets in Valkey
   (`internal/platform/ratelimit`), shared by every replica.
 - Joining also costs a proof of work (`internal/pow`): a stateless HMAC

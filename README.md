@@ -129,6 +129,7 @@ and caveats: [`loadtest/results/README.md`](loadtest/results/README.md).
 | A transactional outbox with a polling relay | No lost or phantom events, without two-phase commit | [0009](docs/adr/0009-transactional-outbox-with-a-polling-relay.md) |
 | An orchestrated saga | One owner for each booking's state machine | [0010](docs/adr/0010-orchestrated-saga.md) |
 | sqlc for database queries | Type-checked SQL, no ORM | [0011](docs/adr/0011-sqlc-for-database-queries.md) |
+| 15-minute access tokens; refresh tokens that rotate with reuse detection | Verified locally on the hot path; a stolen refresh token betrays itself and revokes the login | [0012](docs/adr/0012-access-tokens-and-rotating-refresh-tokens.md) |
 
 ## Failure modes
 
