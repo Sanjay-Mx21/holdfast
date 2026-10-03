@@ -1861,7 +1861,7 @@ Durations are the original **focused-work-day** estimates, which assumed learnin
 | M1 Correctness core | 1 | ✅ Built (Drop 1) | v0.1.0, released 2026-10-01 | E1: 50,000 buyers → exactly 1,000 holds; 10,000 confirmations → exactly 1,000 sold |
 | M1.5 Bring-up and baseline | none | ✅ Complete (2026-10-01) | v0.1.0, released 2026-10-01 | CI green on `main`; E1 passes 100 of 100 runs on your hardware; hold p99 recorded |
 | M2 Fair waiting room | 2 | ✅ Complete (2026-10-02) | v0.2.0, released 2026-10-02 | E6 passed; leader-failover test passes; E2 accepted at 30-second polling, design load moved to task 6.1 (`loadtest/results/`) |
-| M3 MVP backend | 3 | ⏳ **Next** | v0.3.0 | One trace across every service; a 1,000-purchase fault run keeps I1, I2 and I4 at 0 |
+| M3 MVP backend | 3 | ✅ Complete (2026-10-03) | v0.3.0 | One purchase is one trace across every service (`loadtest/results/phase3-one-purchase-trace.png`); a 1,000-purchase fault run kept I1, I2 and I4 at 0 (`loadtest/results/`) |
 | M4 Resume-ready product | 4 | ⏳ Planned | v0.4.0 | Buy a ticket by hand during a k6 rush; README v1 and demo video v1 |
 | M5 Hardened | 5 | ⏳ Planned | v0.5.0 | E3 and E4 pass with every invariant at 0; recovery times documented |
 | M6 v1.0, proven at scale | 6 | ⏳ Planned | v1.0.0 | Every published number traces to a committed results file |
@@ -2081,7 +2081,7 @@ The dates are illustrative. The gates are not.
 
 **Design references:** 6.4 and 6.5 (flow), 7.2 and 7.3 (state machines), 8.1 (booking and payment schemas), 8.3 (topics and contracts), 9.5 to 9.8, 10.2 (gRPC).
 
-**Deliverables:** `cmd/booking`, `cmd/payment`, `cmd/mockpsp`; `internal/booking/saga`; `internal/payment`; `internal/platform` packages `kafka`, `otel`, `outbox`, `idempotency` and `grpcx`; `proto/` with Buf; migrations `booking/00002` onward and `payment/`; Kafka, Redpanda Console, OpenTelemetry Collector and Jaeger in Compose; service docs; ADRs 0008 to 0011.
+**Deliverables:** `cmd/booking`, `cmd/payment`, `cmd/mockpsp`; `internal/booking/saga`; `internal/payment`; `internal/platform` packages `kafka`, `otel`, `outbox`, `idempotency` and `grpcx`; `proto/` with Buf; migrations `booking/00002` onward and `payment/`; Kafka, Redpanda Console, OpenTelemetry Collector and Jaeger in Compose; service docs; ADRs 0008 to 0011. *Two deliverables were built in a different place than listed: the saga is `internal/booking/saga.go` in package `booking` (it shares the package's queries and outbox writer), and idempotency is booking-svc's own (the `booking.idempotency_keys` table and its queries, task 3.6) rather than an `internal/platform/idempotency` package, because booking-svc is the only service with an idempotent client API so far. A shared package can be extracted when a second service needs one.*
 
 **Tasks, in order:**
 
@@ -2107,7 +2107,7 @@ The dates are illustrative. The gates are not.
 - [x] E1 parts A and B pass. *`make e1` and CI.*
 - [x] ADRs 0008 to 0011 written. **Milestone: MVP backend complete.** *Awaiting the owner's review.*
 
-**Demo checkpoint:** a Jaeger screenshot of one purchase crossing every service.
+**Demo checkpoint:** a Jaeger screenshot of one purchase crossing every service. *Done: `loadtest/results/phase3-one-purchase-trace.png` (20 spans across booking, inventory and payment).*
 
 **Rehearse:** why an outbox instead of dual writes; at-least-once delivery plus idempotency; saga compensation; the double-entry ledger.
 

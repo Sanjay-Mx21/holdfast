@@ -3,6 +3,33 @@
 Raw evidence for every number HoldFast publishes. A number that is not backed
 by a file in this folder must not appear in the README, a resume or a post.
 
+## One purchase, one trace, 2026-10-03 (Phase 3 demo checkpoint)
+
+`phase3-one-purchase-trace.png` is Jaeger's view of one purchase made
+through the edge with the whole stack running: 20 spans across booking,
+inventory and payment in one trace. From the top:
+
+1. `POST /v1/bookings` and its gRPC calls: `GetHold` and `MarkPaying` in
+   inventory (with their Valkey commands), and `CreateIntent` in payment,
+   with its call to the provider.
+2. `payment.apply_webhook`: the provider's capture, continuing the booking's
+   trace. The link icon points to the webhook's own trace.
+3. The capture's publish, then booking-svc's saga (`process`), inventory's
+   `Confirm` and the `booking.confirmed.v1` publish.
+
+The saga ran about 14 s after the request because booking-svc had just been
+restarted and its consumer group was rejoining. Jaeger marks the trace
+"Incomplete" for a harmless reason: the test request was sent with a
+hand-made `traceparent`, so the root span's parent is not in Jaeger.
+
+Captured with headless Chrome on the Compose network:
+
+```bash
+docker run --rm --network holdfast_default -v /tmp/shot:/out zenika/alpine-chrome:124 \
+  --no-sandbox --hide-scrollbars --window-size=1600,1100 --virtual-time-budget=15000 \
+  --screenshot=/out/trace.png http://jaeger:16686/trace/ce2f176f13a4ed1cec90696842652bd5
+```
+
 ## E1 part B with injected faults, 2026-10-03 (Phase 3 exit)
 
 **Result: all 12 checks passed. 1,000 purchases completed with I1, I2 and I4

@@ -24,11 +24,21 @@ sells exactly 1,000 (never 1,001) and stays up while doing it.
   their turn for the signed admission token inventory-svc requires;
   inventory-svc follows the queue's published keys, so rotating them needs no
   restart.
-- **booking-svc** (Phase 3, in progress) turns a hold into a booking that
-  waits for payment. Its API is idempotent Stripe-style: a retried request
-  gets the same answer, and a request that failed part-way resumes. It protects
-  the hold over gRPC, writes each state change and its event in one
-  transaction (an outbox), and cancels bookings whose payment deadline passes.
+- **booking-svc** (Phase 3) turns a hold into a booking that waits for
+  payment. Its API is idempotent Stripe-style: a retried request gets the
+  same answer, and a request that failed part-way resumes. It protects the
+  hold over gRPC, writes each state change and its event in one transaction
+  (an outbox), and cancels bookings whose payment deadline passes. Its
+  **saga** turns payment events into sales: the PostgreSQL final guard
+  confirms the booking, or a refund is requested; failed and late payments
+  are compensated.
+- **payment-svc** (Phase 3) creates one payment intent per booking, talks to
+  the payment provider through retries and a circuit breaker, applies its
+  HMAC-signed webhooks exactly once, keeps a double-entry ledger, polls for
+  lost webhooks and refunds what the saga cannot confirm.
+- **mockpsp** (Phase 3) stands in for the payment provider: a checkout page,
+  signed webhooks, and fault injection (duplicated, delayed and lost
+  webhooks, failed payments, slow answers, outages) for tests.
 - **holdfastctl** runs migrations, generates dev keys and tokens, creates
   events, provisions their inventory and queue, rebuilds inventory, and shows
   an event's availability and waiting room (`queue status`).
@@ -42,7 +52,7 @@ sells exactly 1,000 (never 1,001) and stays up while doing it.
 Requirements: Go 1.27+, Docker with Compose v2, make.
 
 ```bash
-make up                                          # dev keys (admission tokens, booking-svc), PostgreSQL, Valkey, Kafka and its topics, migrations, inventory-svc, queue-svc, booking-svc, the NGINX edge, Prometheus, Grafana, OTel Collector, Jaeger
+make up                                          # dev keys (admission tokens, booking-svc), PostgreSQL, Valkey, Kafka and its topics, Redpanda Console, migrations, inventory-svc, queue-svc, booking-svc, payment-svc, mockpsp, the NGINX edge, Prometheus, Grafana, OTel Collector, Jaeger
 make event NAME="Coldplay Mumbai" CAPACITY=1000  # the event, its inventory and its waiting room (opens now); prints the event ID
 export EVENT=<event id>
 export ME=$(cat /proc/sys/kernel/random/uuid)    # your buyer ID (development identity until Phase 4)
@@ -109,9 +119,9 @@ docs/                  architecture, service reference, runbooks, ADRs, design
 scripts/               repository checks
 ```
 
-Next drops, following the design doc: `booking`, `payment`
-and `mockpsp` with gRPC, the outbox and tracing (Phase 3); `auth` and the web
-client (Phase 4); then chaos drills, load tests and benchmarks (Phases 5-7).
+Next drops, following the design doc: `auth`, sale policies and the web
+client (Phase 4); then chaos drills, the reconciler, load tests and
+benchmarks (Phases 5-7).
 
 ## Testing
 
