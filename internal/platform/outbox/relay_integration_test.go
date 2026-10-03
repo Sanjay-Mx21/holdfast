@@ -291,3 +291,60 @@ func (r *recorder) count() int {
 	defer r.mu.Unlock()
 	return len(r.events)
 }
+
+// crashAfterPublish delivers the events, then fails as if the relay died
+// before its transaction committed: the broker has them, the outbox does not
+// know.
+type crashAfterPublish struct {
+	recorder
+	crashes int
+}
+
+func (c *crashAfterPublish) Publish(ctx context.Context, events ...kafka.Event) error {
+	_ = c.recorder.Publish(ctx, events...)
+	if c.crashes > 0 {
+		c.crashes--
+		return errors.New("relay crashed after publishing")
+	}
+	return nil
+}
+
+// TestACrashAfterPublishingRepublishesTheSameEvents pins the relay's half of
+// at-least-once delivery: events published by a relay that crashed before
+// marking them are published again, under the same IDs, so consumers can
+// drop the copies.
+func TestACrashAfterPublishingRepublishesTheSameEvents(t *testing.T) {
+	pool := testenv.Postgres(t)
+	schema := testSchema(t, pool)
+	a := insert(t, pool, schema, "t", uuid.New(), "{}")
+	b := insert(t, pool, schema, "t", uuid.New(), "{}")
+	pub := &crashAfterPublish{crashes: 1}
+	r, _ := NewRelay(pool, pub, Config{Schema: schema, Source: "test-svc"}, NewMetrics(prometheus.NewRegistry()), quiet)
+	if _, err := r.Pass(ctx); err == nil {
+		t.Fatal("the crashed pass reported success")
+	}
+	if n := unpublished(t, pool, schema); n != 2 {
+		t.Fatalf("%d unpublished after the crash, want 2", n)
+	}
+	if n, err := r.Pass(ctx); err != nil || n != 2 {
+		t.Fatalf("after the restart: %d %v", n, err)
+	}
+	if n := unpublished(t, pool, schema); n != 0 {
+		t.Fatalf("%d left unpublished", n)
+	}
+	var ids []string
+	for _, e := range pub.events {
+		ids = append(ids, e.ID)
+	}
+	want := []string{a.String(), b.String(), a.String(), b.String()}
+	if !slices.Equal(ids, want) {
+		t.Fatalf("published IDs %v, want each event twice under its own ID %v", ids, want)
+	}
+	if string(pub.events[0].Value) != string(pub.events[2].Value) || pub.events[0].Type != pub.events[2].Type {
+		t.Fatal("the republished event differs from the first copy")
+	}
+	// A third pass finds nothing: the copies stop once marked.
+	if n, err := r.Pass(ctx); err != nil || n != 0 {
+		t.Fatalf("a pass after marking: %d %v", n, err)
+	}
+}

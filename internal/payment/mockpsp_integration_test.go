@@ -173,3 +173,36 @@ func TestRefundWithMockPSP(t *testing.T) {
 		t.Fatal("the refund did not reverse the receivable")
 	}
 }
+
+// TestDelayedAndDuplicatedWebhooks: every webhook delayed and delivered
+// twice, so copies arrive late and close together; one capture is booked.
+func TestDelayedAndDuplicatedWebhooks(t *testing.T) {
+	w := newMockPSPFixture(t)
+	if err := w.faults.Set(mockpsp.Faults{DuplicateRate: 1, DelayRate: 1,
+		DelayMin: mockpsp.Duration(100 * time.Millisecond), DelayMax: mockpsp.Duration(300 * time.Millisecond)}); err != nil {
+		t.Fatal(err)
+	}
+	var intents []Intent
+	var books []booking
+	for range 5 {
+		b := booking{uuid.New(), uuid.New()}
+		in, err := w.svc.CreateIntent(ctx, b.id, b.event, 1200, time.Now().Add(7*time.Minute))
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.pay(t, in.CheckoutURL)
+		intents, books = append(intents, in), append(books, b)
+	}
+	for _, in := range intents {
+		w.waitStatus(t, in.ID, "CAPTURED")
+	}
+	time.Sleep(500 * time.Millisecond) // the second copies
+	for i, in := range intents {
+		if got := w.balance(t, in.ID, "psp_receivable"); got != 1200 {
+			t.Fatalf("intent %d: receivable %d, want one capture", i, got)
+		}
+		if got := w.events(t, books[i]); len(got) != 1 {
+			t.Fatalf("intent %d: events %v", i, got)
+		}
+	}
+}

@@ -304,6 +304,21 @@ in commit order, marking each batch published in the same transaction
   admission controllers.
 - Fake-clock tests (`testing/synctest`) drive the admission leader's tick loop
   through seconds of ticking with exact timings, in microseconds.
+- The saga and payments (Phase 3), against real PostgreSQL, Kafka and an
+  in-process mockpsp:
+  - the saga's decision table: every payment event against a booking in
+    every status, which moves only along design doc 7.2;
+  - redelivery: every consumer applied twice; duplicates on the wire
+    through the real Kafka consumer;
+  - a relay that crashed after publishing republishes under the same IDs;
+  - duplicate, delayed, late and out-of-order webhooks (a capture always
+    wins; nothing moves backwards);
+  - lost webhooks recovered by polling;
+  - gRPC contracts with the production interceptors (inventory and
+    payment, including the per-caller allowlists).
+  - Tests that claim from a shared queue take a cross-process lock
+    (`testenv.Exclusive`), and integration tests use their own database
+    (`<name>_test`) and Valkey database (1).
 - E1 (`make e1`, and every CI run): 50,000 buyers for 1,000 units, plus
   10,000 concurrent confirmations through the guard. Part B (`-mode
   purchase`) runs 2,000 whole purchases for 1,000 units through the real
