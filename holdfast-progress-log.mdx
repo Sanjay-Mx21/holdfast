@@ -32,13 +32,13 @@ All times are IST (UTC+05:30).
 | **Project** | A flash-sale booking engine that sells exactly the available units under extreme demand, never more |
 | **Plan version** | 2.0 (1 October 2026) |
 | **Milestones complete** | M0 Foundation, M1 Correctness core, M1.5 Bring-up and baseline, and M2 Fair waiting room |
-| **Current milestone** | M3 MVP backend (Phase 3): 9 of 14 tasks done (section 9); next task 3.10, [issue #28](https://github.com/Sanjay-Mx21/holdfast/issues/28) |
+| **Current milestone** | M3 MVP backend (Phase 3): 10 of 14 tasks done (section 9); next task 3.11, [issue #29](https://github.com/Sanjay-Mx21/holdfast/issues/29) |
 | **Progress to v1.0** | About 35% (18 of about 51 focused-work days, excluding Phase 7 stretch goals), counting Phase 2's planned 7 days |
 | **Repository** | [github.com/Sanjay-Mx21/holdfast](https://github.com/Sanjay-Mx21/holdfast), branch `main` |
 | **First commit** | `2173e50` "first commit", 2026-10-01 20:20, 82 files, 12,973 lines |
 | **Latest release** | [v0.2.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.2.0), 2026-10-02 21:51, on `cd0592a` (before it: [v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0), 2026-10-01 23:47, on `9dcd2f8`) |
 | **CI** | Green since 2026-10-01 22:00; `main` is protected and every change needs a pull request with all 9 required checks passing (`images (booking)` and `images (payment)` added on 2026-10-03) |
-| **Issues so far** | 86 recorded: 80 resolved, 6 open (section 6) |
+| **Issues so far** | 88 recorded: 83 resolved, 5 open (section 6) |
 
 <Callout type="tip" title="M2 complete: the fair waiting room (2026-10-02)">
 
@@ -133,7 +133,28 @@ Sources: the dates recorded in the ADRs and the plan, file modification times, a
 | 2026-10-03 10:14 | **Task 3.9 (payment-svc) built and verified:** `cmd/payment` with `holdfast.payment.v1.PaymentService.CreateIntent` over gRPC (booking-svc only), a PSP client (`internal/payment/psp`: idempotency keys, retries with backoff and jitter, a circuit breaker in `internal/platform/breaker`), `POST /v1/webhooks/psp` (HMAC in constant time, 5-minute timestamp window, dedup by event ID, forward-only moves with their ledger entries and outbox event in one transaction), status polling and the payment outbox relay; migration `payment/00002` (the intent's event ID, for the revenue account). booking-svc: `PAYMENT_GRPC_ADDR` and the grace fix (P32). Tests: 10 unit (6 client, 3 breaker, 1 signature table) and 10 integration (intent idempotency and resume after an outage, captured/duplicate/late failure, failure then capture, expiry, unknown order, malformed body, amount mismatch, refund reversing the ledger, the HTTP handler, the poller, the gRPC contract with the allowlist, booking with the grace and checkout URL), 2 clean runs after fixing D33. Gates: gofmt, test, lint, `make gen` unchanged, `buf breaking` clean, up (payment-svc ready, relay leading, Prometheus scraping), E1 PASS; itest passed everywhere except P7 (recurred) and P33 (new), both outside this task. Live smoke test: bad signature 401, signed webhook 200, redelivery 200 and counted as a duplicate | PR #82 (merged by the assistant at 10:21 after all 9 checks passed, `images (payment)` included), `6c48c60`; issue #27 closed |
 | 2026-10-03 10:22 | `images (payment)` added to `main`'s required status checks (now 9); "branches must be up to date" unchanged (on) | GitHub branch protection |
 | 2026-10-03 10:30 | **Fix for P7 and P33 (integration tests isolated from the running stack):** integration tests use Valkey logical database 1 (`testenv.ValkeyDB`) while the services use 0; holdfastctl reads `VALKEY_DB`; the Kafka test helper waits for partition leaders. With the whole stack running: sweeper tests 20 of 20 (were 7 of 10), Kafka ordering test 5 of 5, every Valkey and Kafka package 147 tests passed, 0 failed, 0 skipped; full `make itest` with 13 services running: 24 packages ok | PR #83 (merged by the assistant at 10:31 after all 9 checks passed), `144685f` |
-| 2026-10-03 10:55 | **Fix for P35 (integration tests get their own PostgreSQL database):** found in task 3.10's live check. `testenv` now uses `<database>_test` (`holdfast_test` locally and in CI), created on first use under an advisory lock (the first attempt raced between parallel test processes and failed, fixed before review); holdfastctl's CLI test uses the same DSN. Starting with no test database, with the whole stack running: `make itest` 24 packages ok, 0 failures, twice; the dev database's row counts unchanged (216 intents, 370 booking outbox rows); unit tests and lint pass. This also removes P30's cause | Branch `fix/test-database` |
+| 2026-10-03 10:55 | **Fix for P35 (integration tests get their own PostgreSQL database):** found in task 3.10's live check. `testenv` now uses `<database>_test` (`holdfast_test` locally and in CI), created on first use under an advisory lock (the first attempt raced between parallel test processes and failed, fixed before review); holdfastctl's CLI test uses the same DSN. Starting with no test database, with the whole stack running: `make itest` 24 packages ok, 0 failures, twice; the dev database's row counts unchanged (216 intents, 370 booking outbox rows); unit tests and lint pass. This also removes P30's cause | PR #84 (merged by the assistant at 11:00 after all 9 checks passed), `7d7101d` |
+| 2026-10-03 11:12 | **Task 3.10 (mockpsp) built and verified:**
+- `cmd/mockpsp` on the `internal/payment/psp` contract:
+  - idempotent orders and full refunds, with `GET /v1/settlements` and a matching client method for the Phase 5 reconciler;
+  - a hosted checkout page (JSON for load tests);
+  - webhooks signed per attempt and retried with backoff under the same event ID;
+  - an admin fault API behind `ADMIN_TOKEN` (duplicate, delay, loss, failure, held-back answers, outage), drawn from a seeded source.
+- Compose runs it, and booking-svc now calls payment-svc.
+- P34 fixed: migration `payment/00003` (`polled_at`), and the poller rotates.
+- Tests:
+  - 16 mockpsp unit tests, 5 runs each under the race detector;
+  - 3 new payment integration tests: payment-svc with an in-process mockpsp under the duplicate fault, a lost webhook recovered by polling, and the rotation;
+  - payment packages 72 of 72 over 3 runs.
+- Gates: gofmt, test, lint (after fixing a gosec open-redirect finding and a doc comment), `make gen` stable, up, itest with the stack running (25 packages ok), E1 PASS.
+- Live through the edge:
+  - a booking returns `checkoutUrl`, 3:00 before the hold's protection ends;
+  - the checkout page serves the amount;
+  - paying captures the intent, books D `psp_receivable` / C `unearned_revenue:<event>` for ₹2,500 and publishes `payment.captured.v1`;
+  - one trace spans booking, inventory and payment, including the provider call;
+  - with `duplicateRate` 1, the second webhook was counted as a duplicate and booked once;
+  - Prometheus scrapes mockpsp;
+  - the poller went from 20 to all 50 open intents in 90 s (before the fix, 20 forever). | Branch `feat/p3-mockpsp`, issue #28 |
 
 ## 3. What is complete, and what each piece contributes
 
@@ -210,10 +231,10 @@ Every problem met while bringing Drop 1 up and running the soak on 2026-10-01, i
 
 | Group | Recorded | Resolved | Open |
 |---|---|---|---|
-| P: defects in the repository | 35 | 30 | 5 |
+| P: defects in the repository | 35 | 31 | 4 |
 | E: machine and network | 18 | 17 | 1 |
-| D: diagnosis and process | 33 | 33 | 0 |
-| **Total** | **86** | **80** | **6** |
+| D: diagnosis and process | 35 | 35 | 0 |
+| **Total** | **88** | **83** | **5** |
 
 CI took **three runs** to go green:
 
@@ -260,7 +281,7 @@ CI took **three runs** to go green:
 | P31 | `scripts/check-migrations.sh` compared every file under `db/migrations` against `main`, so registering the new `payment` schema in `db/migrations/embed.go` was reported as editing an applied migration and `make lint` failed | No new service schema could ever be added without failing the check | The check's path covered the Go registry as well as the SQL | It now compares `db/migrations/*/*.sql` only; verified that it still refuses an edited migration (exit 1) and accepts the registry change | ✅ Task 3.8 |
 | P32 | booking-svc set the payment deadline to the end of the hold's PAYING protection (task 3.6), but design doc 6.1 has a 7-minute deadline inside a 10-minute window: 3 minutes of grace | A capture reported just after the deadline would find the hold already released: a late confirm (re-taking units, possibly refused) instead of a normal one, more often than the design intends | Task 3.6 used the protected-until time directly, leaving the grace for later | `PAYMENT_GRACE` (default 3m, validated): the deadline is the protection minus the grace, and the payment intent expires with it; an integration test pins both | ✅ Task 3.9 |
 | P33 | `TestPublishAndConsumeInOrderPerKey` failed once in task 3.9's full `make itest`: publishing to its freshly created topic got `UNKNOWN_TOPIC_OR_PARTITION` | One failed integration run in 6 (it passed 5 of 5 rerun) | The test helper publishes as soon as `CreateTopics` returns, before the broker's metadata lists the new partitions' leaders | The helper now waits until the broker's metadata gives every partition a leader (up to 10 s); 5 of 5 runs pass with the stack up | ✅ PR after task 3.9 |
-| P34 | payment-svc's status poller claims the oldest open intents first and changes nothing when a poll fails, so the same batch is claimed every pass. Found in task 3.10's live check: 20 `get_order` calls rejected per pass, all for the same intents (left by tests, unknown to mockpsp) | A few intents whose polls keep failing (orders unknown after a mockpsp restart, or a provider error on specific orders) starve every newer intent: a lost webhook is never recovered by polling | The claim orders by `created_at` only, and nothing records a poll | In task 3.10: migration `payment/00003` adds `polled_at`; the claim takes the least recently polled first (never polled first), and every poll, failed or not, stamps it | ⏳ Open (task 3.10) |
+| P34 | payment-svc's status poller claims the oldest open intents first and changes nothing when a poll fails, so the same batch is claimed every pass. Found in task 3.10's live check: 20 `get_order` calls rejected per pass, all for the same intents (left by tests, unknown to mockpsp) | A few intents whose polls keep failing (orders unknown after a mockpsp restart, or a provider error on specific orders) starve every newer intent: a lost webhook is never recovered by polling | The claim orders by `created_at` only, and nothing records a poll | In task 3.10: migration `payment/00003` adds `polled_at`; the claim takes the least recently polled first (never polled first), and every poll, failed or not, stamps it | ✅ Task 3.10 (live: the poller reached all 50 open intents of the dev database in 90 s, where it had stuck at 20) |
 | P35 | Integration tests and the `make up` stack shared one PostgreSQL database. The running payment-svc's poller polled the tests' intents (found in task 3.10's live check), the running outbox relays published the tests' events (P30), and a test of the poller could race the running one | Noise in development metrics and topics; a possible flaky poller test | One database for tests and the stack (the PostgreSQL side of P7) | `testenv` uses `<database>_test`, created on first use under an advisory lock; holdfastctl's test uses the same DSN | ✅ PR after task 3.9 |
 
 ### 6.3 Machine and network
@@ -323,6 +344,8 @@ CI took **three runs** to go green:
 | D31 | The relay's first failure test stored "not json at all" in the outbox's `jsonb` headers to exercise the malformed-header path; PostgreSQL refuses invalid JSON, so the test failed at its own insert | One failed test run | The test now stores valid JSON of the wrong shape (`[1, 2]`), the case that can actually occur | ✅ |
 | D32 | The payment schema's first test run used fixed PSP order IDs (`order_1`, `order_2`), which are unique across the whole table; the shared development database kept them from run 1, so runs 2 and 3 failed (the same mistake as D29) | Two failed test runs | Each run uses fresh order IDs; 5 runs pass. Lesson recorded: tests against the shared database must create unique keys and clean up what other tests could trip on | ✅ |
 | D33 | The same mistake a third time (after D29 and D32): task 3.9's webhook tests used fixed PSP payment IDs (`pay_1` to `pay_6`), which are unique across `payment_intents`. The first run passed and left them captured, so the next run failed 5 tests with a duplicate key | One failed test run; also, a run without the test environment variables had skipped the tests, so it looked green until a `-v` run counted the skips | Every test now generates its payment IDs; 2 runs pass 21 of 21 with 0 skipped. Verification now counts `--- PASS`, `--- FAIL` and `--- SKIP` lines rather than trusting `ok` | ✅ |
+| D34 | The first version of the P35 fix created the test database with a plain check-then-create; test packages run as parallel processes, several raced to `CREATE DATABASE`, and the losers failed with `23505` (not the `42P04` the code expected), failing 44 tests in the first run | One failed `make itest` before the PR | Creation now runs under a PostgreSQL advisory lock; two clean runs (from no database, then with it) before the PR | ✅ |
+| D35 | The task 3.10 live-check script selected `amount_paise` from a join of the ledger and the intents, which both have that column, so its first run printed an error instead of the ledger rows | The ledger was not shown in the first live check (the intent, outbox and duplicate checks were) | Qualified the columns; the rerun shows D `psp_receivable` and C `unearned_revenue:<event>`, ₹2,500 each | ✅ |
 
 ### 6.5 Owner setup actions
 
@@ -400,7 +423,7 @@ Goal: every paid booking ends confirmed or refunded, the effect happens once eve
 | 3.7 Outbox relay | [#25](https://github.com/Sanjay-Mx21/holdfast/issues/25) | ✅ 2026-10-03 (PR #80): leader-elected relay in commit order, trace continued, lag metrics; consumer lag in the Kafka helper |
 | 3.8 Payment schema | [#26](https://github.com/Sanjay-Mx21/holdfast/issues/26) | ✅ 2026-10-03 (PR #81): `payment/00001` (intents with a state-machine trigger, PSP orders, webhooks, a balanced double-entry ledger, outbox), sqlc queries |
 | 3.9 payment-svc | [#27](https://github.com/Sanjay-Mx21/holdfast/issues/27) | ✅ 2026-10-03 (PR #82): intents over gRPC, PSP client with retries and a breaker, verified and deduplicated webhooks with ledger and events, status polling; booking deadline grace (P32) |
-| 3.10 mockpsp | [#28](https://github.com/Sanjay-Mx21/holdfast/issues/28) | ⏳ |
+| 3.10 mockpsp | [#28](https://github.com/Sanjay-Mx21/holdfast/issues/28) | ✅ 2026-10-03: provider API with settlements, checkout page, signed and retried webhooks, seeded fault injection; booking-svc now calls payment-svc in Compose; poller rotation (P34) |
 | 3.11 Confirmation and compensation | [#29](https://github.com/Sanjay-Mx21/holdfast/issues/29) | ⏳ |
 | 3.12 E1 part B | [#30](https://github.com/Sanjay-Mx21/holdfast/issues/30) | ⏳ |
 | 3.13 Tests | [#31](https://github.com/Sanjay-Mx21/holdfast/issues/31) | ⏳ |

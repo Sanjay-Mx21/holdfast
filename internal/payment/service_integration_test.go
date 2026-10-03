@@ -414,8 +414,13 @@ func TestPollerAppliesWhatTheProviderKnows(t *testing.T) {
 	if f.balance(t, in.ID, "psp_receivable") != 2000 {
 		t.Fatal("the late webhook booked the capture twice")
 	}
-	// Expiry learned by polling.
+	// Expiry learned by polling. The intent was just polled, so the next pass
+	// takes never-polled intents first (P34); put it back at the head.
 	f.psp.set(quietOrder, func(o *psp.Order) { o.Status = psp.OrderExpired })
+	if _, err := f.pool.Exec(ctx, `UPDATE payment.payment_intents
+		SET created_at = (SELECT min(created_at) FROM payment.payment_intents) - interval '1 day', polled_at = NULL WHERE id = $1`, quiet.ID); err != nil {
+		t.Fatal(err)
+	}
 	if err := p.Pass(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -474,5 +479,44 @@ func TestGRPCContract(t *testing.T) {
 	// Only booking-svc may create intents.
 	if _, _, err := dial(queueKey, "queue").CreateIntent(ctx, uuid.New(), eventID, 100, time.Now()); grpcx.Code(err) != codes.PermissionDenied {
 		t.Fatalf("queue-svc's call: %v, want PERMISSION_DENIED", err)
+	}
+}
+
+// TestPollerRotates pins P34: intents whose polls keep failing must not be
+// claimed again and again ahead of the rest.
+func TestPollerRotates(t *testing.T) {
+	f := newFixture(t)
+	_, a, _ := f.intent(t, 100)
+	_, b, _ := f.intent(t, 100)
+	// The two oldest open intents, a before b.
+	for _, id := range []uuid.UUID{b.ID, a.ID} {
+		if _, err := f.pool.Exec(ctx, `UPDATE payment.payment_intents
+			SET created_at = (SELECT min(created_at) FROM payment.payment_intents) - interval '1 day', polled_at = NULL WHERE id = $1`, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f.psp.setDown(true) // every poll fails
+	p := NewPoller(f.svc, time.Second, time.Minute, 1, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	polled := func(id uuid.UUID) bool {
+		in, err := f.svc.q.GetIntent(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return in.PolledAt.Valid
+	}
+	if err := p.Pass(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if !polled(a.ID) || polled(b.ID) {
+		t.Fatalf("first pass: a polled %v, b polled %v; want a only", polled(a.ID), polled(b.ID))
+	}
+	if err := p.Pass(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if !polled(b.ID) {
+		t.Fatal("second pass polled a again instead of b")
+	}
+	if s := f.status(t, a.ID); s != "CREATED" {
+		t.Fatalf("a failed poll moved the intent to %s", s)
 	}
 }

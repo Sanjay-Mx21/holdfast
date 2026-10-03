@@ -17,7 +17,7 @@ const attachOrder = `-- name: AttachOrder :one
 UPDATE payment.payment_intents
 SET psp_order_id = $1, checkout_url = $2, updated_at = now()
 WHERE id = $3 AND (psp_order_id IS NULL OR psp_order_id = $1)
-RETURNING id, booking_id, amount_paise, currency, status, psp_order_id, psp_payment_id, checkout_url, expires_at, version, created_at, updated_at, event_id
+RETURNING id, booking_id, amount_paise, currency, status, psp_order_id, psp_payment_id, checkout_url, expires_at, version, created_at, updated_at, event_id, polled_at
 `
 
 type AttachOrderParams struct {
@@ -45,6 +45,7 @@ func (q *Queries) AttachOrder(ctx context.Context, arg AttachOrderParams) (Inten
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.EventID,
+		&i.PolledAt,
 	)
 	return i, err
 }
@@ -53,7 +54,7 @@ const captureIntent = `-- name: CaptureIntent :one
 UPDATE payment.payment_intents
 SET status = 'CAPTURED', psp_payment_id = $1, version = version + 1, updated_at = now()
 WHERE id = $2 AND status IN ('CREATED', 'FAILED', 'EXPIRED')
-RETURNING id, booking_id, amount_paise, currency, status, psp_order_id, psp_payment_id, checkout_url, expires_at, version, created_at, updated_at, event_id
+RETURNING id, booking_id, amount_paise, currency, status, psp_order_id, psp_payment_id, checkout_url, expires_at, version, created_at, updated_at, event_id, polled_at
 `
 
 type CaptureIntentParams struct {
@@ -80,14 +81,15 @@ func (q *Queries) CaptureIntent(ctx context.Context, arg CaptureIntentParams) (I
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.EventID,
+		&i.PolledAt,
 	)
 	return i, err
 }
 
 const claimOpenIntents = `-- name: ClaimOpenIntents :many
-SELECT id, booking_id, amount_paise, currency, status, psp_order_id, psp_payment_id, checkout_url, expires_at, version, created_at, updated_at, event_id FROM payment.payment_intents
+SELECT id, booking_id, amount_paise, currency, status, psp_order_id, psp_payment_id, checkout_url, expires_at, version, created_at, updated_at, event_id, polled_at FROM payment.payment_intents
 WHERE status = 'CREATED' AND created_at < $1 AND psp_order_id IS NOT NULL
-ORDER BY created_at
+ORDER BY polled_at NULLS FIRST, created_at
 LIMIT $2
 FOR UPDATE SKIP LOCKED
 `
@@ -98,7 +100,8 @@ type ClaimOpenIntentsParams struct {
 }
 
 // Status polling: intents still CREATED after a while, possibly because a
-// webhook was lost. Locked so concurrent pollers take disjoint batches.
+// webhook was lost; the least recently polled first, never polled before
+// all (P34). Locked so concurrent pollers take disjoint batches.
 func (q *Queries) ClaimOpenIntents(ctx context.Context, arg ClaimOpenIntentsParams) ([]Intent, error) {
 	rows, err := q.db.Query(ctx, claimOpenIntents, arg.CreatedBefore, arg.Batch)
 	if err != nil {
@@ -122,6 +125,7 @@ func (q *Queries) ClaimOpenIntents(ctx context.Context, arg ClaimOpenIntentsPara
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.EventID,
+			&i.PolledAt,
 		); err != nil {
 			return nil, err
 		}
@@ -137,7 +141,7 @@ const createIntent = `-- name: CreateIntent :one
 INSERT INTO payment.payment_intents (id, booking_id, event_id, amount_paise, expires_at)
 VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (booking_id) DO NOTHING
-RETURNING id, booking_id, amount_paise, currency, status, psp_order_id, psp_payment_id, checkout_url, expires_at, version, created_at, updated_at, event_id
+RETURNING id, booking_id, amount_paise, currency, status, psp_order_id, psp_payment_id, checkout_url, expires_at, version, created_at, updated_at, event_id, polled_at
 `
 
 type CreateIntentParams struct {
@@ -173,12 +177,13 @@ func (q *Queries) CreateIntent(ctx context.Context, arg CreateIntentParams) (Int
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.EventID,
+		&i.PolledAt,
 	)
 	return i, err
 }
 
 const getIntent = `-- name: GetIntent :one
-SELECT id, booking_id, amount_paise, currency, status, psp_order_id, psp_payment_id, checkout_url, expires_at, version, created_at, updated_at, event_id FROM payment.payment_intents WHERE id = $1
+SELECT id, booking_id, amount_paise, currency, status, psp_order_id, psp_payment_id, checkout_url, expires_at, version, created_at, updated_at, event_id, polled_at FROM payment.payment_intents WHERE id = $1
 `
 
 func (q *Queries) GetIntent(ctx context.Context, id uuid.UUID) (Intent, error) {
@@ -198,12 +203,13 @@ func (q *Queries) GetIntent(ctx context.Context, id uuid.UUID) (Intent, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.EventID,
+		&i.PolledAt,
 	)
 	return i, err
 }
 
 const getIntentByBooking = `-- name: GetIntentByBooking :one
-SELECT id, booking_id, amount_paise, currency, status, psp_order_id, psp_payment_id, checkout_url, expires_at, version, created_at, updated_at, event_id FROM payment.payment_intents WHERE booking_id = $1
+SELECT id, booking_id, amount_paise, currency, status, psp_order_id, psp_payment_id, checkout_url, expires_at, version, created_at, updated_at, event_id, polled_at FROM payment.payment_intents WHERE booking_id = $1
 `
 
 func (q *Queries) GetIntentByBooking(ctx context.Context, bookingID uuid.UUID) (Intent, error) {
@@ -223,12 +229,13 @@ func (q *Queries) GetIntentByBooking(ctx context.Context, bookingID uuid.UUID) (
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.EventID,
+		&i.PolledAt,
 	)
 	return i, err
 }
 
 const getIntentByOrder = `-- name: GetIntentByOrder :one
-SELECT id, booking_id, amount_paise, currency, status, psp_order_id, psp_payment_id, checkout_url, expires_at, version, created_at, updated_at, event_id FROM payment.payment_intents WHERE psp_order_id = $1
+SELECT id, booking_id, amount_paise, currency, status, psp_order_id, psp_payment_id, checkout_url, expires_at, version, created_at, updated_at, event_id, polled_at FROM payment.payment_intents WHERE psp_order_id = $1
 `
 
 func (q *Queries) GetIntentByOrder(ctx context.Context, pspOrderID pgtype.Text) (Intent, error) {
@@ -248,6 +255,7 @@ func (q *Queries) GetIntentByOrder(ctx context.Context, pspOrderID pgtype.Text) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.EventID,
+		&i.PolledAt,
 	)
 	return i, err
 }
@@ -277,11 +285,21 @@ func (q *Queries) InsertPSPOrder(ctx context.Context, arg InsertPSPOrderParams) 
 	return err
 }
 
+const markPolled = `-- name: MarkPolled :exec
+UPDATE payment.payment_intents SET polled_at = now() WHERE id = $1
+`
+
+// Stamps a poll, whatever its outcome, so the next pass takes others first.
+func (q *Queries) MarkPolled(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, markPolled, id)
+	return err
+}
+
 const transitionIntent = `-- name: TransitionIntent :one
 UPDATE payment.payment_intents
 SET status = $1, version = version + 1, updated_at = now()
 WHERE id = $2 AND status = $3
-RETURNING id, booking_id, amount_paise, currency, status, psp_order_id, psp_payment_id, checkout_url, expires_at, version, created_at, updated_at, event_id
+RETURNING id, booking_id, amount_paise, currency, status, psp_order_id, psp_payment_id, checkout_url, expires_at, version, created_at, updated_at, event_id, polled_at
 `
 
 type TransitionIntentParams struct {
@@ -308,6 +326,7 @@ func (q *Queries) TransitionIntent(ctx context.Context, arg TransitionIntentPara
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.EventID,
+		&i.PolledAt,
 	)
 	return i, err
 }
