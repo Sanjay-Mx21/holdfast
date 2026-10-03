@@ -6,14 +6,16 @@ Code: `internal/booking`. Schema: `booking` (migrations in
 `db/migrations/booking`, queries in `internal/booking/queries`).
 
 **Status:** Phase 3 in progress. Built: the schema and its state machine
-(task 3.5), the booking API and the deadline job (task 3.6), and the outbox
-relay (task 3.7). Payment intents arrive with payment-svc (task 3.9), and
-confirmation and compensation with task 3.11.
+(task 3.5), the booking API and the deadline job (task 3.6), the outbox
+relay (task 3.7), and payment intents from payment-svc (task 3.9; switched on
+in Compose with mockpsp, task 3.10). Confirmation and compensation arrive
+with task 3.11.
 
 ## Responsibilities
 
 - Create a booking for a hold, once, however often the request is retried.
 - Protect the hold for the payment window (inventory-svc, over gRPC).
+- Get the booking's payment intent and checkout URL (payment-svc, over gRPC).
 - Record every state change and its event in one transaction (the outbox).
 - Cancel bookings whose payment deadline passed.
 - Show buyers their own bookings, and nobody else's.
@@ -35,14 +37,20 @@ Content-Type: application/json
 HTTP/1.1 201 Created
 
 {"bookingId":"01a0...","eventId":"0196...","holdId":"1f0e...","quantity":2,
- "amountPaise":500000,"status":"PENDING_PAYMENT","paymentDeadline":"2026-10-05T12:10:00Z"}
+ "amountPaise":500000,"status":"PENDING_PAYMENT","paymentDeadline":"2026-10-05T12:07:00Z",
+ "intentId":"01a1...","checkoutUrl":"https://psp.example/pay/order_..."}
 ```
 
 - The hold must be the buyer's own, and still HELD or PAYING. booking-svc
   calls inventory-svc's `GetHold`, then `MarkPaying`, which protects the hold
-  for the payment window; the booking's `paymentDeadline` is the end of that
-  window, and `amountPaise` is the quantity times the event's price.
-- `checkoutUrl` and `intentId` appear once payment-svc exists (task 3.9).
+  for the payment window (10 minutes). The booking's `paymentDeadline` is
+  the end of that window minus `PAYMENT_GRACE` (3 minutes; design doc 6.1),
+  so a capture reported a little after the deadline still finds its units.
+  `amountPaise` is the quantity times the event's price.
+- booking-svc then asks payment-svc for the booking's intent (`CreateIntent`,
+  idempotent per booking; the intent expires at the payment deadline) and
+  returns its `intentId` and `checkoutUrl`. Without `PAYMENT_GRPC_ADDR` the
+  booking is created without them.
 
 **Idempotency** (design doc 9.5). The `Idempotency-Key` is required and
 belongs to the buyer.
@@ -53,7 +61,8 @@ belongs to the buyer.
 - The same key with a different request (another event or hold) is refused
   with 422 `IDEMPOTENCY_KEY_REUSED`.
 - If an attempt fails part-way (inventory unreachable: 503 with
-  `Retry-After`), the key stays in progress and a retry with the same key
+  `Retry-After`), or payment-svc or its provider is (also 503), the key
+  stays in progress and a retry with the same key
   **resumes**: every step is idempotent (`GetHold`, `MarkPaying`, one booking
   per hold, the intent keyed by the booking). Concurrent identical requests
   produce one booking and one event, and all get the same answer.
@@ -63,8 +72,8 @@ belongs to the buyer.
 Errors: 400 `INVALID_REQUEST`, `INVALID_IDEMPOTENCY_KEY` or
 `IDEMPOTENCY_KEY_REQUIRED`; 404 `HOLD_NOT_FOUND` (also for someone else's
 hold) or `EVENT_NOT_FOUND`; 409 `HOLD_NOT_AVAILABLE` (released, sold or
-expired); 422 `IDEMPOTENCY_KEY_REUSED`; 503 when inventory-svc is
-unreachable (retry with the same key).
+expired); 422 `IDEMPOTENCY_KEY_REUSED`; 503 when inventory-svc, payment-svc
+or the payment provider is unreachable (retry with the same key).
 
 ### `GET /v1/bookings/{bookingID}`
 
@@ -126,8 +135,11 @@ defined in `internal/platform/config` and `internal/platform/otel`.
 |---|---|---|
 | `DEV_IDENTITY` | `false` | Trust `X-Dev-User-Id` as the buyer (refused in production) |
 | `INVENTORY_GRPC_ADDR` | `inventory:7070` | inventory-svc's internal gRPC API |
-| `SERVICE_PRIVATE_KEY_FILE` | required | booking-svc's Ed25519 key for service tokens; inventory-svc trusts the public half |
+| `SERVICE_PRIVATE_KEY_FILE` | required | booking-svc's Ed25519 key for service tokens; inventory-svc and payment-svc trust the public half |
 | `INVENTORY_TIMEOUT` | `800ms` | Deadline of each inventory call, retries included |
+| `PAYMENT_GRPC_ADDR` | empty | payment-svc's internal gRPC API; empty: no payment intents (Compose sets it from task 3.10) |
+| `PAYMENT_TIMEOUT` | `8s` | Deadline of each payment-svc call, which includes the provider's |
+| `PAYMENT_GRACE` | `3m` | How long the hold's protection outlives the payment deadline; keep it below inventory-svc's `PAYMENT_WINDOW` |
 | `KAFKA_BROKERS` | `localhost:29092` | Kafka, for the outbox relay (Compose: `kafka:9092`) |
 | `OUTBOX_BATCH` | `500` | Events published per relay transaction |
 | `OUTBOX_INTERVAL` | `200ms` | Relay pause after a pass that found less than a full batch |

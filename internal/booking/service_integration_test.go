@@ -112,7 +112,7 @@ func newFixture(t *testing.T) *fixture {
 	}
 	inv := &fakeInventory{holds: map[string]inventory.Hold{}}
 	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return &fixture{pool: pool, inv: inv, svc: NewService(pool, inv, nil, NewMetrics(prometheus.NewRegistry()), quiet), event: id.String()}
+	return &fixture{pool: pool, inv: inv, svc: NewService(pool, inv, nil, Config{}, NewMetrics(prometheus.NewRegistry()), quiet), event: id.String()}
 }
 
 func (f *fixture) create(user, hold, key string) (Result, error) {
@@ -403,5 +403,63 @@ func TestHTTPAPI(t *testing.T) {
 	rec := do("POST", "/v1/bookings", "http-key-00002", fmt.Sprintf(`{"eventId":%q,"holdId":%q}`, f.event, other))
 	if rec.Code != http.StatusServiceUnavailable || rec.Header().Get("Retry-After") == "" {
 		t.Fatalf("inventory unavailable: %d %v %s", rec.Code, rec.Header(), rec.Body)
+	}
+}
+
+// fakeIntents is payment-svc as booking-svc sees it: one intent per booking,
+// outages on demand.
+type fakeIntents struct {
+	mu          sync.Mutex
+	byBooking   map[uuid.UUID]uuid.UUID
+	expires     map[uuid.UUID]time.Time
+	unavailable int
+}
+
+func (f *fakeIntents) CreateIntent(_ context.Context, bookingID, _ uuid.UUID, _ int64, expiresAt time.Time) (uuid.UUID, string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.unavailable > 0 {
+		f.unavailable--
+		return uuid.Nil, "", status.Error(codes.Unavailable, "payment provider unavailable")
+	}
+	id, ok := f.byBooking[bookingID]
+	if !ok {
+		id = uuid.New()
+		f.byBooking[bookingID] = id
+	}
+	f.expires[bookingID] = expiresAt
+	return id, "https://psp.test/pay/" + id.String(), nil
+}
+
+func TestBookingCarriesItsPaymentIntent(t *testing.T) {
+	f := newFixture(t)
+	intents := &fakeIntents{byBooking: map[uuid.UUID]uuid.UUID{}, expires: map[uuid.UUID]time.Time{}, unavailable: 1}
+	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
+	f.svc = NewService(f.pool, f.inv, intents, Config{Grace: 3 * time.Minute}, NewMetrics(prometheus.NewRegistry()), quiet)
+	user := uuid.NewString()
+	hold := f.inv.hold(f.event, user, 1, inventory.StateHeld)
+
+	// payment-svc down: the booking exists, the key stays in progress.
+	if _, err := f.create(user, hold, "intent-key-0001"); err == nil {
+		t.Fatal("no error while payment-svc was unavailable")
+	}
+	res, err := f.create(user, hold, "intent-key-0001")
+	if err != nil || res.Code != 201 {
+		t.Fatalf("retry: %+v %v", res, err)
+	}
+	v := decode(t, res)
+	id := uuid.MustParse(v.BookingID)
+	intent := intents.byBooking[id]
+	if v.IntentID != intent.String() || v.CheckoutURL != "https://psp.test/pay/"+intent.String() {
+		t.Fatalf("booking %+v; want intent %s and its checkout URL", v, intent)
+	}
+	// The deadline leaves the grace inside the hold's payment window, and the
+	// intent expires with the deadline.
+	protected := f.inv.holds[hold].ExpiresAt
+	if !v.PaymentDeadline.Equal(protected.Add(-3*time.Minute)) || !intents.expires[id].Equal(v.PaymentDeadline) {
+		t.Fatalf("deadline %s (intent expires %s); want the hold's %s minus 3m", v.PaymentDeadline, intents.expires[id], protected)
+	}
+	if n := f.count(t, `SELECT count(*) FROM booking.bookings WHERE id = $1 AND intent_id = $2`, id, intent); n != 1 {
+		t.Fatal("the intent is not recorded on the booking")
 	}
 }

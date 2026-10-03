@@ -72,8 +72,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 func writeTransient(w http.ResponseWriter, r *http.Request, err error) {
 	switch grpcx.Code(err) {
 	case codes.Unavailable, codes.DeadlineExceeded:
-		logging.FromContext(r.Context()).WarnContext(r.Context(), "booking: inventory unavailable", "err", err)
-		httpx.WriteProblem(w, r, httpx.Unavailable("inventory is unavailable; retry with the same Idempotency-Key", 1))
+		logging.FromContext(r.Context()).WarnContext(r.Context(), "booking: a dependency is unavailable", "err", err)
+		httpx.WriteProblem(w, r, httpx.Unavailable("a dependency (inventory or payments) is unavailable; retry with the same Idempotency-Key", 1))
 		return
 	}
 	logging.FromContext(r.Context()).ErrorContext(r.Context(), "booking: create failed", "err", err)

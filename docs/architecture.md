@@ -33,9 +33,10 @@ IDs match section 2.3 of the design doc.
 | inventory-svc (`cmd/inventory`) | Built; internal gRPC API from task 3.4 | Valkey keys `inv:*` | Valkey; called by booking-svc over gRPC |
 | queue-svc (`cmd/queue`) | Built (Phase 2): provisioning, joining, the T0 transition, positions, admission, the status document, admission tokens and their JWKS | Valkey keys `q:*`, `adm:*`, `rl:*` | Valkey; PostgreSQL for leader election only |
 | NGINX edge (`deploy/nginx`) | Built (Phase 2) | Nothing | queue-svc, inventory-svc |
-| booking-svc (`cmd/booking`) | Phase 3 in progress: the booking API and deadline job built | `booking` schema (with the final guard, `internal/booking/guard`) | PostgreSQL; inventory-svc over gRPC |
+| booking-svc (`cmd/booking`) | Phase 3 in progress: the booking API and deadline job built | `booking` schema (with the final guard, `internal/booking/guard`) | PostgreSQL; inventory-svc and payment-svc over gRPC |
+| payment-svc (`cmd/payment`) | Phase 3 in progress (task 3.9): intents, provider orders, webhooks, the ledger, status polling | `payment` schema | PostgreSQL; the payment provider over HTTPS; called by booking-svc over gRPC; receives the provider's webhooks |
 | holdfastctl (`cmd/holdfastctl`) | Built | Nothing (operator tool) | PostgreSQL, Valkey, Kafka (topic creation) |
-| booking, payment, auth | Planned | See design doc | |
+| auth | Planned | See design doc | |
 
 ## 4. Runtime topology
 
@@ -46,14 +47,14 @@ Each service listens on two ports:
   `/buildz`, `/debug/pprof/*` and operator APIs. Internal network only.
 
 A service that other services call also serves **gRPC** (`GRPC_ADDR`;
-inventory-svc on `:7070`), internal network only, through
+inventory-svc and payment-svc on `:7070`), internal network only, through
 `internal/platform/grpcx`: service-token authentication with a per-method
 allowlist, required deadlines, tracing and metrics on the server; tokens, an
 800 ms default deadline and bounded retries of `UNAVAILABLE` on the client.
 
 Locally, `compose.yaml` runs PostgreSQL 18, Valkey 9.1, a one-shot migration
 job, Kafka 4.3 (KRaft, with a one-shot topic job and Redpanda Console),
-inventory-svc, queue-svc, the NGINX edge, Prometheus, Grafana, the
+inventory-svc, queue-svc, booking-svc, payment-svc, the NGINX edge, Prometheus, Grafana, the
 OpenTelemetry Collector and Jaeger.
 
 **The edge** (`deploy/nginx/nginx.conf`, host port 8088) is the buyers' front
@@ -93,7 +94,15 @@ door, the role a CDN plays in production:
 7. With the hold: `POST /v1/bookings` at booking-svc (idempotent; a retry
    resumes). booking-svc checks the hold and marks it PAYING over gRPC, then
    writes the booking and its `booking.created` event in one transaction.
-   Payment (Phase 3, tasks 3.9 to 3.11) follows.
+   It then gets the booking's payment intent from payment-svc over gRPC,
+   which opens an order at the provider keyed by the intent ID, and answers
+   with the `checkoutUrl`. The deadline is the hold's protection minus a
+   3-minute grace (design doc 6.1).
+8. The buyer pays at the provider. Its webhook (`POST /v1/webhooks/psp` at
+   payment-svc, HMAC-verified, deduplicated by event ID) captures the intent,
+   books it in the ledger and writes `payment.captured.v1`, all in one
+   transaction. Intents with no news after 2 minutes are polled. Confirmation
+   (task 3.11) follows.
 
 ### `POST /v1/events/{eventID}/holds`
 

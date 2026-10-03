@@ -134,6 +134,34 @@ services:
       inventory: { condition: service_started }
     restart: unless-stopped
 
+  # payment-svc: intents over gRPC for booking-svc, the provider's webhooks,
+  # the ledger. booking-svc calls it once mockpsp exists (task 3.10).
+  payment:
+    build:
+      context: .
+      args: { SERVICE: payment }
+    environment:
+      ENVIRONMENT: development
+      LOG_FORMAT: text
+      POSTGRES_DSN: postgres://holdfast:holdfast@postgres:5432/holdfast?sslmode=disable
+      GRPC_TRUSTED_CALLERS: booking=/keys/booking.pub
+      PSP_BASE_URL: http://mockpsp:8080
+      PSP_API_KEY: dev-only-psp-api-key
+      PSP_WEBHOOK_SECRET: dev-only-webhook-secret-change-me-in-any-real-deployment
+      KAFKA_BROKERS: kafka:9092 # the outbox relay publishes payment events
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    ports:
+      - "8084:8080" # public: POST /v1/webhooks/psp
+      - "9094:9090" # admin: metrics, health, pprof (never expose in production)
+      - "7072:7070" # gRPC, for grpcurl while developing
+    volumes:
+      - ./.local/keys:/keys:ro
+    depends_on:
+      postgres: { condition: service_healthy }
+      holdfastctl: { condition: service_completed_successfully }
+      kafka-topics: { condition: service_completed_successfully }
+    restart: unless-stopped
+
   # Traces: services send OTLP to the collector, which forwards to Jaeger.
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.161.0
