@@ -76,3 +76,13 @@ message BookingRefundRequired {
   RefundReason reason = 4;
   google.protobuf.Timestamp required_at = 5;
 }
+
+// BookingRefunded: the refund of a booking that could not be confirmed
+// completed; the saga is over (invariant I3). ce_type booking.refunded.v1.
+message BookingRefunded {
+  string booking_id = 1;
+  string intent_id = 2;
+  int64 amount_paise = 3;
+  string psp_refund_id = 4;
+  google.protobuf.Timestamp refunded_at = 5;
+}

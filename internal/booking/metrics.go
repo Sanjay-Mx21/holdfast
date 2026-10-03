@@ -23,6 +23,10 @@ type Metrics struct {
 	resumed  prometheus.Counter
 	expired  prometheus.Counter
 	runs     *prometheus.CounterVec
+	outcomes *prometheus.CounterVec
+	late     *prometheus.CounterVec
+	saga     *prometheus.CounterVec
+	settled  *prometheus.CounterVec
 }
 
 // NewMetrics registers booking-svc's metrics on reg.
@@ -49,6 +53,34 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 			Name: "holdfast_booking_deadline_runs_total",
 			Help: "Deadline job passes, by result: ok, error.",
 		}, []string{"result"}),
+		outcomes: f.NewCounterVec(prometheus.CounterOpts{
+			Name: "holdfast_booking_saga_outcomes_total",
+			Help: "Bookings moved by the saga, by new status: CONFIRMED, REFUND_REQUIRED, CANCELLED, REFUNDED.",
+		}, []string{"status"}),
+		late: f.NewCounterVec(prometheus.CounterOpts{
+			Name: "holdfast_late_confirm_total",
+			Help: "Captures that arrived after the booking was cancelled, by outcome: confirmed (the guard took the sale) or refund_required.",
+		}, []string{"result"}),
+		saga: f.NewCounterVec(prometheus.CounterOpts{
+			Name: "holdfast_booking_saga_skipped_total",
+			Help: "Payment events the saga applied no change for: duplicate, unknown_booking, already_decided.",
+		}, []string{"reason"}),
+		settled: f.NewCounterVec(prometheus.CounterOpts{
+			Name: "holdfast_booking_inventory_settled_total",
+			Help: "Inventory calls after a decision: confirm_confirmed, confirm_replay, confirm_late, released, release_noop.",
+		}, []string{"result"}),
+	}
+}
+
+// decided counts a saga decision; late marks a capture after cancellation.
+func (m *Metrics) decided(status string, late bool) {
+	m.outcomes.WithLabelValues(status).Inc()
+	if late {
+		result := "confirmed"
+		if status == StatusRefundRequired {
+			result = "refund_required"
+		}
+		m.late.WithLabelValues(result).Inc()
 	}
 }
 

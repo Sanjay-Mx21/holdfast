@@ -18,8 +18,11 @@ import (
 
 // Event types (the ce_type header), from proto/holdfast/events/v1/booking.proto.
 const (
-	eventCreated   = "booking.created.v1"
-	eventCancelled = "booking.cancelled.v1"
+	eventCreated        = "booking.created.v1"
+	eventConfirmed      = "booking.confirmed.v1"
+	eventCancelled      = "booking.cancelled.v1"
+	eventRefundRequired = "booking.refund_required.v1"
+	eventRefunded       = "booking.refunded.v1"
 )
 
 // writeEvent adds an event to the outbox, inside the caller's transaction. It

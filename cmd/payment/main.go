@@ -1,8 +1,8 @@
 // Command payment runs payment-svc: payment intents for bookings
 // (holdfast.payment.v1 over gRPC, for booking-svc), the payment provider's
 // orders and webhooks (POST /v1/webhooks/psp), the double-entry ledger,
-// status polling for intents whose webhook never came, and the payment
-// outbox relay. Its admin port serves /metrics, health and pprof.
+// status polling for intents whose webhook never came, refunds started by
+// booking-svc's events, and the payment outbox relay. Its admin port serves /metrics, health and pprof.
 package main
 
 import (
@@ -139,6 +139,14 @@ func run(ctx context.Context) error {
 		return err
 	}
 
+	// Refunds: booking-svc's refund_required events start them.
+	refunds, err := kafka.NewConsumer(cfg.Kafka, serviceName, kafka.ConsumerConfig{
+		Group: payment.RefundConsumer, Topics: []string{kafka.TopicBooking},
+	}, svc.HandleBookingEvent, kafka.NewMetrics(reg), log)
+	if err != nil {
+		return err
+	}
+
 	var callers map[string]ed25519.PublicKey
 	if len(cfg.GRPCTrustedCallers) > 0 {
 		if callers, err = authn.LoadServiceKeys(cfg.GRPCTrustedCallers); err != nil {
@@ -173,5 +181,6 @@ func run(ctx context.Context) error {
 		httpx.NewServer("admin", cfg.HTTP.AdminAddr, admin, cfg.HTTP, log, httpx.WithWriteTimeout(90*time.Second)),
 		payment.NewPoller(svc, cfg.PollInterval, cfg.PollAfter, cfg.PollBatch, log),
 		relay,
+		refunds,
 	)
 }

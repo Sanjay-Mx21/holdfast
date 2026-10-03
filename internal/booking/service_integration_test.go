@@ -43,6 +43,9 @@ type fakeInventory struct {
 	holds       map[string]inventory.Hold
 	unavailable int // fail this many calls with UNAVAILABLE first
 	markCalls   int
+	// The saga's calls (saga_integration_test.go).
+	confirms, releases int
+	confirmFails       int // fail this many Confirm calls with UNAVAILABLE first
 }
 
 func (f *fakeInventory) hold(event, user string, qty int, state inventory.HoldState) string {

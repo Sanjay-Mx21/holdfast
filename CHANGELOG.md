@@ -85,6 +85,18 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
     answers and outages, drawn from a seeded source.
   - Compose runs it, and booking-svc now calls payment-svc, so a booking
     returns a working `checkoutUrl`. Service doc `docs/services/mockpsp.md`.
+- **The booking saga** (task 3.11):
+  - booking-svc consumes `holdfast.payment.v1` (group `booking-saga`). In one
+    transaction per message: a capture runs the final guard and confirms
+    the booking, or marks it `REFUND_REQUIRED`; a failed or expired payment
+    cancels it; a completed refund closes it as `REFUNDED`.
+  - Late captures are honoured when the guard allows and counted in
+    `holdfast_late_confirm_total`.
+  - After each commit the hold is made SOLD or released over gRPC,
+    idempotently, on every delivery.
+  - payment-svc consumes `booking.refund_required.v1` (group
+    `payment-refunds`) and refunds through the provider.
+  - New event `booking.refunded.v1`.
 
 ### Fixed
 

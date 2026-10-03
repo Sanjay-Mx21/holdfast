@@ -150,6 +150,32 @@ func (q *Queries) GetBookingByHold(ctx context.Context, holdID uuid.UUID) (Booki
 	return i, err
 }
 
+const getBookingForUpdate = `-- name: GetBookingForUpdate :one
+SELECT id, event_id, user_id, hold_id, qty, amount_paise, status, payment_deadline, intent_id, version, created_at, updated_at FROM booking.bookings WHERE id = $1 FOR UPDATE
+`
+
+// The saga locks the booking while it decides, so two deliveries of events
+// for one booking cannot decide at once.
+func (q *Queries) GetBookingForUpdate(ctx context.Context, id uuid.UUID) (Booking, error) {
+	row := q.db.QueryRow(ctx, getBookingForUpdate, id)
+	var i Booking
+	err := row.Scan(
+		&i.ID,
+		&i.EventID,
+		&i.UserID,
+		&i.HoldID,
+		&i.Qty,
+		&i.AmountPaise,
+		&i.Status,
+		&i.PaymentDeadline,
+		&i.IntentID,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getBookingForUser = `-- name: GetBookingForUser :one
 SELECT id, event_id, user_id, hold_id, qty, amount_paise, status, payment_deadline, intent_id, version, created_at, updated_at FROM booking.bookings WHERE id = $1 AND user_id = $2
 `
@@ -179,6 +205,17 @@ func (q *Queries) GetBookingForUser(ctx context.Context, arg GetBookingForUserPa
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getPerUserLimit = `-- name: GetPerUserLimit :one
+SELECT per_user_limit FROM booking.events WHERE id = $1
+`
+
+func (q *Queries) GetPerUserLimit(ctx context.Context, id uuid.UUID) (int16, error) {
+	row := q.db.QueryRow(ctx, getPerUserLimit, id)
+	var per_user_limit int16
+	err := row.Scan(&per_user_limit)
+	return per_user_limit, err
 }
 
 const setBookingIntent = `-- name: SetBookingIntent :one
