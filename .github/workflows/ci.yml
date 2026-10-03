@@ -51,7 +51,7 @@ jobs:
         run: |
           buf generate
           sqlc generate
-          git status --porcelain -- internal/gen internal/booking/bookingdb internal/payment/paymentdb | tee /dev/stderr | (! grep -q .) || { echo "run make gen and commit the result"; exit 1; }
+          git status --porcelain -- internal/gen internal/auth/authdb internal/booking/bookingdb internal/payment/paymentdb | tee /dev/stderr | (! grep -q .) || { echo "run make gen and commit the result"; exit 1; }
 
   unit:
     runs-on: ubuntu-latest
@@ -142,7 +142,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [inventory, queue, booking, payment, mockpsp, holdfastctl]
+        service: [inventory, queue, booking, payment, mockpsp, auth, holdfastctl]
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4

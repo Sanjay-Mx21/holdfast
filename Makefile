@@ -6,8 +6,8 @@ VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev
 COMMIT   ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 PKG      := github.com/Sanjay-Mx21/holdfast
 LDFLAGS  := -s -w -X $(PKG)/internal/platform/buildinfo.Version=$(VERSION) -X $(PKG)/internal/platform/buildinfo.Commit=$(COMMIT)
-BINARIES := inventory queue booking payment mockpsp holdfastctl contention fairness
-IMAGES   := inventory queue booking payment mockpsp holdfastctl
+BINARIES := inventory queue booking payment mockpsp auth holdfastctl contention fairness
+IMAGES   := inventory queue booking payment mockpsp auth holdfastctl
 GOLANGCI_LINT_VERSION := v2.14.0
 BUF_VERSION           := v1.73.0
 SQLC_VERSION          := v1.31.1
@@ -61,9 +61,10 @@ build: ## Build every binary into ./bin
 	@mkdir -p bin
 	@for b in $(BINARIES); do $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o bin/$$b ./cmd/$$b || exit 1; done
 
-keys: ## Generate dev key pairs in .local/keys: admission tokens, booking-svc's service tokens (idempotent)
+keys: ## Generate dev key pairs in .local/keys: admission tokens, booking-svc's service tokens, auth-svc's access tokens (idempotent)
 	$(GO) run ./cmd/holdfastctl keys generate --out-dir .local/keys --if-missing
 	$(GO) run ./cmd/holdfastctl keys generate --out-dir .local/keys --name booking --if-missing
+	$(GO) run ./cmd/holdfastctl keys generate --out-dir .local/keys --name auth --if-missing
 
 infra: ## Start only PostgreSQL, Valkey and Kafka
 	docker compose up -d --wait postgres valkey kafka

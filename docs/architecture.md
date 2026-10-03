@@ -37,7 +37,7 @@ IDs match section 2.3 of the design doc.
 | payment-svc (`cmd/payment`) | Built (Phase 3): intents, provider orders, webhooks, the ledger, status polling, refunds | `payment` schema | PostgreSQL; the payment provider over HTTPS; called by booking-svc over gRPC; receives the provider's webhooks |
 | mockpsp (`cmd/mockpsp`) | Built (task 3.10): test tool, never deployed | In-memory orders and refunds | Sends signed webhooks to payment-svc; called by payment-svc; fault injection on its admin port |
 | holdfastctl (`cmd/holdfastctl`) | Built | Nothing (operator tool) | PostgreSQL, Valkey, Kafka (topic creation) |
-| auth | Planned | See design doc | |
+| auth-svc (`cmd/auth`) | Built (Phase 4, task 4.1): sign-in with a phone code (mock SMS), access tokens, rotating refresh tokens with reuse detection, JWKS | `auth` schema | PostgreSQL; its JWKS is fetched by the services that verify access tokens |
 
 ## 4. Runtime topology
 
@@ -246,9 +246,15 @@ provider about quiet intents, least recently polled first.
   `docs/services/queue.md`). Only
   the EdDSA algorithm is accepted, and `kid` selects among trusted public keys
   so rotation needs no downtime.
-- Until auth-svc exists, queue-svc identifies buyers by the `X-Dev-User-Id`
-  header when `DEV_IDENTITY=true`. Anyone can claim any ID with it, so the
-  service refuses to start with it in production.
+- auth-svc signs people in with a one-time code sent to their phone
+  (`docs/services/auth.md`). It issues 15-minute EdDSA access tokens, and
+  refresh tokens in an httpOnly, SameSite=Strict cookie that rotate on every
+  use; presenting a rotated one revokes the whole login. Phones, codes and
+  refresh tokens are stored only as HMACs or hashes.
+- Until task 4.2 wires those tokens in, queue-svc and booking-svc identify
+  buyers by the `X-Dev-User-Id` header when `DEV_IDENTITY=true`. Anyone can
+  claim any ID with it, so the services refuse to start with it in
+  production.
 - Joining passes per-IP (IPv6 per /64) and per-user token buckets in Valkey
   (`internal/platform/ratelimit`), shared by every replica.
 - Services call each other over gRPC with service tokens: short-lived

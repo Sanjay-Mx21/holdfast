@@ -32,13 +32,13 @@ All times are IST (UTC+05:30).
 | **Project** | A flash-sale booking engine that sells exactly the available units under extreme demand, never more |
 | **Plan version** | 2.0 (1 October 2026) |
 | **Milestones complete** | M0 Foundation, M1 Correctness core, M1.5 Bring-up and baseline, M2 Fair waiting room, and M3 MVP backend |
-| **Current milestone** | M4 Resume-ready product (Phase 4): P39 fixed and Node.js installed; task 4.1 next |
+| **Current milestone** | M4 Resume-ready product (Phase 4): 1 of 8 tasks done (section 10); next task 4.2, [issue #34](https://github.com/Sanjay-Mx21/holdfast/issues/34) |
 | **Progress to v1.0** | About 35% (18 of about 51 focused-work days, excluding Phase 7 stretch goals), counting Phase 2's planned 7 days |
 | **Repository** | [github.com/Sanjay-Mx21/holdfast](https://github.com/Sanjay-Mx21/holdfast), branch `main` |
 | **First commit** | `2173e50` "first commit", 2026-10-01 20:20, 82 files, 12,973 lines |
 | **Latest release** | [v0.3.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.3.0), 2026-10-03 15:48, on `5ffa271` (before it: [v0.2.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.2.0), 2026-10-02 21:51, on `cd0592a`; [v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0), 2026-10-01 23:47, on `9dcd2f8`) |
 | **CI** | Green since 2026-10-01 22:00; `main` is protected and every change needs a pull request with all 10 required checks passing (`images (booking)`, `images (payment)` and `images (mockpsp)` added on 2026-10-03) |
-| **Issues so far** | 99 recorded: 94 resolved, 5 open (section 6) |
+| **Issues so far** | 100 recorded: 95 resolved, 5 open (section 6) |
 
 <Callout type="tip" title="M3 complete: the MVP backend (2026-10-03)">
 
@@ -219,7 +219,15 @@ The rest of the list was already covered by tests written with tasks 3.4 to 3.12
 - **Tests:** one session leading 12 events (one backend holds all 12 locks), and a killed session handing every event to the other replica with newer epochs and the old ones fenced; the leadership tests passed 3 of 3 under `-race`.
 - **Live:** queue-svc went from 31 connections to 3 (29 locks on one connection), and `make e1` passed every mode **beside the full stack**, which failed before.
 - Also found and fixed P40 in the same PR.
-- **Prerequisite done:** Node.js v24.21.0 LTS installed natively in WSL (official tarball, SHA-256 verified against nodejs.org's list) under `~/.local`; the `npm` seen before was the Windows install leaking through the PATH. | Branch `fix/p39-lock-session` |
+- **Prerequisite done:** Node.js v24.21.0 LTS installed natively in WSL (official tarball, SHA-256 verified against nodejs.org's list) under `~/.local`; the `npm` seen before was the Windows install leaking through the PATH. | PR #94 (merged by the assistant at 16:10 after all 10 checks passed), `b9c9c49` |
+| 2026-10-03 16:34 | **Task 4.1 (auth-svc) built and verified:**
+- `cmd/auth` and `internal/auth`: sign-in with a six-digit code sent through a mock SMS gateway (dev inbox only with `DEV_SMS_INBOX`); 15-minute EdDSA access tokens (`authn.AccessIssuer` and `AccessVerifier`) and their JWKS; refresh tokens in an httpOnly, Secure, SameSite=Strict cookie, rotated on every use, a reused one revoking its family; logout.
+- Schema `auth/00001`: phones as an HMAC under a pepper plus the last 4 digits, codes as an HMAC bound to their challenge, refresh tokens as SHA-256.
+- Limits: 5 attempts per code in one conditional `UPDATE`, single use by compare-and-set, one code per 30 s and 5 an hour per phone under an advisory lock, and 5 code requests a minute per address at the edge.
+- **Tests:** unit (phone normalisation, codes, the access-token verifier refusing 9 kinds of bad token) and 11 integration tests, 3 runs each (33 of 33). They cover: sign-in and the same user again; nothing stored in the clear; attempts, expiry and single use; 10 concurrent correct guesses signing in once; resend, concurrent and hourly limits; rotation, reuse revoking the family and a second family untouched; 6 concurrent refreshes rotating once; logout; the HTTP layer (cookie flags, no token in the body, `Retry-After`, the inbox only when enabled).
+- **Live through the edge:** request 202, inbox code, wrong 401, right 200 with the cookie flags, refresh 200, reuse 401 `REFRESH_REUSED` and the newest token then 401, logout 204, the JWKS with one key; 8 quick code requests from one address answered 202 five times, then 429; no phone in the clear; metrics and Prometheus scraping.
+- **Gates:** gofmt, test, lint (after making the cookie always Secure: gosec rightly flagged a configurable Secure flag; browsers accept Secure cookies from localhost), `make gen` stable, up, itest, E1 PASS.
+- Two slips of the assistant's own, caught before the PR: a test that put `+91...` unescaped in a query string, where `+` means a space; and a placeholder helper in the handler, replaced with `strconv.Itoa` before the first build. | Branch `feat/p4-auth`, issue #33 |
 
 ## 3. What is complete, and what each piece contributes
 
@@ -298,8 +306,8 @@ Every problem met while bringing Drop 1 up and running the soak on 2026-10-01, i
 |---|---|---|---|
 | P: defects in the repository | 40 | 36 | 4 |
 | E: machine and network | 21 | 20 | 1 |
-| D: diagnosis and process | 38 | 38 | 0 |
-| **Total** | **99** | **94** | **5** |
+| D: diagnosis and process | 39 | 39 | 0 |
+| **Total** | **100** | **95** | **5** |
 
 CI took **three runs** to go green:
 
@@ -422,6 +430,7 @@ CI took **three runs** to go green:
 | D36 | Writing task 3.11's doc edits, the assistant put the Python edit script in a shell heredoc, against its own recorded practice (write scripts with the file tool); the text's apostrophes broke the shell quoting | The script did not run; nothing was half-written (checked) | Rewritten with the file tool and run | ✅ |
 | D37 | To stop the hung push (E21), the assistant ran `pkill -f "git push ... feat/p3-e1-purchase"` inside a `bash -c` whose own command line contained that text, so pkill also killed the shell running the retry | One wasted attempt; the hung push was stopped as intended | Retried without pkill; in future, match a pattern the calling command does not contain (or use the process ID) | ✅ |
 | D38 | Task 3.14's live check of runbooks RB-3 and RB-4 went wrong twice before it worked. First the script set PostgreSQL's capacity to 0, which the table's CHECK refuses, so no sale was refused and nothing needed refunding. Then it paused mockpsp after the buyers paid, but the capture, saga and refund request take about a second, so the refunds completed before the pause and nothing was dead-lettered | Two runs that did not exercise the runbooks (the refusal of `refund` for a confirmed booking was shown) | The third run sells one unit, lowers capacity to the sold count, stops booking-svc while the buyers pay, switches on mockpsp's outage fault, then restarts booking-svc: the refunds fail deterministically and are dead-lettered | ✅ |
+| D39 | Starting task 4.1, the assistant's usual sync (`git stash push .gitignore && git checkout main && git pull && git stash pop`) stopped when `git pull` failed on the network, so the owner's `.gitignore` edit stayed in the stash, and the new branch was cut from an old `main`. To fix the branch, the assistant ran `git reset --hard origin/main` without first checking the stash or `git status` | A near miss: had the edit still been in the working tree, `reset --hard` would have destroyed it. Nothing was lost: the edit was in `stash@{0}`, was verified (the 3 lines ignoring `explanation/`) and restored, and the owner's `explanation/` files were never touched | The edit was restored and the branch now starts at the real `main` (`b9c9c49`). Lesson: never run `reset --hard` (or anything that discards changes) without checking `git status` and `git stash list` first, and stop a sync chain at a failed step | ✅ |
 
 ### 6.5 Owner setup actions
 
@@ -506,6 +515,21 @@ Goal: every paid booking ends confirmed or refunded, the effect happens once eve
 | 3.13 Tests | [#31](https://github.com/Sanjay-Mx21/holdfast/issues/31) | ✅ 2026-10-03 (PR #88): the saga decision table, the saga over real Kafka, outbox crash recovery, late and out-of-order webhooks |
 | 3.14 Docs | [#32](https://github.com/Sanjay-Mx21/holdfast/issues/32) | ✅ 2026-10-03: `holdfastctl dlq replay` and `refund`, runbooks RB-3 and RB-4, ADRs 0008 to 0010, docs |
 
-## 10. Keeping this log current
+## 10. Phase 4 tasks (milestone M4)
+
+Goal: a real person can buy a ticket through a web app, with real identity and the sale policies enforced. Plan section 17.11; [milestone M4](https://github.com/Sanjay-Mx21/holdfast/milestone/3). The owner's decisions of 2026-10-03: P17 (oversubscription and `SOLD_OUT`) is built inside task 4.3.
+
+| Task | Issue | Status |
+|---|---|---|
+| 4.1 auth-svc | [#33](https://github.com/Sanjay-Mx21/holdfast/issues/33) | ✅ 2026-10-03: sign-in with a phone code (mock SMS), EdDSA access tokens and JWKS, rotating refresh tokens with reuse detection |
+| 4.2 Wire identity in | [#34](https://github.com/Sanjay-Mx21/holdfast/issues/34) | ⏳ |
+| 4.3 Policy engine (with P17) | [#35](https://github.com/Sanjay-Mx21/holdfast/issues/35) | ⏳ |
+| 4.4 Proof of work | [#36](https://github.com/Sanjay-Mx21/holdfast/issues/36) | ⏳ |
+| 4.5 Web app | [#37](https://github.com/Sanjay-Mx21/holdfast/issues/37) | ⏳ |
+| 4.6 Mission-control dashboard | [#38](https://github.com/Sanjay-Mx21/holdfast/issues/38) | ⏳ |
+| 4.7 README v1 and demo video v1 | [#39](https://github.com/Sanjay-Mx21/holdfast/issues/39) | ⏳ |
+| 4.8 Docs | [#40](https://github.com/Sanjay-Mx21/holdfast/issues/40) | ⏳ |
+
+## 11. Keeping this log current
 
 Add a row to the timeline (section 2) whenever a task or milestone finishes, with the date, time and the evidence: a commit hash, a tag, or a file in `loadtest/results/`. Record every issue in section 6 when it happens, including failed attempts and wrong diagnoses, and update its status when it is resolved; never delete a row. Update section 1 and the milestone tables at the end of every phase, in the same pull request as the work.

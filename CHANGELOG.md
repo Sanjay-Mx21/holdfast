@@ -6,6 +6,24 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
 
 ## [Unreleased]
 
+### Added
+
+- **auth-svc** (task 4.1, `cmd/auth`):
+  - sign-in with a six-digit code sent to a phone through a mock SMS gateway
+    (`POST /v1/auth/otp/request` and `/otp/verify`), with per-phone and
+    per-address rate limits, 5 attempts per code, single use and a 5-minute
+    life;
+  - 15-minute EdDSA access tokens (`authn.AccessIssuer` and
+    `AccessVerifier`) and the JWKS that verifies them;
+  - refresh tokens in an httpOnly, SameSite=Strict cookie, rotated on every
+    `POST /v1/auth/refresh`; presenting a rotated one revokes the whole
+    login (reuse detection); `POST /v1/auth/logout`;
+  - the `auth` schema (`auth/00001`), which stores phones, codes and refresh
+    tokens only as HMACs or hashes;
+  - in development, the code can be read at `GET /v1/auth/dev/inbox`.
+  - The edge routes `/v1/auth/`; Compose runs it on 8086 and 9096; service
+    doc `docs/services/auth.md`.
+
 ### Fixed
 
 - queue-svc holds all of a replica's admission-leader locks on one
