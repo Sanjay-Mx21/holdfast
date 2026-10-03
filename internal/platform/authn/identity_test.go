@@ -16,8 +16,8 @@ func TestRequireUser(t *testing.T) {
 	_, otherKey, _ := ed25519.GenerateKey(rand.Reader)
 	v := NewAccessVerifier(func(kid string) (ed25519.PublicKey, bool) { return pub, kid == KeyID(pub) }, time.Second)
 	user := uuid.NewString()
-	good, _, _ := NewAccessIssuer(priv, time.Minute).Issue(user, RoleAgent)
-	forged, _, _ := NewAccessIssuer(otherKey, time.Minute).Issue(user, RoleBuyer)
+	good, _, _ := NewAccessIssuer(priv, time.Minute).Issue(user, RoleAgent, true)
+	forged, _, _ := NewAccessIssuer(otherKey, time.Minute).Issue(user, RoleBuyer, true)
 	devUser := uuid.NewString()
 
 	var seenUser, seenRole string

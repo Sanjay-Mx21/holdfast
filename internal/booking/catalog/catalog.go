@@ -33,14 +33,18 @@ type NewEvent struct {
 
 // Event is a stored event with its inventory counters.
 type Event struct {
-	ID             uuid.UUID
-	Name           string
-	SaleOpensAt    time.Time
-	PerUserLimit   int
-	UnitPricePaise int64
-	Status         string
-	Capacity       int
-	Sold           int
+	ID          uuid.UUID
+	Name        string
+	SaleOpensAt time.Time
+	// The policy windows: verified buyers only, and no agents, until these
+	// instants; nil means no window.
+	VerifiedWindowEndsAt *time.Time
+	AgentLockoutEndsAt   *time.Time
+	PerUserLimit         int
+	UnitPricePaise       int64
+	Status               string
+	Capacity             int
+	Sold                 int
 }
 
 func (e NewEvent) validate() error {
@@ -55,6 +59,10 @@ func (e NewEvent) validate() error {
 		return fmt.Errorf("%w: unit price must be positive", ErrInvalid)
 	case e.Capacity < 1 || e.Capacity > 10_000_000:
 		return fmt.Errorf("%w: capacity must be between 1 and 10000000", ErrInvalid)
+	case e.VerifiedWindowEndsAt != nil && !e.VerifiedWindowEndsAt.After(e.SaleOpensAt):
+		return fmt.Errorf("%w: the verified-only window must end after the sale opens", ErrInvalid)
+	case e.AgentLockoutEndsAt != nil && !e.AgentLockoutEndsAt.After(e.SaleOpensAt):
+		return fmt.Errorf("%w: the agent lockout must end after the sale opens", ErrInvalid)
 	}
 	return nil
 }
@@ -94,11 +102,13 @@ func Create(ctx context.Context, db *pgxpool.Pool, e NewEvent) (uuid.UUID, error
 func Get(ctx context.Context, db *pgxpool.Pool, id uuid.UUID) (Event, error) {
 	var e Event
 	err := db.QueryRow(ctx, `
-		SELECT e.id, e.name, e.sale_opens_at, e.per_user_limit, e.unit_price_paise, e.status, i.capacity, i.sold
+		SELECT e.id, e.name, e.sale_opens_at, e.verified_window_ends_at, e.agent_lockout_ends_at,
+		       e.per_user_limit, e.unit_price_paise, e.status, i.capacity, i.sold
 		FROM booking.events e
 		JOIN booking.event_inventory i ON i.event_id = e.id
 		WHERE e.id = $1`, id,
-	).Scan(&e.ID, &e.Name, &e.SaleOpensAt, &e.PerUserLimit, &e.UnitPricePaise, &e.Status, &e.Capacity, &e.Sold)
+	).Scan(&e.ID, &e.Name, &e.SaleOpensAt, &e.VerifiedWindowEndsAt, &e.AgentLockoutEndsAt,
+		&e.PerUserLimit, &e.UnitPricePaise, &e.Status, &e.Capacity, &e.Sold)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Event{}, ErrNotFound
 	}

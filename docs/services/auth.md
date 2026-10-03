@@ -124,6 +124,7 @@ EdDSA (Ed25519) JWTs with `kid` in the header and these claims:
 | `aud` | `holdfast-api` |
 | `sub` | the user's ID (UUIDv7) |
 | `role` | `BUYER`, `AGENT` or `ADMIN` |
+| `vrf` | `true` when the user's identity is verified: their phone, after a code sign-in. queue-svc's verified-only window admits only these (task 4.3) |
 | `iat`, `nbf`, `exp`, `jti` | 15 minutes' life |
 
 `authn.AccessVerifier` checks the signature (EdDSA only: no `none`, no HMAC

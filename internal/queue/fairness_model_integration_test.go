@@ -81,8 +81,8 @@ func runF1Model(t *testing.T, seed uint64) {
 	// Provision directly (not on the work list, so no running queue-svc
 	// interferes), with T0 an hour away; the test moves T0 itself.
 	cfg := validConfig()
-	code, err := provisionScript.Run(ctx, f.rdb, []string{k.config(), k.state()},
-		time.Now().Add(time.Hour).UnixMilli(), cfg.AdmissionRate, m.maxSessions, cfg.SessionTTL.Milliseconds()).Int64()
+	code, err := provisionScript.Run(ctx, f.rdb, []string{k.config(), k.state(), k.policy()},
+		time.Now().Add(time.Hour).UnixMilli(), cfg.AdmissionRate, m.maxSessions, cfg.SessionTTL.Milliseconds(), 0, 0).Int64()
 	if err != nil || code != 1 {
 		t.Fatalf("provision: %d %v", code, err)
 	}

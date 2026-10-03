@@ -210,7 +210,7 @@ Versions below are the current stable lines as of September 2026 (sources in sec
 | Logging | standard `log/slog` with the JSON handler | Structured logs with a `request_id` on every line today, and a `trace_id` from Phase 3. |
 | Testing | standard `testing` with the race detector; `testing/synctest` from Phase 2 | Integration tests against real PostgreSQL and Valkey (Kafka from Phase 3), configured by environment variables; model-based randomized tests; fake-clock time tests. No testify, rapid or testcontainers needed so far. |
 | Config | `caarlos0/env` | 12-factor configuration from environment variables. |
-| Ops CLI | standard `flag` with subcommands | `holdfastctl` (built): migrations, keys, tokens, events, inventory provision and status. Freezes, DLQ replay and manual refunds arrive with their phases. |
+| Ops CLI | standard `flag` with subcommands | `holdfastctl` (built): migrations, keys, tokens, events, inventory and queue provision and status, DLQ replay, manual refunds, and the freeze switch (task 4.3). |
 
 ### 4.3 Infrastructure, observability and tooling
 
@@ -881,7 +881,7 @@ redis.call('SET', KEYS[4], cjson.encode({
 return nxt
 ```
 
-**As built in task 2.5** (`internal/queue/admission.go`, `scripts/advance.lua`): the session budget is computed inside `advance.lua`, in the same atomic step as the advance, rather than from a snapshot taken earlier in the tick; every admitted rank holds a slot in `adm:{E}:sessions` for the session TTL; the leader's rate limiter refills at the event's admission rate and holds at most one second's worth; and the leader takes its advisory lock on a connection taken out of the pool (`Hijack`), which the snippet above opens directly. Not built yet: the oversubscription target from inventory's units left and `MarkSoldOut`, which need inventory-svc's API (progress log, issue P17); AIMD is Phase 5 (task 5.4). The status document is task 2.6.
+**As built in task 2.5** (`internal/queue/admission.go`, `scripts/advance.lua`): the session budget is computed inside `advance.lua`, in the same atomic step as the advance, rather than from a snapshot taken earlier in the tick; every admitted rank holds a slot in `adm:{E}:sessions` for the session TTL; the leader's rate limiter refills at the event's admission rate and holds at most one second's worth; and the leader takes its advisory lock on a connection taken out of the pool (`Hijack`), which the snippet above opens directly. The oversubscription target and `MarkSoldOut` were built in task 4.3 (progress log P17): the leader reads units left and open holds from inventory-svc's `GetAvailability` over gRPC each tick and passes the cap (units left × 1.3) into `advance.lua`, so it applies in the same atomic step as the budget; a failed read lifts the cap for that tick instead of stopping admission; `soldout.lua` is fenced like `advance.lua`. AIMD is Phase 5 (task 5.4). The status document is task 2.6.
 
 **Why fencing matters.** A leader can pause (a long GC, a frozen VM) and wake up after a new leader was elected. Its epoch is now stale, so `advance.lua` rejects its writes. This is the fencing-token pattern from Martin Kleppmann's writing on distributed locks.
 
@@ -1360,17 +1360,17 @@ Measure the **collapse ratio**: edge requests per second (`X-Cache-Status: HIT`)
 | `GET /v1/events/{id}` | none | Event details | 200, cached 60 s |
 | `GET /v1/events/{id}/status` | none | The shared status document ✅ | 200, edge-cached 1 s (`public, max-age=1`); 404 `EVENT_NOT_FOUND` |
 | `GET /v1/queue/{id}/challenge` | access token | Proof-of-work challenge | 200 |
-| `POST /v1/queue/{id}/join` | access token ✅ + PoW solution (Phase 4, task 4.4) | Join the waiting room ✅ | 202; 403 outside your policy window (Phase 4); 404 `EVENT_NOT_FOUND`; 409 `QUEUE_CLOSED`; 429 `RATE_LIMITED` with Retry-After |
+| `POST /v1/queue/{id}/join` | access token ✅ + PoW solution (Phase 4, task 4.4) | Join the waiting room ✅ | 202; 403 `VERIFIED_ONLY` or `AGENT_LOCKOUT` outside your policy window, with Retry-After ✅; 404 `EVENT_NOT_FOUND`; 409 `QUEUE_CLOSED`; 429 `RATE_LIMITED` with Retry-After |
 | `GET /v1/queue/{id}/me` | access token ✅ | Your rank after T0 ✅ | 200 with `rank`, or `randomizingAt` before T0; 404 `NOT_IN_QUEUE`; 429 `RATE_LIMITED` |
 | `POST /v1/queue/{id}/admit` | access token ✅ | Exchange your turn for an admission token ✅ | 200; 409 `NOT_YOUR_TURN` or `TURN_EXPIRED`; 404 `NOT_IN_QUEUE` |
-| `POST /v1/events/{id}/holds` | admission token + Idempotency-Key | Hold N units ✅ | 201, and 201 with `Idempotent-Replayed: true` on a replay; 409 `SOLD_OUT`; 422 `USER_LIMIT`, `INVALID_QUANTITY` or `IDEMPOTENCY_KEY_REUSED`; 403 `TOKEN_EVENT_MISMATCH` |
+| `POST /v1/events/{id}/holds` | admission token + Idempotency-Key | Hold N units ✅ | 201, and 201 with `Idempotent-Replayed: true` on a replay; 409 `SOLD_OUT`; 422 `USER_LIMIT`, `INVALID_QUANTITY` or `IDEMPOTENCY_KEY_REUSED`; 403 `TOKEN_EVENT_MISMATCH`; 503 `SALE_PAUSED` while the sale is frozen ✅ |
 | `GET /v1/events/{id}/holds/{holdId}` | admission token, owner only | Read your hold ✅ | 200; 404 for non-owners as well |
 | `DELETE /v1/events/{id}/holds/{holdId}` | admission token | Release your hold ✅ | 204, also when already released; 409 `HOLD_NOT_CANCELLABLE` when PAYING or SOLD |
 | `GET /v1/events/{id}/availability` | none | Units left ✅ | 200, `Cache-Control: public, max-age=1` |
 | `POST /v1/bookings` | access token + Idempotency-Key | Create the booking and get a checkout URL | 201; 409 `HOLD_EXPIRED`; 503 with Retry-After |
 | `GET /v1/bookings/{id}` | access token, owner only | Booking status | 200; 404 for non-owners as well |
 | `POST /v1/webhooks/psp` | HMAC signature | PSP callbacks | 200 quickly; 401 on a bad signature |
-| `POST /internal/v1/events/{id}/freeze` (admin port) | operator token | Kill switch: pause admissions (Phase 4) | 204 |
+| `POST /internal/v1/events/{id}/freeze` and `/unfreeze` (admin port) | operator token | Kill switch ✅: on queue-svc it pauses admissions (`FROZEN`), on inventory-svc it stops new holds; `holdfastctl freeze` does both | 200 with the new state and whether it changed; 409 `STATE_CONFLICT` (queue not `OPEN` or `FROZEN`) |
 | `PUT /internal/v1/events/{id}/inventory` (admin port) | operator token | Provision inventory ✅ | 201 created; 200 unchanged; 409 `PROVISION_CONFLICT` |
 | `PUT /internal/v1/events/{id}/queue` (queue-svc admin port) | operator token | Provision the queue: opening time, admission rate, maximum sessions, session TTL; state PRE ✅ | 201 created; 200 unchanged; 409 `PROVISION_CONFLICT` |
 
@@ -1651,7 +1651,7 @@ holdfast/
 │   ├── queue/                        ✅ provisioning, lottery, joining, admission controller, status document, admission tokens (2.1 to 2.7)
 │   ├── payment/                      ⏳ intents, webhooks, ledger, PSP client (3); reconciler (5)
 │   ├── auth/                         ⏳ OTP, tokens, JWKS (4)
-│   ├── policy/                       ⏳ verified window, agent lockout, caps, freeze (4)
+│   ├── policy/                       ✅ verified window, agent lockout (4.3); the cap and freeze are enforced where units are held and admitted
 │   └── testenv/                      ✅ wiring for integration tests
 ├── db/migrations/                    ✅ embed.go, booking/    ⏳ payment/ (3), auth/ (4)
 ├── proto/                            ⏳ buf.yaml; events/v1, inventory/v1, payment/v1 (3)
@@ -2009,7 +2009,7 @@ The dates are illustrative. The gates are not.
 | Admission tokens can be reused until they expire (no `jti` check) | Phase 2, task 2.8: ✅ decided to keep reuse within the session-capped lifetime (retries must work) |
 | inventory reads trusted keys from files (no JWKS fetch) | Phase 2, task 2.8: ✅ inventory follows queue-svc's JWKS |
 | `MarkPaying`, `Confirm` and `ReleaseForFailedPayment` are reachable only in-process | Phase 3, task 3.4 |
-| inventory has no sale-freeze check | Phase 4, task 4.3 |
+| inventory has no sale-freeze check | Phase 4, task 4.3: ✅ `hold.lua` refuses new holds while the sale is frozen |
 | The rebuild ignores units in pending bookings | Phase 5, task 5.3 |
 
 ### 17.8 M1.5: Bring-up and baseline ✅ (completed 2026-10-01)
@@ -2121,7 +2121,7 @@ The dates are illustrative. The gates are not.
 
 - [x] 4.1 **auth-svc.** OTP with a mock SMS inbox, EdDSA access tokens, refresh rotation with reuse detection (token families), JWKS; migrations in `db/migrations/auth/` (users, hashed OTP codes, refresh tokens). *Built as `cmd/auth` and `internal/auth`, with access tokens in `internal/platform/authn` (`AccessIssuer`, `AccessVerifier`, for task 4.2). Codes are six digits, stored as an HMAC under a pepper bound to their challenge. Every guess takes one of 5 attempts in one conditional `UPDATE`, and a correct code is used once. Per phone: one code per 30 s and 5 per hour, raced safely under an advisory lock; per address, the edge allows 5 code requests a minute. Refresh rotation is a compare-and-set on `replaced_by`, and a reused token revokes its family. The mock SMS inbox is readable at `GET /v1/auth/dev/inbox` only with `DEV_SMS_INBOX` (refused in production). IDs are UUIDv7 generated by the service, as elsewhere. Documented in `docs/services/auth.md`; ADR 0012 comes with task 4.8.*
 - [x] 4.2 **Wire identity in.** Access tokens replace the development identity header in queue-svc and booking-svc. *Built as `authn.RequireUser` (with `NewAccessIdentity`): queue-svc and booking-svc verify auth-svc's access tokens against its JWKS (`ACCESS_JWKS_URL`, a readiness check until a key is known), put the user and the role in the request context, and refuse a bad token without falling back. `DEV_IDENTITY` remains as an explicit option for development and load tests (E2 turns it on for queue-svc through its Compose override); Compose now defaults it to off, and production refuses it. inventory-svc is unchanged: holds still take the admission token, whose subject is now the signed-in user.*
-- [ ] 4.3 **Policy engine** (`internal/policy`): the verified-only window, agent lockout, per-user caps and the freeze switch. inventory checks the freeze state. Add `holdfastctl freeze` and `unfreeze` and runbook RB-1.
+- [x] 4.3 **Policy engine** (`internal/policy`): the verified-only window, agent lockout, per-user caps and the freeze switch. inventory checks the freeze state. Add `holdfastctl freeze` and `unfreeze` and runbook RB-1. *Built as a pure `policy.Check` over an event's windows (stored with the queue, from the catalog) and the buyer's role and a new `vrf` (verified) access-token claim, applied at join with 403 `VERIFIED_ONLY` or `AGENT_LOCKOUT` and `Retry-After`. The per-user cap stays where it already was (inventory's `hold.lua` and booking's final guard). The freeze switch is two flags: queue `OPEN`↔`FROZEN` (`state.lua`) and inventory's `frozen` field, checked by `hold.lua` after the replay check (503 `SALE_PAUSED`); each has an admin endpoint, and `holdfastctl freeze`/`unfreeze` switch both; runbook RB-1 is `docs/runbooks/sale.md`. P17 was built here too, as the owner decided: admission capped by inventory's units left × 1.3 over gRPC, and `SOLD_OUT` once no units and no holds remain.*
 - [ ] 4.4 **Proof of work.** A challenge endpoint in queue-svc and a Web Worker solver in the web app.
 - [ ] 4.5 **Web app** (`web/`, Next.js with static export): event page, countdown, waiting room with rank (polling the status document with jitter), quantity picker, redirect to mockpsp checkout, booking status page. Cover the accessibility basics.
 - [ ] 4.6 **Mission-control dashboard** (12.4), provisioned in `deploy/grafana/`.

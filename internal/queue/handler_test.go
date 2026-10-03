@@ -19,6 +19,7 @@ import (
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/authn"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/httpx"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/ratelimit"
+	"github.com/Sanjay-Mx21/holdfast/internal/policy"
 )
 
 type fakeService struct {
@@ -27,13 +28,22 @@ type fakeService struct {
 	position  func(ctx context.Context, eventID, userID string) (Position, error)
 	status    func(ctx context.Context, eventID string) (Status, error)
 	admit     func(ctx context.Context, eventID, userID string) (Turn, error)
+	freeze    func(ctx context.Context, eventID string, frozen bool) (bool, error)
+	buyer     policy.Buyer // the last joiner's
 }
 
 func (f *fakeService) Provision(ctx context.Context, e string, c EventConfig) (bool, error) {
 	return f.provision(ctx, e, c)
 }
-func (f *fakeService) Join(ctx context.Context, e, u string) (JoinResult, error) {
+func (f *fakeService) Join(ctx context.Context, e, u string, b policy.Buyer) (JoinResult, error) {
+	f.buyer = b
 	return f.join(ctx, e, u)
+}
+func (f *fakeService) Freeze(ctx context.Context, e string) (bool, error) {
+	return f.freeze(ctx, e, true)
+}
+func (f *fakeService) Unfreeze(ctx context.Context, e string) (bool, error) {
+	return f.freeze(ctx, e, false)
 }
 func (f *fakeService) Position(ctx context.Context, e, u string) (Position, error) {
 	return f.position(ctx, e, u)
@@ -104,6 +114,12 @@ func newHarness(svc service) harness {
 			ctx := r.Context()
 			if u := r.Header.Get("X-Test-User"); u != "" {
 				ctx = authn.WithUser(ctx, u)
+			}
+			// X-Test-Role: the caller signed in with an access token.
+			if role := r.Header.Get("X-Test-Role"); role != "" {
+				c := &authn.AccessClaims{Role: role, Verified: r.Header.Get("X-Test-Verified") == "true"}
+				c.Subject = r.Header.Get("X-Test-User")
+				ctx = authn.WithAccess(ctx, c)
 			}
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -775,5 +791,72 @@ func TestClientIDBehindTheEdge(t *testing.T) {
 	// Without trusted proxies, a forwarded-for header is never believed.
 	if got := clientID(req("10.250.0.10:5000", "203.0.113.7"), nil); got != "10.250.0.10" {
 		t.Errorf("no trusted proxies: clientID = %q, want the connection address", got)
+	}
+}
+
+func TestJoinPassesTheBuyerAndMapsPolicyRefusals(t *testing.T) {
+	ev, user := "0196f0c1-7a3e-7c51-9b0e-5d2f8a1c4e77", "0196f0c1-7a3e-7c51-9b0e-5d2f8a1c4e78"
+	until := time.Now().Add(90 * time.Second)
+	svc := &fakeService{join: func(context.Context, string, string) (JoinResult, error) {
+		return JoinResult{}, &policy.Refused{Reason: policy.ReasonAgentLockout, Until: until}
+	}}
+	h := newHarness(svc)
+	rec := send(h.public, http.MethodPost, "/v1/queue/"+ev+"/join", "", "", map[string]string{
+		"X-Test-User": user, "X-Test-Role": "AGENT", "X-Test-Verified": "true",
+	}, "192.0.2.1:1234")
+	if svc.buyer != (policy.Buyer{Role: "AGENT", Verified: true}) {
+		t.Fatalf("buyer %+v, want the token's role and verification", svc.buyer)
+	}
+	if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), `"code":"AGENT_LOCKOUT"`) {
+		t.Fatalf("got %d %s", rec.Code, rec.Body.String())
+	}
+	if ra := rec.Header().Get("Retry-After"); ra != "90" && ra != "89" {
+		t.Fatalf("Retry-After %q, want the seconds until the window ends (90)", ra)
+	}
+	var out dto.Metric
+	_ = h.m.joins.WithLabelValues(joinAgentLockout).Write(&out)
+	if out.GetCounter().GetValue() != 1 {
+		t.Fatalf("agent_lockout joins = %v, want 1", out.GetCounter().GetValue())
+	}
+
+	// The development header alone is an unverified buyer with no role.
+	svc.join = func(context.Context, string, string) (JoinResult, error) {
+		return JoinResult{}, &policy.Refused{Reason: policy.ReasonVerifiedOnly, Until: time.Now().Add(-time.Second)}
+	}
+	rec = send(h.public, http.MethodPost, "/v1/queue/"+ev+"/join", "", "", map[string]string{"X-Test-User": user}, "192.0.2.1:1234")
+	if svc.buyer != (policy.Buyer{}) || rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), `"code":"VERIFIED_ONLY"`) {
+		t.Fatalf("buyer %+v; got %d %s", svc.buyer, rec.Code, rec.Body.String())
+	}
+	if rec.Header().Get("Retry-After") != "1" {
+		t.Fatalf("Retry-After %q, want at least 1", rec.Header().Get("Retry-After"))
+	}
+}
+
+func TestFreezeRoutesAreAdminOnly(t *testing.T) {
+	ev := "0196f0c1-7a3e-7c51-9b0e-5d2f8a1c4e77"
+	var calls []bool
+	svc := &fakeService{freeze: func(_ context.Context, e string, frozen bool) (bool, error) {
+		calls = append(calls, frozen)
+		return true, nil
+	}}
+	h := newHarness(svc)
+	for _, tc := range []struct{ path, state string }{{"freeze", "FROZEN"}, {"unfreeze", "OPEN"}} {
+		rec := send(h.internal, http.MethodPost, "/internal/v1/events/"+ev+"/"+tc.path, "", "", nil, "10.0.0.1:1")
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"state":"`+tc.state+`"`) {
+			t.Fatalf("%s: %d %s", tc.path, rec.Code, rec.Body.String())
+		}
+		if rec := send(h.public, http.MethodPost, "/internal/v1/events/"+ev+"/"+tc.path, "", "", nil, "10.0.0.1:1"); rec.Code != http.StatusNotFound {
+			t.Fatalf("%s must not exist on the public router, got %d", tc.path, rec.Code)
+		}
+	}
+	if len(calls) != 2 || !calls[0] || calls[1] {
+		t.Fatalf("calls %v, want [true false]", calls)
+	}
+	svc.freeze = func(context.Context, string, bool) (bool, error) {
+		return false, fmt.Errorf("%w: it is PRE, and only a queue in state OPEN can become FROZEN", ErrStateConflict)
+	}
+	rec := send(h.internal, http.MethodPost, "/internal/v1/events/"+ev+"/freeze", "", "", nil, "10.0.0.1:1")
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), `"code":"STATE_CONFLICT"`) || !strings.Contains(rec.Body.String(), "it is PRE") {
+		t.Fatalf("conflict: %d %s", rec.Code, rec.Body.String())
 	}
 }

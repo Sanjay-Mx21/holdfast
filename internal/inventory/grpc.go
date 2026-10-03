@@ -33,7 +33,7 @@ type GRPCServer struct {
 func NewGRPCServer(svc *Service) *GRPCServer { return &GRPCServer{svc: svc} }
 
 // GRPCAllow lets each caller use only what it needs: booking-svc drives a
-// hold through checkout.
+// hold through checkout; queue-svc reads availability to pace admissions.
 func GRPCAllow() map[string][]string {
 	booking := []string{"booking"}
 	return map[string][]string{
@@ -41,6 +41,7 @@ func GRPCAllow() map[string][]string {
 		inventoryv1.InventoryService_MarkPaying_FullMethodName:              booking,
 		inventoryv1.InventoryService_Confirm_FullMethodName:                 booking,
 		inventoryv1.InventoryService_ReleaseForFailedPayment_FullMethodName: booking,
+		inventoryv1.InventoryService_GetAvailability_FullMethodName:         {"queue"},
 	}
 }
 
@@ -89,6 +90,18 @@ func (g *GRPCServer) ReleaseForFailedPayment(ctx context.Context, req *inventory
 		return nil, toStatus(err)
 	}
 	return &inventoryv1.ReleaseForFailedPaymentResponse{Released: released}, nil
+}
+
+// GetAvailability implements inventoryv1.InventoryServiceServer.
+func (g *GRPCServer) GetAvailability(ctx context.Context, req *inventoryv1.GetAvailabilityRequest) (*inventoryv1.GetAvailabilityResponse, error) {
+	a, err := g.svc.Availability(ctx, req.GetEventId())
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	return &inventoryv1.GetAvailabilityResponse{
+		Available: int64(a.Available), Capacity: int64(a.Capacity),
+		ActiveHolds: int64(a.ActiveHolds), Frozen: a.Frozen,
+	}, nil
 }
 
 // toStatus maps domain errors to gRPC statuses with stable reasons.
@@ -183,6 +196,18 @@ func (c *Client) ReleaseForFailedPayment(ctx context.Context, eventID, userID, h
 		return false, fromStatus(err)
 	}
 	return resp.GetReleased(), nil
+}
+
+// GetAvailability reads an event's units left, open holds and freeze flag.
+func (c *Client) GetAvailability(ctx context.Context, eventID string) (Availability, error) {
+	resp, err := c.c.GetAvailability(ctx, &inventoryv1.GetAvailabilityRequest{EventId: eventID})
+	if err != nil {
+		return Availability{}, fromStatus(err)
+	}
+	return Availability{
+		EventID: eventID, Available: int(resp.GetAvailable()), Capacity: int(resp.GetCapacity()),
+		ActiveHolds: int(resp.GetActiveHolds()), Frozen: resp.GetFrozen(),
+	}, nil
 }
 
 // fromStatus turns a status back into the domain error it came from; other

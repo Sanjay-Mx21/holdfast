@@ -86,12 +86,22 @@ the status document is.
    on exactly one replica. If none: PostgreSQL may be unreachable (elections
    need it); check `docker compose ps postgres` and the queue-svc logs for
    `admission: leadership term ended`.
-2. Is the queue `OPEN`? `FROZEN`, `SOLD_OUT` and `CLOSED` admit nobody.
-3. Is the session budget full? Compare `holdfast_queue_active_sessions`
+2. Is the queue `OPEN`? `FROZEN`, `SOLD_OUT` and `CLOSED` admit nobody
+   (`holdfast_queue_state`). A freeze is lifted with `holdfastctl unfreeze`
+   (RB-1, `docs/runbooks/sale.md`).
+3. Are the units left the limit (P17)? Active sessions never exceed the units
+   left × `OVERSUBSCRIPTION_FACTOR`: with every unit held, admission waits
+   for holds to expire or sell. `holdfastctl inventory status --event <event
+   id>` shows the units left and the open holds. If
+   `holdfast_queue_inventory_reads_total{result="error"}` grows, leaders cannot
+   read inventory and admit without this cap (inventory still refuses holds
+   beyond capacity): check inventory-svc and that it trusts `queue.pub`
+   (`GRPC_TRUSTED_CALLERS`).
+4. Is the session budget full? Compare `holdfast_queue_active_sessions`
    with `holdfast_queue_max_sessions` (or
    `valkey-cli ZCARD "adm:{<event id>}:sessions"` with `max_sessions` in
    `q:{<event id>}:config`). Slots free themselves after the session TTL.
-4. Repeated `fenced off by a newer leader` warnings mean two processes keep
+5. Repeated `fenced off by a newer leader` warnings mean two processes keep
    taking over from each other; check that every replica reaches the same
    PostgreSQL.
 
@@ -145,3 +155,24 @@ and in which order, cannot.
 3. Buyers must join again. Tell them: their earlier places are gone. Rebuild
    inventory too if its keys were lost (`holdfastctl inventory provision`,
    RB-INV-4).
+
+## RB-Q-9 Buyers are refused with `VERIFIED_ONLY` or `AGENT_LOCKOUT`
+
+**Symptom:** joins fail with 403 `VERIFIED_ONLY` or `AGENT_LOCKOUT`
+(`holdfast_queue_joins_total{result="verified_only"}` or
+`{result="agent_lockout"}` grows).
+
+These are the event's policy windows working: until the window ends, only
+verified buyers (a phone-code sign-in) may join, and agents may not. The
+response's `Retry-After` says when the caller may join.
+
+1. Check the windows: `holdfastctl queue status --event <event id>` prints
+   them on its `policy` line.
+2. A buyer using the development header (`DEV_IDENTITY`) is never verified:
+   during a verified-only window, sign in with a phone code instead.
+3. A wrong window is moved or lifted by provisioning the queue again with the
+   same settings and the new windows (`PUT /internal/v1/events/{id}/queue`
+   with `verifiedOnlyUntil` and `agentLockoutUntil`, absent for none). Update
+   the event in PostgreSQL too (`booking.events.verified_window_ends_at` and
+   `agent_lockout_ends_at`), so `holdfastctl queue provision` restores the
+   same windows after Valkey loses them.

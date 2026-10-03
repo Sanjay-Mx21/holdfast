@@ -3,6 +3,8 @@ package queue
 import (
 	"testing"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 func TestAllowanceRefillsAtRateAndCapsAtOneSecond(t *testing.T) {
@@ -59,5 +61,41 @@ func TestLeaderLockKey(t *testing.T) {
 	}
 	if a == leaderLockKey("0196f0c1-7a3e-7c51-9b0e-5d2f8a1c4e78") {
 		t.Fatal("different events share a lock key")
+	}
+}
+
+func TestLeaderTickExportsTheStateAndTermEndRemovesIt(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := NewMetrics(reg)
+	const ev = "0196f0c1-7a3e-7c51-9b0e-5d2f8a1c4e77"
+	stateOf := func() map[string]float64 {
+		out := map[string]float64{}
+		mfs, _ := reg.Gather()
+		for _, mf := range mfs {
+			if mf.GetName() != "holdfast_queue_state" {
+				continue
+			}
+			for _, mt := range mf.GetMetric() {
+				for _, l := range mt.GetLabel() {
+					if l.GetName() == "state" {
+						out[l.GetValue()] = mt.GetGauge().GetValue()
+					}
+				}
+			}
+		}
+		return out
+	}
+	m.leaderTerm(ev, 3, 100, true)
+	m.leaderTick(ev, Advance{State: StateFrozen})
+	if got := stateOf(); len(got) != 5 || got["FROZEN"] != 1 || got["OPEN"] != 0 {
+		t.Fatalf("state gauge %v, want FROZEN=1 and the four others 0", got)
+	}
+	m.leaderTick(ev, Advance{State: StateSoldOut})
+	if got := stateOf(); got["SOLD_OUT"] != 1 || got["FROZEN"] != 0 {
+		t.Fatalf("state gauge %v, want SOLD_OUT=1", got)
+	}
+	m.leaderTerm(ev, 3, 100, false)
+	if got := stateOf(); len(got) != 0 {
+		t.Fatalf("state gauge %v after the term, want none", got)
 	}
 }

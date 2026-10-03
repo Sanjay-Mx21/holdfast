@@ -1,6 +1,7 @@
 // Command holdfastctl is the operator CLI: database migrations, development
-// keys and tokens, event creation, and inventory and queue provisioning. It reuses the
-// services' own packages, so every rule has exactly one implementation.
+// keys and tokens, event creation, inventory and queue provisioning, and the
+// sale's freeze switch. It reuses the services' own packages, so every rule
+// has exactly one implementation.
 package main
 
 import (
@@ -33,6 +34,7 @@ import (
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/kafka"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/postgres"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/valkey"
+	"github.com/Sanjay-Mx21/holdfast/internal/policy"
 	"github.com/Sanjay-Mx21/holdfast/internal/queue"
 )
 
@@ -52,6 +54,8 @@ func commands() []command {
 		{"inventory status", "show an event's live availability", cmdInventoryStatus},
 		{"queue provision", "provision an event's waiting room (opening time from PostgreSQL by default)", cmdQueueProvision},
 		{"queue status", "show an event's waiting room: state, size, admission, sessions, leader", cmdQueueStatus},
+		{"freeze", "freeze a sale (runbook RB-1): no new holds, admissions paused", cmdFreeze},
+		{"unfreeze", "resume a frozen sale (runbook RB-1)", cmdUnfreeze},
 		{"kafka topics", "create every Kafka topic HoldFast uses (idempotent; auto-creation is off)", cmdKafkaTopics},
 		{"dlq replay", "publish a dead-letter topic's messages back to their topic (runbook RB-3)", cmdDLQReplay},
 		{"refund", "ask payment-svc again to refund a booking stuck in REFUND_REQUIRED (runbook RB-4)", cmdRefund},
@@ -258,6 +262,8 @@ func cmdEventCreate(ctx context.Context, args []string) error {
 	perUser := fs.Int("per-user-limit", 4, "maximum units per user")
 	price := fs.Int64("price-paise", 250000, "unit price in paise")
 	opens := fs.String("opens-at", "", "sale opening time, RFC 3339 (default: now)")
+	verifiedFor := fs.Duration("verified-only-for", 0, "policy: only verified buyers may join for this long after opening (0: no window)")
+	lockoutFor := fs.Duration("agent-lockout-for", 0, "policy: agents may not join for this long after opening (0: no window)")
 	qf := addQueueFlags(fs)
 	noProvision := fs.Bool("no-provision", false, "only write PostgreSQL; provision Valkey later")
 	if err := fs.Parse(args); err != nil {
@@ -271,7 +277,12 @@ func cmdEventCreate(ctx context.Context, args []string) error {
 		}
 		opensAt = t
 	}
+	if *verifiedFor < 0 || *lockoutFor < 0 {
+		return errors.New("--verified-only-for and --agent-lockout-for must not be negative")
+	}
+	verifiedUntil, lockoutUntil := windowEnd(opensAt, *verifiedFor), windowEnd(opensAt, *lockoutFor)
 	qcfg := qf.config(opensAt)
+	qcfg.Policy = policyRules(verifiedUntil, lockoutUntil)
 	// Check the queue settings before writing anything, so a bad flag never
 	// leaves an event in PostgreSQL that cannot be put on sale.
 	if err := qcfg.Validate(); err != nil {
@@ -284,6 +295,7 @@ func cmdEventCreate(ctx context.Context, args []string) error {
 	defer pool.Close()
 	id, err := catalog.Create(ctx, pool, catalog.NewEvent{
 		Name: *name, SaleOpensAt: opensAt, PerUserLimit: *perUser, UnitPricePaise: *price, Capacity: *capacity,
+		VerifiedWindowEndsAt: verifiedUntil, AgentLockoutEndsAt: lockoutUntil,
 	})
 	if err != nil {
 		return err
@@ -296,6 +308,27 @@ func cmdEventCreate(ctx context.Context, args []string) error {
 		return err
 	}
 	return provisionQueue(ctx, *vk, id.String(), qcfg)
+}
+
+// windowEnd is opensAt plus d, or nil (no window) when d is zero.
+func windowEnd(opensAt time.Time, d time.Duration) *time.Time {
+	if d == 0 {
+		return nil
+	}
+	t := opensAt.Add(d)
+	return &t
+}
+
+// policyRules turns the catalog's optional window ends into queue rules.
+func policyRules(verifiedUntil, lockoutUntil *time.Time) policy.Rules {
+	var r policy.Rules
+	if verifiedUntil != nil {
+		r.VerifiedOnlyUntil = *verifiedUntil
+	}
+	if lockoutUntil != nil {
+		r.AgentLockoutUntil = *lockoutUntil
+	}
+	return r
 }
 
 func cmdInventoryProvision(ctx context.Context, args []string) error {
@@ -373,9 +406,24 @@ func provisionQueue(ctx context.Context, addrs, eventID string, cfg queue.EventC
 		fmt.Fprintf(stdout, "queue provisioned: opens %s, %d admissions/s, %d sessions of %s, state PRE\n",
 			cfg.OpensAt.UTC().Format(time.RFC3339), cfg.AdmissionRate, cfg.MaxSessions, cfg.SessionTTL)
 	} else {
-		fmt.Fprintln(stdout, "queue already provisioned with the same settings; nothing to do")
+		fmt.Fprintln(stdout, "queue already provisioned with the same settings; nothing to do but set the policy windows")
 	}
+	fmt.Fprintf(stdout, "policy: %s\n", describePolicy(cfg.Policy))
 	return nil
+}
+
+func describePolicy(r policy.Rules) string {
+	var parts []string
+	if !r.VerifiedOnlyUntil.IsZero() {
+		parts = append(parts, "verified buyers only until "+r.VerifiedOnlyUntil.UTC().Format(time.RFC3339))
+	}
+	if !r.AgentLockoutUntil.IsZero() {
+		parts = append(parts, "no agents until "+r.AgentLockoutUntil.UTC().Format(time.RFC3339))
+	}
+	if len(parts) == 0 {
+		return "no windows: anyone signed in may join"
+	}
+	return strings.Join(parts, "; ")
 }
 
 // queueFlags are the waiting-room settings, shared by event create and queue
@@ -399,8 +447,9 @@ func (q queueFlags) config(opensAt time.Time) queue.EventConfig {
 
 // cmdQueueProvision provisions an event's waiting room: for an event created
 // with --no-provision, or to put its settings back after Valkey lost them.
-// The opening time comes from PostgreSQL (the catalog) unless --opens-at is
-// given; the admission settings are not stored there, so they come from flags.
+// The opening time and the policy windows come from PostgreSQL (the catalog)
+// unless --opens-at is given, which sets no windows; the admission settings
+// are not stored there, so they come from flags.
 // Rebuilding cannot bring back who had joined: the queue lives in Valkey only.
 func cmdQueueProvision(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("queue provision", flag.ContinueOnError)
@@ -417,6 +466,7 @@ func cmdQueueProvision(ctx context.Context, args []string) error {
 		return errors.New("--event must be a UUID")
 	}
 	var opensAt time.Time
+	var rules policy.Rules
 	if *opens != "" {
 		if opensAt, err = time.Parse(time.RFC3339, *opens); err != nil {
 			return fmt.Errorf("--opens-at: %w", err)
@@ -432,8 +482,10 @@ func cmdQueueProvision(ctx context.Context, args []string) error {
 			return err
 		}
 		opensAt = e.SaleOpensAt
+		rules = policyRules(e.VerifiedWindowEndsAt, e.AgentLockoutEndsAt)
 	}
 	cfg := qf.config(opensAt)
+	cfg.Policy = rules
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
@@ -489,6 +541,7 @@ func printQueueStatus(w io.Writer, o queue.Overview) {
 		doc = fmt.Sprintf("written %s ago", o.Now.Sub(o.UpdatedAt).Round(time.Millisecond))
 	}
 	fmt.Fprintf(w, "  %-11s %s; status document %s\n", "leader", leader, doc)
+	fmt.Fprintf(w, "  %-11s %s\n", "policy", describePolicy(o.Config.Policy))
 	list := "yes"
 	if !o.OnWorkList {
 		list = "NO: no opener or admission controller serves this event"
@@ -516,9 +569,86 @@ func queueStatusJSON(o queue.Overview) any {
 		UpdatedAt      *time.Time `json:"updatedAt"`
 		OnWorkList     bool       `json:"onWorkList"`
 		Now            time.Time  `json:"now"`
+		// The policy windows; null means none.
+		VerifiedOnlyUntil *time.Time `json:"verifiedOnlyUntil"`
+		AgentLockoutUntil *time.Time `json:"agentLockoutUntil"`
 	}{o.EventID, string(o.State), string(o.StoredState), o.Config.OpensAt, o.QueueSize, o.AdmittedUpTo,
 		o.ActiveSessions, o.Config.MaxSessions, o.Config.AdmissionRate, o.Config.SessionTTL.String(),
-		o.LeaderEpoch, updated, o.OnWorkList, o.Now}
+		o.LeaderEpoch, updated, o.OnWorkList, o.Now,
+		nonZero(o.Config.Policy.VerifiedOnlyUntil), nonZero(o.Config.Policy.AgentLockoutUntil)}
+}
+
+func nonZero(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
+}
+
+// cmdFreeze is runbook RB-1's switch: inventory stops taking new holds
+// first, then the queue stops admitting. Holds already made, checkouts and
+// payments carry on. Running it again is harmless.
+func cmdFreeze(ctx context.Context, args []string) error {
+	return freezeSwitch(ctx, "freeze", args, true)
+}
+
+// cmdUnfreeze resumes the sale: holds first, so the people admitted already
+// can buy, then admissions.
+func cmdUnfreeze(ctx context.Context, args []string) error {
+	return freezeSwitch(ctx, "unfreeze", args, false)
+}
+
+func freezeSwitch(ctx context.Context, name string, args []string, frozen bool) error {
+	fs := flag.NewFlagSet(name, flag.ContinueOnError)
+	vk := valkeyFlag(fs)
+	event := fs.String("event", "", "event ID (required)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if _, err := uuid.Parse(*event); err != nil {
+		return errors.New("--event must be a UUID")
+	}
+	rdb, err := openValkey(ctx, *vk)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rdb.Close() }()
+	inv, err := inventoryService(rdb)
+	if err != nil {
+		return err
+	}
+	changed, err := inv.SetFrozen(ctx, *event, frozen)
+	if err != nil {
+		return fmt.Errorf("inventory: %w", err)
+	}
+	holds := map[bool]string{true: "holds frozen: no new holds", false: "holds resumed"}[frozen]
+	fmt.Fprintf(stdout, "inventory: %s%s\n", holds, unchangedNote(changed))
+
+	qsvc := queue.NewService(queue.NewStore(rdb))
+	if frozen {
+		changed, err = qsvc.Freeze(ctx, *event)
+	} else {
+		changed, err = qsvc.Unfreeze(ctx, *event)
+	}
+	switch {
+	case errors.Is(err, queue.ErrStateConflict):
+		// The sale's holds are switched; the queue has nothing to pause or
+		// resume (before T0, sold out or closed).
+		fmt.Fprintf(stdout, "queue: left as it is (%s)\n", strings.TrimPrefix(err.Error(), queue.ErrStateConflict.Error()+": "))
+	case err != nil:
+		return fmt.Errorf("queue: %w", err)
+	default:
+		admissions := map[bool]string{true: "FROZEN: admissions paused", false: "OPEN: admissions resumed"}[frozen]
+		fmt.Fprintf(stdout, "queue: %s%s\n", admissions, unchangedNote(changed))
+	}
+	return nil
+}
+
+func unchangedNote(changed bool) string {
+	if changed {
+		return ""
+	}
+	return " (already so)"
 }
 
 func cmdInventoryStatus(ctx context.Context, args []string) error {
@@ -541,7 +671,8 @@ func cmdInventoryStatus(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("event %s: %d of %d units available (sold out: %t)\n", a.EventID, a.Available, a.Capacity, a.SoldOut())
+	fmt.Printf("event %s: %d of %d units available (sold out: %t), %d open holds, frozen: %t\n",
+		a.EventID, a.Available, a.Capacity, a.SoldOut(), a.ActiveHolds, a.Frozen)
 	return nil
 }
 

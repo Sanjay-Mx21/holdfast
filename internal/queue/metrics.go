@@ -19,6 +19,7 @@ type Metrics struct {
 	admitted   *prometheus.CounterVec
 	terms      prometheus.Counter
 	leader     *prometheus.GaugeVec
+	invReads   *prometheus.CounterVec
 
 	// Per-event gauges, set by the event's admission leader every tick and
 	// removed when its term ends, so only the current leader reports them.
@@ -27,6 +28,7 @@ type Metrics struct {
 	sessions     *prometheus.GaugeVec
 	maxSessions  *prometheus.GaugeVec
 	epoch        *prometheus.GaugeVec
+	state        *prometheus.GaugeVec
 
 	// statusAge is set by the opener in every replica: what clients see.
 	statusAge *prometheus.GaugeVec
@@ -41,6 +43,8 @@ const (
 	joinClosed        = "closed"
 	joinNotFound      = "not_found"
 	joinInvalid       = "invalid"
+	joinAgentLockout  = "agent_lockout"
+	joinVerifiedOnly  = "verified_only"
 	joinError         = "error"
 )
 
@@ -81,6 +85,16 @@ const (
 	tickFenced   = "fenced"
 	tickError    = "error"
 )
+
+// Results of the leader's inventory reads, the values of the result label.
+const (
+	inventoryReadOK             = "ok"
+	inventoryReadNotProvisioned = "not_provisioned"
+	inventoryReadError          = "error"
+)
+
+// allStates are the values of the state label.
+var allStates = []State{StatePre, StateOpen, StateFrozen, StateSoldOut, StateClosed}
 
 // NewMetrics registers the queue metrics on reg.
 func NewMetrics(reg prometheus.Registerer) *Metrics {
@@ -132,12 +146,20 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 		Name: "holdfast_queue_leader_terms_total",
 		Help: "Admission leadership terms won by this process.",
 	})
+	m.state = promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+		Name: "holdfast_queue_state",
+		Help: "1 for the queue's current state (PRE, OPEN, FROZEN, SOLD_OUT, CLOSED), 0 for the others, as the status document shows it; set by the event's admission leader every tick. Labelled by event ID: bounded by the number of provisioned events.",
+	}, []string{"event", "state"})
+	m.invReads = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "holdfast_queue_inventory_reads_total",
+		Help: "Availability reads by admission leaders from inventory-svc, by result; on error or not_provisioned the tick admits without the units cap.",
+	}, []string{"result"})
 	m.leader = promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 		Name: "holdfast_queue_admission_leader",
 		Help: "1 while this process leads the event's admission controller. Labelled by event ID: bounded by the number of provisioned events.",
 	}, []string{"event"})
 	// Export every series from the start, at zero.
-	for _, r := range []string{joinJoined, joinAlready, joinRateLimitedIP, joinRateLimitUser, joinClosed, joinNotFound, joinInvalid, joinError} {
+	for _, r := range []string{joinJoined, joinAlready, joinRateLimitedIP, joinRateLimitUser, joinClosed, joinNotFound, joinInvalid, joinAgentLockout, joinVerifiedOnly, joinError} {
 		m.joins.WithLabelValues(r)
 	}
 	for _, r := range []string{positionRanked, positionRandomizing, positionNotInQueue, positionNotFound, positionRateLimited, positionInvalid, positionError} {
@@ -155,8 +177,13 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 	for _, r := range []string{tickAdvanced, tickIdle, tickFenced, tickError} {
 		m.ticks.WithLabelValues(r)
 	}
+	for _, r := range []string{inventoryReadOK, inventoryReadNotProvisioned, inventoryReadError} {
+		m.invReads.WithLabelValues(r)
+	}
 	return m
 }
+
+func (m *Metrics) inventoryRead(result string) { m.invReads.WithLabelValues(result).Inc() }
 
 func (m *Metrics) join(result string)     { m.joins.WithLabelValues(result).Inc() }
 func (m *Metrics) position(result string) { m.positions.WithLabelValues(result).Inc() }
@@ -179,6 +206,15 @@ func (m *Metrics) leaderTick(eventID string, a Advance) {
 	m.size.WithLabelValues(eventID).Set(float64(a.QueueSize))
 	m.admittedUpTo.WithLabelValues(eventID).Set(float64(a.AdmittedUpTo))
 	m.sessions.WithLabelValues(eventID).Set(float64(a.ActiveSessions))
+	if a.State != "" {
+		for _, s := range allStates {
+			v := 0.0
+			if s == a.State {
+				v = 1
+			}
+			m.state.WithLabelValues(eventID, string(s)).Set(v)
+		}
+	}
 }
 
 // leaderTerm starts or ends this process's view of an event's leadership.
@@ -194,4 +230,5 @@ func (m *Metrics) leaderTerm(eventID string, epoch int64, maxSessions int, leadi
 	for _, g := range []*prometheus.GaugeVec{m.size, m.admittedUpTo, m.sessions, m.maxSessions, m.epoch} {
 		g.DeleteLabelValues(eventID)
 	}
+	m.state.DeletePartialMatch(prometheus.Labels{"event": eventID})
 }

@@ -26,6 +26,7 @@ type fakeService struct {
 	cancel    func(ctx context.Context, eventID, userID, holdID string) error
 	avail     func(ctx context.Context, eventID string) (Availability, error)
 	provision func(ctx context.Context, eventID string, cfg EventConfig) (bool, error)
+	freeze    func(ctx context.Context, eventID string, frozen bool) (bool, error)
 }
 
 func (f *fakeService) CreateHold(ctx context.Context, r CreateHoldRequest) (HoldResult, error) {
@@ -42,6 +43,9 @@ func (f *fakeService) Availability(ctx context.Context, e string) (Availability,
 }
 func (f *fakeService) Provision(ctx context.Context, e string, c EventConfig) (bool, error) {
 	return f.provision(ctx, e, c)
+}
+func (f *fakeService) SetFrozen(ctx context.Context, e string, frozen bool) (bool, error) {
+	return f.freeze(ctx, e, frozen)
 }
 
 type harness struct{ public, internal *httpx.Router }
@@ -170,6 +174,7 @@ func TestDomainErrorsMapToStableProblemCodes(t *testing.T) {
 		{"not provisioned", ErrEventNotProvisioned, 404, "EVENT_NOT_FOUND"},
 		{"key reused", ErrIdempotencyKeyReused, 422, "IDEMPOTENCY_KEY_REUSED"},
 		{"hold expired", ErrHoldExpired, 409, "HOLD_EXPIRED"},
+		{"sale paused", ErrSalePaused, 503, "SALE_PAUSED"},
 		{"valkey closed", fmt.Errorf("inventory: hold: %w", redis.ErrClosed), 503, "UNAVAILABLE"},
 		{"deadline", fmt.Errorf("inventory: hold: %w", context.DeadlineExceeded), 503, "UNAVAILABLE"},
 		{"network", &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}, 503, "UNAVAILABLE"},
@@ -187,8 +192,9 @@ func TestDomainErrorsMapToStableProblemCodes(t *testing.T) {
 			if rec.Code != tc.status || problemCode(t, rec) != tc.code {
 				t.Fatalf("got %d %s", rec.Code, rec.Body.String())
 			}
-			if tc.status == 503 && rec.Header().Get("Retry-After") != "1" {
-				t.Fatal("503 must tell clients when to retry")
+			wantRetry := map[string]string{"UNAVAILABLE": "1", "SALE_PAUSED": "10"}[tc.code]
+			if tc.status == 503 && rec.Header().Get("Retry-After") != wantRetry {
+				t.Fatalf("503 must tell clients when to retry: Retry-After %q, want %q", rec.Header().Get("Retry-After"), wantRetry)
 			}
 			if tc.code == "INVALID_QUANTITY" && !strings.Contains(rec.Body.String(), `"detail":"quantity must be between 1 and 4 for this event"`) {
 				t.Fatalf("detail should be client-friendly: %s", rec.Body.String())
@@ -254,5 +260,37 @@ func TestProvisionLivesOnlyOnTheInternalRouter(t *testing.T) {
 		if rec := do(h.public, http.MethodPut, "/internal/v1/events/"+ev+"/inventory", `{"capacity":1000,"perUserLimit":4}`, nil); rec.Code != http.StatusNotFound {
 			t.Fatalf("operator route must not exist on the public router, got %d", rec.Code)
 		}
+	}
+}
+
+func TestFreezeLivesOnlyOnTheInternalRouter(t *testing.T) {
+	ev := uuid.NewString()
+	var calls []bool
+	h := newHarness(&fakeService{freeze: func(_ context.Context, e string, frozen bool) (bool, error) {
+		if e != ev {
+			t.Fatalf("event %q", e)
+		}
+		calls = append(calls, frozen)
+		return true, nil
+	}})
+	for _, tc := range []struct {
+		path   string
+		frozen bool
+	}{{"freeze", true}, {"unfreeze", false}} {
+		rec := do(h.internal, http.MethodPost, "/internal/v1/events/"+ev+"/"+tc.path, "", nil)
+		want := fmt.Sprintf(`"frozen":%t`, tc.frozen)
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), want) || !strings.Contains(rec.Body.String(), `"changed":true`) {
+			t.Fatalf("%s: %d %s", tc.path, rec.Code, rec.Body.String())
+		}
+		if rec := do(h.public, http.MethodPost, "/internal/v1/events/"+ev+"/"+tc.path, "", nil); rec.Code != http.StatusNotFound {
+			t.Fatalf("%s must not exist on the public router, got %d", tc.path, rec.Code)
+		}
+	}
+	if len(calls) != 2 || !calls[0] || calls[1] {
+		t.Fatalf("calls %v, want [true false]", calls)
+	}
+	h = newHarness(&fakeService{freeze: func(context.Context, string, bool) (bool, error) { return false, ErrEventNotProvisioned }})
+	if rec := do(h.internal, http.MethodPost, "/internal/v1/events/"+ev+"/freeze", "", nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown event: got %d", rec.Code)
 	}
 }

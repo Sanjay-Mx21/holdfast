@@ -28,9 +28,9 @@ func (f *fixture) openQueueWith(t *testing.T, n int, maxSessions int) {
 	cfg.OpensAt = time.Now().Add(-time.Minute)
 	cfg.MaxSessions = maxSessions
 	k := keysFor(f.eventID)
-	code, err := provisionScript.Run(ctx, f.rdb, []string{k.config(), k.state()},
-		cfg.OpensAt.UnixMilli(), cfg.AdmissionRate, cfg.MaxSessions, cfg.SessionTTL.Milliseconds()).Int64()
-	if err != nil || code != 1 {
+	code, err := provisionScript.Run(ctx, f.rdb, []string{k.config(), k.state(), k.policy()},
+		cfg.OpensAt.UnixMilli(), cfg.AdmissionRate, cfg.MaxSessions, cfg.SessionTTL.Milliseconds(), 0, 0).Int64()
+	if err != nil || code < 0 {
 		t.Fatalf("provision: %d %v", code, err)
 	}
 	members := make([]redis.Z, n)
@@ -428,7 +428,7 @@ func TestStatusFallbackBeforeAnyLeader(t *testing.T) {
 	opensAt := time.Now().Add(time.Hour).Truncate(time.Millisecond)
 	f.provisionAt(t, opensAt)
 	for range 3 {
-		if _, err := f.svc.Join(ctx, f.eventID, uuid.NewString()); err != nil {
+		if _, err := f.svc.Join(ctx, f.eventID, uuid.NewString(), anyone); err != nil {
 			t.Fatal(err)
 		}
 	}

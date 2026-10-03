@@ -23,13 +23,15 @@ const (
 	InventoryService_MarkPaying_FullMethodName              = "/holdfast.inventory.v1.InventoryService/MarkPaying"
 	InventoryService_Confirm_FullMethodName                 = "/holdfast.inventory.v1.InventoryService/Confirm"
 	InventoryService_ReleaseForFailedPayment_FullMethodName = "/holdfast.inventory.v1.InventoryService/ReleaseForFailedPayment"
+	InventoryService_GetAvailability_FullMethodName         = "/holdfast.inventory.v1.InventoryService/GetAvailability"
 )
 
 // InventoryServiceClient is the client API for InventoryService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// InventoryService is inventory-svc's internal API, for booking-svc. It is
+// InventoryService is inventory-svc's internal API, for booking-svc and
+// queue-svc. It is
 // served on the internal network only and wraps the same service layer as the
 // public HTTP API, so every rule has one implementation.
 //
@@ -54,6 +56,11 @@ type InventoryServiceClient interface {
 	// ReleaseForFailedPayment returns a hold's units after a definitive payment
 	// failure. Releasing a hold that is already released succeeds.
 	ReleaseForFailedPayment(ctx context.Context, in *ReleaseForFailedPaymentRequest, opts ...grpc.CallOption) (*ReleaseForFailedPaymentResponse, error)
+	// GetAvailability returns an event's units left and its open holds, for
+	// queue-svc's admission controller: it admits at most the units left times
+	// an oversubscription factor, and marks the queue SOLD_OUT once no units
+	// are left and no open hold can return any.
+	GetAvailability(ctx context.Context, in *GetAvailabilityRequest, opts ...grpc.CallOption) (*GetAvailabilityResponse, error)
 }
 
 type inventoryServiceClient struct {
@@ -104,11 +111,22 @@ func (c *inventoryServiceClient) ReleaseForFailedPayment(ctx context.Context, in
 	return out, nil
 }
 
+func (c *inventoryServiceClient) GetAvailability(ctx context.Context, in *GetAvailabilityRequest, opts ...grpc.CallOption) (*GetAvailabilityResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetAvailabilityResponse)
+	err := c.cc.Invoke(ctx, InventoryService_GetAvailability_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // InventoryServiceServer is the server API for InventoryService service.
 // All implementations must embed UnimplementedInventoryServiceServer
 // for forward compatibility.
 //
-// InventoryService is inventory-svc's internal API, for booking-svc. It is
+// InventoryService is inventory-svc's internal API, for booking-svc and
+// queue-svc. It is
 // served on the internal network only and wraps the same service layer as the
 // public HTTP API, so every rule has one implementation.
 //
@@ -133,6 +151,11 @@ type InventoryServiceServer interface {
 	// ReleaseForFailedPayment returns a hold's units after a definitive payment
 	// failure. Releasing a hold that is already released succeeds.
 	ReleaseForFailedPayment(context.Context, *ReleaseForFailedPaymentRequest) (*ReleaseForFailedPaymentResponse, error)
+	// GetAvailability returns an event's units left and its open holds, for
+	// queue-svc's admission controller: it admits at most the units left times
+	// an oversubscription factor, and marks the queue SOLD_OUT once no units
+	// are left and no open hold can return any.
+	GetAvailability(context.Context, *GetAvailabilityRequest) (*GetAvailabilityResponse, error)
 	mustEmbedUnimplementedInventoryServiceServer()
 }
 
@@ -154,6 +177,9 @@ func (UnimplementedInventoryServiceServer) Confirm(context.Context, *ConfirmRequ
 }
 func (UnimplementedInventoryServiceServer) ReleaseForFailedPayment(context.Context, *ReleaseForFailedPaymentRequest) (*ReleaseForFailedPaymentResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReleaseForFailedPayment not implemented")
+}
+func (UnimplementedInventoryServiceServer) GetAvailability(context.Context, *GetAvailabilityRequest) (*GetAvailabilityResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetAvailability not implemented")
 }
 func (UnimplementedInventoryServiceServer) mustEmbedUnimplementedInventoryServiceServer() {}
 func (UnimplementedInventoryServiceServer) testEmbeddedByValue()                          {}
@@ -248,6 +274,24 @@ func _InventoryService_ReleaseForFailedPayment_Handler(srv interface{}, ctx cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _InventoryService_GetAvailability_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetAvailabilityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(InventoryServiceServer).GetAvailability(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: InventoryService_GetAvailability_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(InventoryServiceServer).GetAvailability(ctx, req.(*GetAvailabilityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // InventoryService_ServiceDesc is the grpc.ServiceDesc for InventoryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -270,6 +314,10 @@ var InventoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReleaseForFailedPayment",
 			Handler:    _InventoryService_ReleaseForFailedPayment_Handler,
+		},
+		{
+			MethodName: "GetAvailability",
+			Handler:    _InventoryService_GetAvailability_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

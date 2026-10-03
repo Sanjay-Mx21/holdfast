@@ -71,6 +71,7 @@ type Session struct {
 	RefreshToken   string // opaque; goes in an httpOnly cookie, never in a body
 	RefreshExpires time.Time
 	NewUser        bool
+	Verified       bool // the phone is verified: always, after a code sign-in
 }
 
 // Service signs users in.
@@ -184,7 +185,8 @@ func (s *Service) VerifyOTP(ctx context.Context, rawPhone, code string) (Session
 		if err != nil {
 			return err
 		}
-		sess.UserID, sess.Role, sess.NewUser = u.ID, u.Role, !u.PhoneVerifiedAt.Valid || u.CreatedAt.Equal(u.PhoneVerifiedAt.Time)
+		sess.UserID, sess.Role, sess.Verified = u.ID, u.Role, u.PhoneVerifiedAt.Valid
+		sess.NewUser = !u.PhoneVerifiedAt.Valid || u.CreatedAt.Equal(u.PhoneVerifiedAt.Time)
 		return s.startRefresh(ctx, q, &sess, uuid.Must(uuid.NewV7()))
 	})
 	if errors.Is(err, ErrInvalidCode) {
@@ -228,7 +230,7 @@ func (s *Service) Refresh(ctx context.Context, raw string) (Session, error) {
 		if err != nil {
 			return err
 		}
-		sess.UserID, sess.Role = u.ID, u.Role
+		sess.UserID, sess.Role, sess.Verified = u.ID, u.Role, u.PhoneVerifiedAt.Valid
 		return s.storeRefresh(ctx, q, &sess, row.FamilyID, next)
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -306,7 +308,7 @@ func (s *Service) storeRefresh(ctx context.Context, q *authdb.Queries, sess *Ses
 }
 
 func (s *Service) issueAccess(sess *Session) error {
-	tok, exp, err := s.access.Issue(sess.UserID.String(), sess.Role)
+	tok, exp, err := s.access.Issue(sess.UserID.String(), sess.Role, sess.Verified)
 	if err != nil {
 		return err
 	}

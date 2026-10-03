@@ -4,7 +4,8 @@ package holdfast.inventory.v1;
 
 import "google/protobuf/timestamp.proto";
 
-// InventoryService is inventory-svc's internal API, for booking-svc. It is
+// InventoryService is inventory-svc's internal API, for booking-svc and
+// queue-svc. It is
 // served on the internal network only and wraps the same service layer as the
 // public HTTP API, so every rule has one implementation.
 //
@@ -32,6 +33,12 @@ service InventoryService {
   // ReleaseForFailedPayment returns a hold's units after a definitive payment
   // failure. Releasing a hold that is already released succeeds.
   rpc ReleaseForFailedPayment(ReleaseForFailedPaymentRequest) returns (ReleaseForFailedPaymentResponse);
+
+  // GetAvailability returns an event's units left and its open holds, for
+  // queue-svc's admission controller: it admits at most the units left times
+  // an oversubscription factor, and marks the queue SOLD_OUT once no units
+  // are left and no open hold can return any.
+  rpc GetAvailability(GetAvailabilityRequest) returns (GetAvailabilityResponse);
 }
 
 // HoldRef identifies a hold. All three IDs are UUIDs.
@@ -107,4 +114,20 @@ message ReleaseForFailedPaymentRequest {
 message ReleaseForFailedPaymentResponse {
   // released is false when the hold was already released or sold.
   bool released = 1;
+}
+
+message GetAvailabilityRequest {
+  string event_id = 1;
+}
+
+message GetAvailabilityResponse {
+  // available is the units neither held nor sold. Late confirmations can
+  // push it below zero.
+  int64 available = 1;
+  int64 capacity = 2;
+  // active_holds counts holds that are HELD or PAYING, including expired
+  // ones not released yet: holds that may still return units.
+  int64 active_holds = 3;
+  // frozen says the sale is frozen (runbook RB-1): no new holds.
+  bool frozen = 4;
 }

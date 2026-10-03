@@ -17,16 +17,19 @@ import (
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/httpx"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/logging"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/ratelimit"
+	"github.com/Sanjay-Mx21/holdfast/internal/policy"
 )
 
 // service is what the HTTP layer needs from *Service. Depending on this
 // interface keeps handlers unit-testable without Valkey.
 type service interface {
 	Provision(ctx context.Context, eventID string, cfg EventConfig) (bool, error)
-	Join(ctx context.Context, eventID, userID string) (JoinResult, error)
+	Join(ctx context.Context, eventID, userID string, buyer policy.Buyer) (JoinResult, error)
 	Position(ctx context.Context, eventID, userID string) (Position, error)
 	Status(ctx context.Context, eventID string) (Status, error)
 	Admit(ctx context.Context, eventID, userID string) (Turn, error)
+	Freeze(ctx context.Context, eventID string) (bool, error)
+	Unfreeze(ctx context.Context, eventID string) (bool, error)
 }
 
 // tokenIssuer signs admission tokens (*authn.Issuer).
@@ -95,6 +98,8 @@ func (h *Handler) Register(public, internal *httpx.Router, identity, operator ht
 	public.Handle("POST /v1/queue/{eventID}/admit", identity(http.HandlerFunc(h.admit)))
 	public.Handle("GET /.well-known/jwks.json", http.HandlerFunc(h.publishKeys))
 	internal.Handle("PUT /internal/v1/events/{eventID}/queue", operator(http.HandlerFunc(h.provision)))
+	internal.Handle("POST /internal/v1/events/{eventID}/freeze", operator(h.freezeSwitch(StateFrozen)))
+	internal.Handle("POST /internal/v1/events/{eventID}/unfreeze", operator(h.freezeSwitch(StateOpen)))
 }
 
 type joinResponse struct {
@@ -115,7 +120,7 @@ func (h *Handler) join(w http.ResponseWriter, r *http.Request) {
 		!h.allow(w, r, scopeJoinUser, user, h.limits.JoinPerUser, h.m.join, joinRateLimitUser) {
 		return
 	}
-	res, err := h.svc.Join(r.Context(), r.PathValue("eventID"), user)
+	res, err := h.svc.Join(r.Context(), r.PathValue("eventID"), user, buyerOf(r.Context()))
 	if err != nil {
 		h.m.join(joinResultOf(err))
 		writeError(w, r, err)
@@ -131,6 +136,17 @@ func (h *Handler) join(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	httpx.WriteJSON(w, http.StatusAccepted, joinResponse{EventID: res.EventID, Joined: res.Joined, Ordering: res.Ordering})
+}
+
+// buyerOf is what the policy windows need to know about the caller: their
+// role and whether their identity is verified, from their access token. A
+// caller identified by the development header has neither, so they are
+// treated as an unverified buyer.
+func buyerOf(ctx context.Context) policy.Buyer {
+	if c, ok := authn.AccessFrom(ctx); ok {
+		return policy.Buyer{Role: c.Role, Verified: c.Verified}
+	}
+	return policy.Buyer{}
 }
 
 type positionResponse struct {
@@ -349,6 +365,13 @@ func lastForwardedFor(r *http.Request) (netip.Addr, bool) {
 }
 
 func joinResultOf(err error) string {
+	var refused *policy.Refused
+	if errors.As(err, &refused) {
+		if refused.Reason == policy.ReasonAgentLockout {
+			return joinAgentLockout
+		}
+		return joinVerifiedOnly
+	}
 	switch {
 	case errors.Is(err, ErrQueueClosed):
 		return joinClosed
@@ -366,6 +389,16 @@ type provisionRequest struct {
 	AdmissionRatePerSecond int       `json:"admissionRatePerSecond"`
 	MaxSessions            int       `json:"maxSessions"`
 	SessionTTLSeconds      int       `json:"sessionTtlSeconds"`
+	// The policy windows, optional: absent means no window.
+	VerifiedOnlyUntil *time.Time `json:"verifiedOnlyUntil"`
+	AgentLockoutUntil *time.Time `json:"agentLockoutUntil"`
+}
+
+func timeOrZero(t *time.Time) time.Time {
+	if t == nil {
+		return time.Time{}
+	}
+	return *t
 }
 
 func (h *Handler) provision(w http.ResponseWriter, r *http.Request) {
@@ -380,6 +413,10 @@ func (h *Handler) provision(w http.ResponseWriter, r *http.Request) {
 		AdmissionRate: body.AdmissionRatePerSecond,
 		MaxSessions:   body.MaxSessions,
 		SessionTTL:    time.Duration(body.SessionTTLSeconds) * time.Second,
+		Policy: policy.Rules{
+			VerifiedOnlyUntil: timeOrZero(body.VerifiedOnlyUntil),
+			AgentLockoutUntil: timeOrZero(body.AgentLockoutUntil),
+		},
 	}
 	created, err := h.svc.Provision(r.Context(), eventID, cfg)
 	if err != nil {
@@ -388,7 +425,8 @@ func (h *Handler) provision(w http.ResponseWriter, r *http.Request) {
 	}
 	logging.FromContext(r.Context()).Info("queue provisioned",
 		"event_id", eventID, "opens_at", cfg.OpensAt, "admission_rate", cfg.AdmissionRate,
-		"max_sessions", cfg.MaxSessions, "session_ttl", cfg.SessionTTL, "created", created)
+		"max_sessions", cfg.MaxSessions, "session_ttl", cfg.SessionTTL,
+		"verified_only_until", cfg.Policy.VerifiedOnlyUntil, "agent_lockout_until", cfg.Policy.AgentLockoutUntil, "created", created)
 	status := http.StatusOK
 	if created {
 		status = http.StatusCreated
@@ -396,16 +434,46 @@ func (h *Handler) provision(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, status, map[string]any{"eventId": strings.ToLower(eventID), "created": created})
 }
 
+// freezeSwitch serves the freeze switch (runbook RB-1): to FROZEN pauses
+// admissions, to OPEN resumes them. It is half of the switch: inventory-svc's
+// admin endpoint stops new holds, and holdfastctl freeze does both.
+func (h *Handler) freezeSwitch(to State) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		eventID := r.PathValue("eventID")
+		var changed bool
+		var err error
+		if to == StateFrozen {
+			changed, err = h.svc.Freeze(r.Context(), eventID)
+		} else {
+			changed, err = h.svc.Unfreeze(r.Context(), eventID)
+		}
+		if err != nil {
+			writeError(w, r, err)
+			return
+		}
+		logging.FromContext(r.Context()).Info("queue freeze switched", "event_id", eventID, "state", to, "changed", changed)
+		httpx.WriteJSON(w, http.StatusOK, map[string]any{"eventId": strings.ToLower(eventID), "state": to, "changed": changed})
+	})
+}
+
 // writeError maps domain errors to problem responses. Anything unexpected is
 // logged with the request ID and reported as a generic 500.
 func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	var p *httpx.Problem
+	var refused *policy.Refused
 	switch {
 	case errors.As(err, &p):
+	case errors.As(err, &refused):
+		// 403 with the reason as the code: the buyer may join later, from
+		// the time in Retry-After (and in the detail).
+		p = httpx.NewProblem(http.StatusForbidden, refused.Reason, refused.Error())
+		p.RetryAfter = max(1, int(math.Ceil(time.Until(refused.Until).Seconds())))
 	case errors.Is(err, ErrInvalidRequest):
 		p = httpx.BadRequest("INVALID_REQUEST", strings.TrimPrefix(err.Error(), ErrInvalidRequest.Error()+": "))
 	case errors.Is(err, ErrProvisionConflict):
 		p = httpx.Conflict("PROVISION_CONFLICT", "queue already provisioned with different settings; see the queue runbook")
+	case errors.Is(err, ErrStateConflict):
+		p = httpx.Conflict("STATE_CONFLICT", strings.TrimPrefix(err.Error(), ErrStateConflict.Error()+": "))
 	case errors.Is(err, ErrEventNotFound):
 		p = httpx.NotFound("EVENT_NOT_FOUND", "this event has no waiting room")
 	case errors.Is(err, ErrQueueClosed):

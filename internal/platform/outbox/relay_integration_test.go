@@ -211,12 +211,21 @@ func TestOnlyOneRelayLeads(t *testing.T) {
 		t.Fatal("two relays lead at once")
 	}
 	insert(t, pool, schema, "t", uuid.New(), "{}")
-	waitFor(t, "a to publish", func() bool { return pubA.count() == 1 })
+	// Wait for a's pass to commit, not just to publish: a relay stopped
+	// between publishing and committing leaves the row for the next leader,
+	// which publishes it again (at least once, by design).
+	waitFor(t, "a to publish and commit", func() bool { return pubA.count() == 1 && unpublished(t, pool, schema) == 0 })
 
 	stopA()
 	waitFor(t, "b to take over", func() bool { return gauge(t, regB, "holdfast_outbox_relay_leader") == 1 })
-	insert(t, pool, schema, "t", uuid.New(), "{}")
+	second := insert(t, pool, schema, "t", uuid.New(), "{}")
 	waitFor(t, "b to publish", func() bool { return pubB.count() == 1 })
+	pubB.mu.Lock()
+	got := pubB.events[0].ID
+	pubB.mu.Unlock()
+	if got != second.String() {
+		t.Fatalf("b published %s, want the new event %s", got, second)
+	}
 	if pubA.count() != 1 {
 		t.Fatal("the stopped relay kept publishing")
 	}

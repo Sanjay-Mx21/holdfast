@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+
+	"github.com/Sanjay-Mx21/holdfast/internal/policy"
 )
 
 //go:embed scripts/*.lua
@@ -31,8 +33,13 @@ var (
 	advanceScript   = loadScript("advance.lua")
 	statusScript    = loadScript("status.lua")
 	admitScript     = loadScript("admit.lua")
+	stateScript     = loadScript("state.lua")
+	soldOutScript   = loadScript("soldout.lua")
 
-	allScripts = []*redis.Script{provisionScript, joinScript, openScript, positionScript, advanceScript, statusScript, admitScript}
+	allScripts = []*redis.Script{
+		provisionScript, joinScript, openScript, positionScript, advanceScript, statusScript, admitScript,
+		stateScript, soldOutScript,
+	}
 )
 
 // Store is the Valkey-backed state of the waiting room. It runs the atomic
@@ -58,11 +65,13 @@ func (s *Store) LoadScripts(ctx context.Context) error {
 }
 
 // Provision stores an event's queue settings exactly once and puts the queue
-// in state PRE. It reports whether this call created them.
+// in state PRE; it sets the policy windows on every accepted call. It
+// reports whether this call created the settings.
 func (s *Store) Provision(ctx context.Context, eventID string, cfg EventConfig) (bool, error) {
 	k := keysFor(eventID)
-	code, err := provisionScript.Run(ctx, s.rdb, []string{k.config(), k.state()},
-		cfg.OpensAt.UnixMilli(), cfg.AdmissionRate, cfg.MaxSessions, cfg.SessionTTL.Milliseconds()).Int64()
+	code, err := provisionScript.Run(ctx, s.rdb, []string{k.config(), k.state(), k.policy()},
+		cfg.OpensAt.UnixMilli(), cfg.AdmissionRate, cfg.MaxSessions, cfg.SessionTTL.Milliseconds(),
+		unixMilliOrZero(cfg.Policy.VerifiedOnlyUntil), unixMilliOrZero(cfg.Policy.AgentLockoutUntil)).Int64()
 	if err != nil {
 		return false, fmt.Errorf("queue: provision: %w", err)
 	}
@@ -75,6 +84,33 @@ func (s *Store) Provision(ctx context.Context, eventID string, cfg EventConfig) 
 		return false, fmt.Errorf("queue: register event: %w", err)
 	}
 	return code == 1, nil
+}
+
+// Policy reads the event's policy windows. An event provisioned without any,
+// or not provisioned at all, has none.
+func (s *Store) Policy(ctx context.Context, eventID string) (policy.Rules, error) {
+	vals, err := s.rdb.HMGet(ctx, keysFor(eventID).policy(), "verified_only_until_ms", "agent_lockout_until_ms").Result()
+	if err != nil {
+		return policy.Rules{}, fmt.Errorf("queue: read policy: %w", err)
+	}
+	return policy.Rules{VerifiedOnlyUntil: msTime(vals[0]), AgentLockoutUntil: msTime(vals[1])}, nil
+}
+
+func unixMilliOrZero(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return t.UnixMilli()
+}
+
+// msTime parses a stored millisecond time; "0" or nothing is the zero time.
+func msTime(v any) time.Time {
+	raw, _ := v.(string)
+	ms, _ := strconv.ParseInt(raw, 10, 64)
+	if ms <= 0 {
+		return time.Time{}
+	}
+	return time.UnixMilli(ms).UTC()
 }
 
 // joinOutcome is what join.lua reports for one join.
@@ -173,23 +209,73 @@ func (s *Store) NewTerm(ctx context.Context, eventID string) (int64, error) {
 // n more people, within the session budget. A caller whose epoch is no
 // longer current gets ErrFenced and must stop leading.
 func (s *Store) Advance(ctx context.Context, eventID string, epoch int64, n int) (Advance, error) {
+	return s.AdvanceWithin(ctx, eventID, epoch, n, -1)
+}
+
+// AdvanceWithin is Advance with a second cap on open sessions, from the
+// units left (P17): active sessions never exceed unitsCap. -1 means no such
+// cap.
+func (s *Store) AdvanceWithin(ctx context.Context, eventID string, epoch int64, n, unitsCap int) (Advance, error) {
 	k := keysFor(eventID)
 	res, err := advanceScript.Run(ctx, s.rdb,
 		[]string{k.epoch(), k.state(), k.config(), k.members(), k.admitted(), k.sessions(), k.status()},
-		epoch, n).Int64Slice()
+		epoch, n, unitsCap).Slice()
 	if err != nil {
 		return Advance{}, fmt.Errorf("queue: advance: %w", err)
 	}
-	if len(res) != 5 {
+	if len(res) != 6 {
 		return Advance{}, fmt.Errorf("queue: advance: unexpected reply %v", res)
 	}
-	switch res[0] {
+	var nums [5]int64
+	for i := range nums {
+		nums[i], _ = res[i].(int64)
+	}
+	switch nums[0] {
 	case -1:
 		return Advance{}, ErrFenced
 	case -2:
 		return Advance{}, ErrEventNotFound
 	}
-	return Advance{AdmittedUpTo: res[1], Admitted: res[2], ActiveSessions: res[3], QueueSize: res[4]}, nil
+	state, _ := res[5].(string)
+	return Advance{AdmittedUpTo: nums[1], Admitted: nums[2], ActiveSessions: nums[3], QueueSize: nums[4], State: State(state)}, nil
+}
+
+// MarkSoldOut is the leader's sold-out transition: an OPEN queue becomes
+// SOLD_OUT. It reports whether this call marked it; a queue in any other
+// state (sold out already, frozen, closed) is left alone. A caller whose
+// epoch is no longer current gets ErrFenced.
+func (s *Store) MarkSoldOut(ctx context.Context, eventID string, epoch int64) (bool, error) {
+	k := keysFor(eventID)
+	code, err := soldOutScript.Run(ctx, s.rdb, []string{k.epoch(), k.state()}, epoch).Int64()
+	if err != nil {
+		return false, fmt.Errorf("queue: mark sold out: %w", err)
+	}
+	if code == -1 {
+		return false, ErrFenced
+	}
+	return code == 1, nil
+}
+
+// Transition moves the queue from one state to another (the freeze switch).
+// It reports whether this call moved it: a queue already in the target state
+// is not an error, a queue in any other state is ErrStateConflict.
+func (s *Store) Transition(ctx context.Context, eventID string, from, to State) (bool, error) {
+	res, err := stateScript.Run(ctx, s.rdb, []string{keysFor(eventID).state()}, string(from), string(to)).Slice()
+	if err != nil {
+		return false, fmt.Errorf("queue: change state: %w", err)
+	}
+	if len(res) != 2 {
+		return false, fmt.Errorf("queue: change state: unexpected reply %v", res)
+	}
+	code, _ := res[0].(int64)
+	state, _ := res[1].(string)
+	switch code {
+	case -2:
+		return false, ErrEventNotFound
+	case -1:
+		return false, fmt.Errorf("%w: it is %s, and only a queue in state %s can become %s", ErrStateConflict, state, from, to)
+	}
+	return code == 1, nil
 }
 
 // Status reads the event's status document, or a fallback built from the
@@ -280,6 +366,7 @@ func (s *Store) Overview(ctx context.Context, eventID string) (Overview, error) 
 	k := keysFor(eventID)
 	pipe := s.rdb.Pipeline()
 	cfgCmd := pipe.HMGet(ctx, k.config(), "opens_at_ms", "admission_rate", "max_sessions", "session_ttl_ms")
+	policyCmd := pipe.HMGet(ctx, k.policy(), "verified_only_until_ms", "agent_lockout_until_ms")
 	stateCmd := pipe.Get(ctx, k.state())
 	epochCmd := pipe.Get(ctx, k.epoch())
 	listedCmd := pipe.SIsMember(ctx, eventsKey, eventID)
@@ -302,10 +389,12 @@ func (s *Store) Overview(ctx context.Context, eventID string) (Overview, error) 
 		return Overview{}, fmt.Errorf("queue: overview: %w", err)
 	}
 	epoch, _ := strconv.ParseInt(epochCmd.Val(), 10, 64)
+	pol := policyCmd.Val()
 	return Overview{
 		Config: EventConfig{
 			OpensAt: time.UnixMilli(num(0)).UTC(), AdmissionRate: int(num(1)),
 			MaxSessions: int(num(2)), SessionTTL: time.Duration(num(3)) * time.Millisecond,
+			Policy: policy.Rules{VerifiedOnlyUntil: msTime(pol[0]), AgentLockoutUntil: msTime(pol[1])},
 		},
 		StoredState: State(stateCmd.Val()), LeaderEpoch: epoch, ActiveSessions: live,
 		OnWorkList: listedCmd.Val(), Now: now.UTC(),
@@ -320,7 +409,7 @@ func (s *Store) Purge(ctx context.Context, eventID string) error {
 		return fmt.Errorf("queue: purge: %w", err)
 	}
 	k := keysFor(eventID)
-	if err := s.rdb.Unlink(ctx, k.config(), k.state(), k.members(), k.seq(), k.admitted(), k.status(), k.epoch(), k.sessions()).Err(); err != nil {
+	if err := s.rdb.Unlink(ctx, k.config(), k.state(), k.members(), k.seq(), k.admitted(), k.status(), k.policy(), k.epoch(), k.sessions()).Err(); err != nil {
 		return fmt.Errorf("queue: purge: %w", err)
 	}
 	return nil

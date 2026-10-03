@@ -36,6 +36,7 @@ import (
 
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/config"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/valkey"
+	"github.com/Sanjay-Mx21/holdfast/internal/policy"
 	"github.com/Sanjay-Mx21/holdfast/internal/queue"
 	"github.com/Sanjay-Mx21/holdfast/internal/stats"
 )
@@ -169,7 +170,7 @@ func run(ctx context.Context, o options) (*Report, error) {
 
 	join := func(j *joiner) {
 		j.sentAt = time.Now()
-		res, err := svc.Join(ctx, eventID, j.user)
+		res, err := svc.Join(ctx, eventID, j.user, policy.Buyer{})
 		j.latency = time.Since(j.sentAt)
 		j.ordering, j.err = res.Ordering, err
 	}

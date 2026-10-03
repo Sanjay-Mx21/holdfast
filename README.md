@@ -43,9 +43,16 @@ sells exactly 1,000 (never 1,001) and stays up while doing it.
   (through a mock SMS gateway). It issues short-lived EdDSA access tokens
   and rotating refresh tokens whose reuse revokes the whole login, and it
   never stores a phone number, code or token in the clear.
+- **Sale policies** (Phase 4): an event may open to verified buyers only for
+  its first minutes and keep agents out for longer, as IRCTC does for
+  Tatkal. Admission follows the units left (about 1.3 sessions per unit), so
+  thousands are not let in to fight over the last few, and the queue says
+  `SOLD_OUT` once the last unit is sold. A **freeze switch** stops new holds
+  and admissions at once while purchases in flight finish (runbook RB-1).
 - **holdfastctl** runs migrations, generates dev keys and tokens, creates
-  events, provisions their inventory and queue, rebuilds inventory, and shows
-  an event's availability and waiting room (`queue status`).
+  events, provisions their inventory and queue, rebuilds inventory, shows an
+  event's availability and waiting room (`queue status`), and freezes or
+  unfreezes a sale.
 - **Experiment E1** (`cmd/contention`) fires 50,000 concurrent buyers at 1,000
   units and fails unless exactly 1,000 holds are granted. Its part B runs
   whole purchases (holds, bookings, payments with 10% failing, the saga) and
@@ -85,10 +92,17 @@ curl -s -X POST $EDGE/v1/bookings -H "Authorization: Bearer $ME" \
   -H "Idempotency-Key: booking-$(date +%s)" \
   -H 'Content-Type: application/json' -d "{\"eventId\":\"$EVENT\",\"holdId\":\"$HOLD\"}"   # book it
 
+go run ./cmd/holdfastctl freeze --event $EVENT     # runbook RB-1: no new holds, admissions paused
+go run ./cmd/holdfastctl unfreeze --event $EVENT
+
 make e1                                          # contention experiment against the local stack
 make fairness-e6                                 # fairness of the queue order (E6)
 make load-e2                                     # k6 stampede on the waiting room through the edge (E2)
 ```
+
+`holdfastctl event create` takes `--verified-only-for 15m` and
+`--agent-lockout-for 30m` to open a sale to verified buyers first and keep
+agents out (both off by default; `docs/services/queue.md`).
 
 `make -s token EVENT=$EVENT` still mints an admission token directly,
 bypassing the waiting room, for development and load tests. Starting the
@@ -133,9 +147,9 @@ docs/                  architecture, service reference, runbooks, ADRs, design
 scripts/               repository checks
 ```
 
-Next drops, following the design doc: `auth`, sale policies and the web
-client (Phase 4); then chaos drills, the reconciler, load tests and
-benchmarks (Phases 5-7).
+Next drops, following the design doc: the rest of Phase 4 (proof of work,
+the web client, the mission-control dashboard); then chaos drills, the
+reconciler, load tests and benchmarks (Phases 5-7).
 
 ## Testing
 
@@ -172,7 +186,8 @@ failure with `HOLDFAST_TEST_SEED=<seed>`.
 | `GET /v1/events/{eventID}/status` | Public (queue-svc) | The shared status document (cacheable for 1 s) |
 | `POST /v1/queue/{eventID}/admit` | Access token (queue-svc) | Exchange your turn for an admission token |
 | `GET /.well-known/jwks.json` | Public (queue-svc) | Public keys of admission tokens |
-| `PUT /internal/v1/events/{eventID}/queue` | Operator token, queue-svc admin port only | Provision the queue |
+| `PUT /internal/v1/events/{eventID}/queue` | Operator token, queue-svc admin port only | Provision the queue, with its policy windows |
+| `POST /internal/v1/events/{eventID}/freeze`, `/unfreeze` | Operator token, admin port only (queue-svc and inventory-svc) | The freeze switch: pause admissions, stop new holds |
 | `POST /v1/bookings` | Access token + `Idempotency-Key` (booking-svc) | Book a hold: a booking waiting for payment |
 | `GET /v1/bookings/{bookingID}` | Access token (booking-svc) | Your booking |
 

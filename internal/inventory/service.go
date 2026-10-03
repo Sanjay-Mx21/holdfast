@@ -112,6 +112,9 @@ func (s *Service) CreateHold(ctx context.Context, req CreateHoldRequest) (HoldRe
 	case -3:
 		s.m.holdResult("not_provisioned")
 		return HoldResult{}, ErrEventNotProvisioned
+	case -4:
+		s.m.holdResult("paused")
+		return HoldResult{}, ErrSalePaused
 	default:
 		s.m.holdResult("error")
 		return HoldResult{}, fmt.Errorf("inventory: unexpected hold reply code %d", r.code)
@@ -219,6 +222,17 @@ func (s *Service) Provision(ctx context.Context, eventID string, cfg EventConfig
 		s.m.setAvailable(id, int64(cfg.initialAvailable()))
 	}
 	return created, nil
+}
+
+// SetFrozen freezes or unfreezes an event's sale (runbook RB-1): while
+// frozen, no new holds are taken. It reports whether this call changed the
+// flag; setting it again is harmless.
+func (s *Service) SetFrozen(ctx context.Context, eventID string, frozen bool) (bool, error) {
+	id, err := canonicalUUID("eventId", eventID)
+	if err != nil {
+		return false, err
+	}
+	return s.store.SetFrozen(ctx, id, frozen)
 }
 
 // Availability returns an event's remaining units.

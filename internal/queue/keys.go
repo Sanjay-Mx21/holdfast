@@ -13,6 +13,7 @@ func (k keys) members() string  { return k.prefix() + "members" }
 func (k keys) seq() string      { return k.prefix() + "seq" }
 func (k keys) admitted() string { return k.prefix() + "admitted" }
 func (k keys) status() string   { return k.prefix() + "status" }
+func (k keys) policy() string   { return k.prefix() + "policy" }
 
 // Admission keys live under adm:, with the same {eventID} hash tag, so
 // advance.lua can touch them together with the q: keys in one slot.

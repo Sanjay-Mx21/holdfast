@@ -10,6 +10,7 @@
 --   -1 user limit     n = units this user already holds or bought
 --   -2 bad quantity   n = per-user limit
 --   -3 event not provisioned
+--   -4 sale frozen (runbook RB-1): no new holds until it is unfrozen
 local limit = tonumber(redis.call('HGET', KEYS[2], 'per_user_limit'))
 if not limit then return {-3, 0, 0} end
 
@@ -20,6 +21,10 @@ if redis.call('EXISTS', KEYS[4]) == 1 then
   local exp = tonumber(redis.call('HGET', KEYS[4], 'expires_at')) or 0
   return {2, tonumber(redis.call('GET', KEYS[1]) or '0'), exp}
 end
+
+-- A frozen sale takes no new holds; a retry of a hold made before the freeze
+-- still gets its answer above.
+if redis.call('HGET', KEYS[2], 'frozen') == '1' then return {-4, 0, 0} end
 
 local used = tonumber(redis.call('GET', KEYS[3]) or '0')
 if used + qty > limit then return {-1, used, 0} end

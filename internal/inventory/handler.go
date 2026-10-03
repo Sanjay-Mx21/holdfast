@@ -23,6 +23,7 @@ type service interface {
 	CancelHold(ctx context.Context, eventID, userID, holdID string) error
 	Availability(ctx context.Context, eventID string) (Availability, error)
 	Provision(ctx context.Context, eventID string, cfg EventConfig) (bool, error)
+	SetFrozen(ctx context.Context, eventID string, frozen bool) (bool, error)
 }
 
 // Handler exposes inventory over HTTP.
@@ -42,6 +43,24 @@ func (h *Handler) Register(public, internal *httpx.Router, admission, operator h
 	public.Handle("DELETE /v1/events/{eventID}/holds/{holdID}", admission(http.HandlerFunc(h.cancelHold)))
 	public.Handle("GET /v1/events/{eventID}/availability", http.HandlerFunc(h.availability))
 	internal.Handle("PUT /internal/v1/events/{eventID}/inventory", operator(http.HandlerFunc(h.provision)))
+	internal.Handle("POST /internal/v1/events/{eventID}/freeze", operator(h.setFrozen(true)))
+	internal.Handle("POST /internal/v1/events/{eventID}/unfreeze", operator(h.setFrozen(false)))
+}
+
+// setFrozen freezes or unfreezes the event's holds (runbook RB-1). It is
+// half of the freeze switch: queue-svc's admin endpoint pauses admissions,
+// and holdfastctl freeze does both.
+func (h *Handler) setFrozen(frozen bool) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		eventID := r.PathValue("eventID")
+		changed, err := h.svc.SetFrozen(r.Context(), eventID, frozen)
+		if err != nil {
+			writeError(w, r, err)
+			return
+		}
+		logging.FromContext(r.Context()).Info("sale freeze switched", "event_id", eventID, "frozen", frozen, "changed", changed)
+		httpx.WriteJSON(w, http.StatusOK, map[string]any{"eventId": strings.ToLower(eventID), "frozen": frozen, "changed": changed})
+	})
 }
 
 type holdResponse struct {
@@ -210,6 +229,9 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 		p = httpx.Unprocessable("IDEMPOTENCY_KEY_REUSED", "Idempotency-Key was already used with a different quantity")
 	case errors.Is(err, ErrProvisionConflict):
 		p = httpx.Conflict("PROVISION_CONFLICT", "event already provisioned with different settings; see the inventory runbook")
+	case errors.Is(err, ErrSalePaused):
+		p = httpx.NewProblem(http.StatusServiceUnavailable, "SALE_PAUSED", "the sale is paused; your place is kept, retry after the time in Retry-After")
+		p.RetryAfter = salePausedRetryAfter
 	case isUnavailable(err):
 		logging.FromContext(r.Context()).Warn("dependency unavailable", "err", err)
 		p = httpx.Unavailable("inventory is temporarily unavailable; retry shortly", 1)
@@ -219,6 +241,11 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	}
 	httpx.WriteProblem(w, r, p)
 }
+
+// salePausedRetryAfter is the Retry-After, in seconds, of a hold refused
+// because the sale is frozen. How long a freeze lasts is an operator's call,
+// so clients simply ask again at a gentle pace.
+const salePausedRetryAfter = 10
 
 func isUnavailable(err error) bool {
 	var netErr net.Error
