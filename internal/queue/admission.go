@@ -27,7 +27,9 @@ type AdmissionConfig struct {
 
 // Admission runs one admission controller per provisioned event. Every
 // queue-svc replica runs one; per event, exactly one controller across all
-// replicas leads at a time, elected with a PostgreSQL advisory lock.
+// replicas leads at a time, elected with a PostgreSQL advisory lock. A
+// replica's controllers hold their locks on one shared connection
+// (LockSession).
 type Admission struct {
 	store *Store
 	pool  *pgxpool.Pool
@@ -49,6 +51,8 @@ func (a *Admission) Name() string { return "queue-admission" }
 // when its event no longer exists; it is started again if the event is
 // provisioned again.
 func (a *Admission) Run(ctx context.Context) error {
+	locks := NewLockSession(a.pool, a.cfg.Tick)
+	defer locks.Close() // after every controller has stopped
 	var wg sync.WaitGroup
 	defer wg.Wait()
 	var mu sync.Mutex
@@ -66,7 +70,7 @@ func (a *Admission) Run(ctx context.Context) error {
 				continue
 			}
 			running[ev] = true
-			c := NewController(a.store, a.pool, ev, a.cfg, a.m, a.log)
+			c := NewController(a.store, locks, ev, a.cfg, a.m, a.log)
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -90,7 +94,7 @@ func (a *Admission) Run(ctx context.Context) error {
 // the session budget.
 type Controller struct {
 	store   *Store
-	pool    *pgxpool.Pool
+	locks   *LockSession
 	eventID string
 	lockKey int64
 	cfg     AdmissionConfig
@@ -98,10 +102,11 @@ type Controller struct {
 	log     *slog.Logger
 }
 
-// NewController returns the controller for one event.
-func NewController(store *Store, pool *pgxpool.Pool, eventID string, cfg AdmissionConfig, m *Metrics, log *slog.Logger) *Controller {
+// NewController returns the controller for one event. Its leadership lock is
+// taken on locks, which the replica's other controllers share.
+func NewController(store *Store, locks *LockSession, eventID string, cfg AdmissionConfig, m *Metrics, log *slog.Logger) *Controller {
 	return &Controller{
-		store: store, pool: pool, eventID: eventID, lockKey: leaderLockKey(eventID),
+		store: store, locks: locks, eventID: eventID, lockKey: leaderLockKey(eventID),
 		cfg: cfg, m: m, log: log.With("event_id", eventID),
 	}
 }
@@ -134,25 +139,18 @@ func (c *Controller) Run(ctx context.Context) {
 }
 
 // term tries to become leader and, if it does, leads until ctx ends, the
-// lock's connection is lost, or a newer leader fences this one off.
+// lock's session is lost, or a newer leader fences this one off. The lock is
+// released when the term ends; if this process dies, its session drops and
+// PostgreSQL releases every lock it held for the standbys.
 func (c *Controller) term(ctx context.Context) error {
-	// A dedicated connection: the advisory lock belongs to the session, so
-	// it must not go back to the pool while held. If this process dies, the
-	// connection drops and PostgreSQL releases the lock for a standby.
-	pc, err := c.pool.Acquire(ctx)
+	gen, leader, err := c.locks.TryLock(ctx, c.lockKey)
 	if err != nil {
-		return fmt.Errorf("acquire connection: %w", err)
-	}
-	conn := pc.Hijack()
-	defer func() { _ = conn.Close(context.WithoutCancel(ctx)) }()
-
-	var leader bool
-	if err := conn.QueryRow(ctx, `SELECT pg_try_advisory_lock($1)`, c.lockKey).Scan(&leader); err != nil {
-		return fmt.Errorf("try lock: %w", err)
+		return err
 	}
 	if !leader {
 		return errNotLeader
 	}
+	defer c.locks.Unlock(ctx, c.lockKey, gen)
 	// Settings first: a term for an event that no longer exists must not
 	// recreate its epoch key.
 	rate, maxSessions, err := c.store.termConfig(ctx, c.eventID)
@@ -167,16 +165,16 @@ func (c *Controller) term(ctx context.Context) error {
 	c.m.leaderTerm(c.eventID, epoch, maxSessions, true)
 	defer c.m.leaderTerm(c.eventID, epoch, maxSessions, false)
 	c.log.Info("admission: became leader", "epoch", epoch, "rate_per_second", rate, "max_sessions", maxSessions)
-	return c.lead(ctx, epoch, rate, conn.Ping, c.store.Advance)
+	return c.lead(ctx, epoch, rate, func(ctx context.Context) error { return c.locks.Alive(ctx, gen) }, c.store.Advance)
 }
 
 // advanceFunc is one fenced admission tick (Store.Advance).
 type advanceFunc func(ctx context.Context, eventID string, epoch int64, n int) (Advance, error)
 
-// lead is the leader's tick loop: every Tick it checks that the lock's
-// connection is alive (ping), then admits what the rate allows. It returns
-// nil when ctx ends, and an error when the connection is lost, a newer
-// leader has fenced this one off, or the event no longer exists.
+// lead is the leader's tick loop: every Tick it checks that the lock is
+// still held (ping), then admits what the rate allows. It returns nil when
+// ctx ends, and an error when the lock's session is lost, a newer leader has
+// fenced this one off, or the event no longer exists.
 func (c *Controller) lead(ctx context.Context, epoch int64, rate int, ping func(context.Context) error, advance advanceFunc) error {
 	bucket := newAllowance(float64(rate), time.Now())
 	t := time.NewTicker(c.cfg.Tick)
@@ -187,7 +185,7 @@ func (c *Controller) lead(ctx context.Context, epoch int64, rate int, ping func(
 			return nil
 		case now := <-t.C:
 			if err := ping(ctx); err != nil {
-				return fmt.Errorf("lost the lock's connection: %w", err) // step down; a standby takes over
+				return fmt.Errorf("lost the lock: %w", err) // step down; a standby takes over
 			}
 			adv, err := advance(ctx, c.eventID, epoch, bucket.available(now))
 			switch {

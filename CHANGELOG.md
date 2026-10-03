@@ -6,6 +6,14 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
 
 ## [Unreleased]
 
+### Fixed
+
+- queue-svc holds all of a replica's admission-leader locks on one
+  PostgreSQL connection (`LockSession`) instead of one connection per event
+  (P39). A term that ends releases its lock; losing the session hands every
+  event to the standbys, as a crash does, and fencing is unchanged. ADR 0007
+  is amended.
+
 ## [0.3.0] - 2026-10-03
 
 The MVP backend (milestone M3, build plan Phase 3): a buyer can book a held

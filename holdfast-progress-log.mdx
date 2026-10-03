@@ -32,13 +32,13 @@ All times are IST (UTC+05:30).
 | **Project** | A flash-sale booking engine that sells exactly the available units under extreme demand, never more |
 | **Plan version** | 2.0 (1 October 2026) |
 | **Milestones complete** | M0 Foundation, M1 Correctness core, M1.5 Bring-up and baseline, M2 Fair waiting room, and M3 MVP backend |
-| **Current milestone** | M4 Resume-ready product (Phase 4), after the P39 fix and Phase 4's prerequisites (the owner's decisions of 2026-10-03) |
+| **Current milestone** | M4 Resume-ready product (Phase 4): P39 fixed and Node.js installed; task 4.1 next |
 | **Progress to v1.0** | About 35% (18 of about 51 focused-work days, excluding Phase 7 stretch goals), counting Phase 2's planned 7 days |
 | **Repository** | [github.com/Sanjay-Mx21/holdfast](https://github.com/Sanjay-Mx21/holdfast), branch `main` |
 | **First commit** | `2173e50` "first commit", 2026-10-01 20:20, 82 files, 12,973 lines |
-| **Latest release** | [v0.2.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.2.0), 2026-10-02 21:51, on `cd0592a` (before it: [v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0), 2026-10-01 23:47, on `9dcd2f8`) |
+| **Latest release** | [v0.3.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.3.0), 2026-10-03 15:48, on `5ffa271` (before it: [v0.2.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.2.0), 2026-10-02 21:51, on `cd0592a`; [v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0), 2026-10-01 23:47, on `9dcd2f8`) |
 | **CI** | Green since 2026-10-01 22:00; `main` is protected and every change needs a pull request with all 10 required checks passing (`images (booking)`, `images (payment)` and `images (mockpsp)` added on 2026-10-03) |
-| **Issues so far** | 98 recorded: 92 resolved, 6 open (section 6) |
+| **Issues so far** | 99 recorded: 94 resolved, 5 open (section 6) |
 
 <Callout type="tip" title="M3 complete: the MVP backend (2026-10-03)">
 
@@ -208,7 +208,18 @@ The rest of the list was already covered by tests written with tasks 3.4 to 3.12
 - **E1 with the stack running failed one check:** "no infrastructure errors" in the guard mode ("too many clients"), with every invariant passing. Cause: P39 (queue-svc holds one PostgreSQL connection per provisioned queue: 31 for this session's 35 queues). With queue-svc stopped for the run, `make e1` passed all modes with 0 failed checks; queue-svc was restarted. | PR #90 (merged by the assistant at 15:05 after all 10 checks passed), `c048014` |
 | 2026-10-03 15:10 | **Phase 3 complete:** all 14 tasks and the 4 exit criteria met (PRs #74 to #90, `39d5439..c048014`). Work stopped for the owner's review, as agreed. Not tagged: v0.3.0 waits for the owner. Open for the owner: P39 (queue-svc's connection per event) and P17 (oversubscription, still unconfirmed) | This log |
 | 2026-10-03 15:34 | **Owner's decisions after Phase 3:** do the paperwork, release v0.3.0, fix P39, build P17 inside task 4.3, then Phase 4's prerequisites and Phase 4. **Paperwork** (this PR): asked "is Phase 3 completed precisely?", the assistant found and reported five gaps: stale "in progress" status lines (README, architecture, booking and payment docs), M3 still "Next" in the milestone tracker, the undocumented idempotency deviation (no `internal/platform/idempotency` package), no Jaeger screenshot for the demo checkpoint, and the README not mentioning payment-svc, mockpsp or the saga. All fixed; the screenshot is `loadtest/results/phase3-one-purchase-trace.png` | PR #92 (merged by the assistant at 15:40 after all 10 checks passed), `11d0022` |
-| 2026-10-03 15:42 | **Release v0.3.0 prepared:** CHANGELOG `[0.3.0]` with its known issues, the milestone tracker (M3 released, M4 next), README status and this log. The tag and the GitHub release follow on the merge commit | Branch `release/v0.3.0` |
+| 2026-10-03 15:42 | **Release v0.3.0 prepared:** CHANGELOG `[0.3.0]` with its known issues, the milestone tracker (M3 released, M4 next), README status and this log. The tag and the GitHub release follow on the merge commit | PR #93 (merged by the assistant at 15:47 after all 10 checks passed), `5ffa271` |
+| 2026-10-03 15:48 | **v0.3.0 released:** annotated tag `v0.3.0` on `5ffa271`, GitHub release "v0.3.0: the MVP backend" (not a draft, marked latest) with three assets: the one-purchase trace screenshot, the fault-run report and the results README | https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.3.0 |
+| 2026-10-03 16:04 | **P39 fixed: one lock session per replica.**
+- Each queue-svc replica holds all of its events' leader locks on one PostgreSQL connection (`internal/queue/locksession.go`), instead of one connection per event.
+- A term that ends unlocks explicitly; an unlock that fails drops the session, since advisory locks stack.
+- Losing the session steps every leader down through a generation number, as a crash would, and fencing is unchanged.
+- Queries run detached from callers' cancellation, so one controller stopping cannot break the others' locks.
+- ADR 0007 is amended; the queue service doc, runbook RB-Q-6 and the architecture doc are updated.
+- **Tests:** one session leading 12 events (one backend holds all 12 locks), and a killed session handing every event to the other replica with newer epochs and the old ones fenced; the leadership tests passed 3 of 3 under `-race`.
+- **Live:** queue-svc went from 31 connections to 3 (29 locks on one connection), and `make e1` passed every mode **beside the full stack**, which failed before.
+- Also found and fixed P40 in the same PR.
+- **Prerequisite done:** Node.js v24.21.0 LTS installed natively in WSL (official tarball, SHA-256 verified against nodejs.org's list) under `~/.local`; the `npm` seen before was the Windows install leaking through the PATH. | Branch `fix/p39-lock-session` |
 
 ## 3. What is complete, and what each piece contributes
 
@@ -285,10 +296,10 @@ Every problem met while bringing Drop 1 up and running the soak on 2026-10-01, i
 
 | Group | Recorded | Resolved | Open |
 |---|---|---|---|
-| P: defects in the repository | 39 | 34 | 5 |
+| P: defects in the repository | 40 | 36 | 4 |
 | E: machine and network | 21 | 20 | 1 |
 | D: diagnosis and process | 38 | 38 | 0 |
-| **Total** | **98** | **92** | **6** |
+| **Total** | **99** | **94** | **5** |
 
 CI took **three runs** to go green:
 
@@ -340,7 +351,8 @@ CI took **three runs** to go green:
 | P36 | `TestConcurrentDeadlineJobsTakeDisjointBatches` (bookingdb) failed in CI on PR #85, with no change to it: one of its expired bookings was claimed by neither of its two jobs | One failed CI run; latent since tasks 3.5 and 3.9, in four tests | Test packages run as parallel processes on one test database, and the claims take every eligible row: booking's deadline-job test locked or cancelled bookingdb's rows (`FOR UPDATE SKIP LOCKED` skips them). The paymentdb claim test and the payment poller tests share the same race | `testenv.Exclusive(t, pool, name)` holds a cross-process advisory lock for the test's duration; the six queue-claiming tests take `booking-deadline` or `payment-poll`. The four packages, 10 times in parallel: 310 of 310 | ✅ Task 3.10 (PR #85) |
 | P37 | `TestRefillsOverTime` (rate limiter) failed once in task 3.12's full `make itest`, run right after E1 with the stack up: "second immediate request allowed" | One failed run; first failure on record | The test allowed one token every 50 ms and expected two back-to-back calls to land inside one interval; on a loaded machine more than 50 ms can pass between them | 500 ms per token and a 600 ms wait: the same behaviour with ten times the margin; 20 of 20 targeted runs and the next full `make itest` pass | ✅ Task 3.12 |
 | P38 | A purchase was two traces, not one: the provider's webhook starts its own trace, so the capture, booking-svc's saga and inventory's Confirm were in a different trace from the booking request. `docs/architecture.md` had claimed since task 3.2 that "a purchase is one trace across asynchronous hops" | Phase 3's first exit criterion (one trace spanning every service) was not met; the doc overstated what was built | The trace context crossed Kafka but not the provider: a webhook carries no `traceparent`, and nothing linked it back to the booking | Found during the exit check. payment-svc stores the trace with the intent and continues it when settling (migration `payment/00004`; `TestPaymentContinuesTheBookingsTrace`); live, one purchase is one trace of 20 spans. The architecture doc now describes how | ✅ Phase 3 exit |
-| P39 | queue-svc holds one PostgreSQL connection per provisioned queue: each event's admission leader keeps its advisory lock on a dedicated connection (ADR 0007), and every replica runs a controller for every queue. On 2026-10-03 queue-svc held 31 connections for 35 queues, so `make e1`'s guard mode (64 connections) no longer fitted under PostgreSQL's 100 beside the stack | Connections grow with the number of events, unbounded: many events on sale at once would exhaust PostgreSQL (`max_connections`) and starve every service sharing it. Locally, E1 fails "no infrastructure errors" while the stack runs | The per-event dedicated connection in `internal/queue/admission.go` | Not fixed: it changes ADR 0007's design (reviewed in Phase 2), so it is for the owner. Recommendation: one session per replica holds all of its events' advisory locks (they are per session, and a session can hold many), with the fencing epoch unchanged; or stop running controllers for events that have ended. Meanwhile, E1 passes with queue-svc stopped | ⏳ Open (owner's decision) |
+| P39 | queue-svc holds one PostgreSQL connection per provisioned queue: each event's admission leader keeps its advisory lock on a dedicated connection (ADR 0007), and every replica runs a controller for every queue. On 2026-10-03 queue-svc held 31 connections for 35 queues, so `make e1`'s guard mode (64 connections) no longer fitted under PostgreSQL's 100 beside the stack | Connections grow with the number of events, unbounded: many events on sale at once would exhaust PostgreSQL (`max_connections`) and starve every service sharing it. Locally, E1 fails "no infrastructure errors" while the stack runs | The per-event dedicated connection in `internal/queue/admission.go` | Not fixed: it changes ADR 0007's design (reviewed in Phase 2), so it is for the owner. Recommendation: one session per replica holds all of its events' advisory locks (they are per session, and a session can hold many), with the fencing epoch unchanged; or stop running controllers for events that have ended. Meanwhile, E1 passes with queue-svc stopped | ✅ Fixed 2026-10-03 after the owner's decision: one lock session per replica (ADR 0007 amended); live, 31 connections became 3 and `make e1` passes beside the stack |
+| P40 | `TestDeclineThenPayAndExpiry` (mockpsp) failed once in a full `make itest`: it expected the decline's webhook before the capture's, but the two were sent 4 ms apart from separate goroutines and arrived the other way round | One failed run | The test assumed webhooks arrive in the order they were sent, which neither mockpsp nor a real provider guarantees (payment-svc is built for exactly that) | The tests find webhooks by type (`receiver.ofType`), not position; 40 of 40 runs under `-race` and the next full `make itest` pass | ✅ P39's PR |
 
 ### 6.3 Machine and network
 

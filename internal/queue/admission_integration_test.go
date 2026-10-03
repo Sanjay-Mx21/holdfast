@@ -190,13 +190,14 @@ func TestOneLeaderAndFailover(t *testing.T) {
 		cancel context.CancelFunc
 		done   chan struct{}
 	}
-	start := func() *runner {
+	start := func() *runner { // one replica: its own lock session
 		reg := prometheus.NewRegistry()
 		m := NewMetrics(reg)
-		c := NewController(f.store, pool, f.eventID, cfg, m, quiet)
+		locks := NewLockSession(pool, cfg.Tick)
+		c := NewController(f.store, locks, f.eventID, cfg, m, quiet)
 		runCtx, cancel := context.WithCancel(ctx)
 		r := &runner{m: m, reg: reg, cancel: cancel, done: make(chan struct{})}
-		go func() { defer close(r.done); c.Run(runCtx) }()
+		go func() { defer close(r.done); defer locks.Close(); c.Run(runCtx) }()
 		return r
 	}
 	a, b := start(), start()
@@ -222,7 +223,7 @@ func TestOneLeaderAndFailover(t *testing.T) {
 	}
 	firstEpoch, _ := f.rdb.Get(ctx, keysFor(f.eventID).epoch()).Int64()
 
-	// Kill the leader: its connection closes and PostgreSQL releases the lock.
+	// Stop the leader: its term ends and releases the lock.
 	leader.cancel()
 	<-leader.done
 	before := f.admittedUpTo(t)
@@ -266,8 +267,9 @@ func TestControllerStopsWhenTheEventIsGone(t *testing.T) {
 	k := keysFor(f.eventID)
 	run := func(eventID string) chan struct{} {
 		done := make(chan struct{})
-		c := NewController(f.store, pool, eventID, cfg, NewMetrics(prometheus.NewRegistry()), quiet)
-		go func() { defer close(done); c.Run(ctx) }()
+		locks := NewLockSession(pool, cfg.Tick)
+		c := NewController(f.store, locks, eventID, cfg, NewMetrics(prometheus.NewRegistry()), quiet)
+		go func() { defer close(done); defer locks.Close(); c.Run(ctx) }()
 		return done
 	}
 	waitStopped := func(what string, done chan struct{}) {
@@ -529,5 +531,188 @@ func TestAdmitRefusedWhenClosedOrUnknown(t *testing.T) {
 		f.setState(t, s)
 		_, err = f.svc.Admit(ctx, f.eventID, uuid.NewString())
 		mustErr(t, "admit when "+string(s), err, ErrQueueClosed)
+	}
+}
+
+// lockHolders returns the PostgreSQL backends holding the leader locks of
+// the events.
+func lockHolders(t *testing.T, eventIDs []string) map[int32]int {
+	t.Helper()
+	pool := testenv.Postgres(t)
+	keys := make([]int64, len(eventIDs))
+	for i, id := range eventIDs {
+		keys[i] = leaderLockKey(id)
+	}
+	// An advisory lock on a bigint key is stored as two 32-bit halves.
+	rows, err := pool.Query(ctx, `SELECT pid FROM pg_locks WHERE locktype = 'advisory' AND granted
+		AND ((classid::bigint << 32) | objid::bigint) = ANY($1)`, keys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	out := map[int32]int{}
+	for rows.Next() {
+		var pid int32
+		if err := rows.Scan(&pid); err != nil {
+			t.Fatal(err)
+		}
+		out[pid]++
+	}
+	return out
+}
+
+// TestOneSessionLeadsManyEvents pins P39: a replica leading many events holds
+// all of their locks on one PostgreSQL connection, not one each.
+func TestOneSessionLeadsManyEvents(t *testing.T) {
+	pool := testenv.Postgres(t)
+	cfg := AdmissionConfig{Tick: 20 * time.Millisecond, RetryLeadership: 100 * time.Millisecond, Rescan: time.Second}
+	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
+	locks := NewLockSession(pool, cfg.Tick)
+	defer locks.Close()
+	m := NewMetrics(prometheus.NewRegistry())
+	runCtx, cancel := context.WithCancel(ctx)
+	var done []chan struct{}
+	defer func() {
+		cancel()
+		for _, d := range done {
+			<-d
+		}
+	}()
+	var ids []string
+	for range 12 {
+		f := newFixture(t)
+		f.openQueueWith(t, 10, 10_000)
+		ids = append(ids, f.eventID)
+		c := NewController(f.store, locks, f.eventID, cfg, m, quiet)
+		d := make(chan struct{})
+		done = append(done, d)
+		go func() { defer close(d); c.Run(runCtx) }()
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		leading := 0
+		for _, id := range ids {
+			if gauge(t, m, id) == 1 {
+				leading++
+			}
+		}
+		if leading == len(ids) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d of %d events have a leader", leading, len(ids))
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	holders := lockHolders(t, ids)
+	if len(holders) != 1 {
+		t.Fatalf("the 12 leader locks are held by %d connections %v, want 1", len(holders), holders)
+	}
+	for _, n := range holders {
+		mustEqual(t, "locks on the one connection", n, len(ids))
+	}
+
+	// A controller that stops releases its own lock and leaves the rest.
+	cancel()
+	for _, d := range done {
+		<-d
+	}
+	if h := lockHolders(t, ids); len(h) != 0 {
+		t.Fatalf("locks still held after every term ended: %v", h)
+	}
+}
+
+// TestLosingTheSessionHandsEveryEventOver: when a replica's lock session
+// dies (its connection is killed), every one of its events loses its lock at
+// once; the other replica takes them all over with newer epochs, and the old
+// leaders step down.
+func TestLosingTheSessionHandsEveryEventOver(t *testing.T) {
+	pool := testenv.Postgres(t)
+	cfg := AdmissionConfig{Tick: 20 * time.Millisecond, RetryLeadership: 100 * time.Millisecond, Rescan: time.Second}
+	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
+	type replica struct {
+		locks *LockSession
+		m     *Metrics
+	}
+	newReplica := func() replica {
+		return replica{locks: NewLockSession(pool, cfg.Tick), m: NewMetrics(prometheus.NewRegistry())}
+	}
+	a, b := newReplica(), newReplica()
+	defer a.locks.Close()
+	defer b.locks.Close()
+	runCtx, cancel := context.WithCancel(ctx)
+	var done []chan struct{}
+	defer func() {
+		cancel()
+		for _, d := range done {
+			<-d
+		}
+	}()
+	run := func(r replica, f *fixture) {
+		c := NewController(f.store, r.locks, f.eventID, cfg, r.m, quiet)
+		d := make(chan struct{})
+		done = append(done, d)
+		go func() { defer close(d); c.Run(runCtx) }()
+	}
+	waitFor := func(what string, cond func() bool) {
+		t.Helper()
+		for deadline := time.Now().Add(5 * time.Second); !cond(); time.Sleep(10 * time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Fatalf("timed out waiting for %s", what)
+			}
+		}
+	}
+	var fs []*fixture
+	for range 3 {
+		f := newFixture(t)
+		f.openQueueWith(t, 10_000, 10_000)
+		fs = append(fs, f)
+		run(a, f)
+	}
+	leadsAll := func(r replica) bool {
+		for _, f := range fs {
+			if gauge(t, r.m, f.eventID) != 1 {
+				return false
+			}
+		}
+		return true
+	}
+	waitFor("replica A to lead every event", func() bool { return leadsAll(a) })
+	epochs := map[string]int64{}
+	for _, f := range fs {
+		epochs[f.eventID], _ = f.rdb.Get(ctx, keysFor(f.eventID).epoch()).Int64()
+		run(b, f) // standbys
+	}
+
+	// Kill replica A's session from outside, as a network cut would.
+	var ids []string
+	for _, f := range fs {
+		ids = append(ids, f.eventID)
+	}
+	holders := lockHolders(t, ids)
+	if len(holders) != 1 {
+		t.Fatalf("locks held by %v, want one connection", holders)
+	}
+	for pid := range holders {
+		if _, err := pool.Exec(ctx, `SELECT pg_terminate_backend($1)`, pid); err != nil {
+			t.Fatal(err)
+		}
+	}
+	waitFor("replica B to take every event over", func() bool { return leadsAll(b) })
+	waitFor("replica A's leaders to step down", func() bool {
+		for _, f := range fs {
+			if gauge(t, a.m, f.eventID) != 0 {
+				return false
+			}
+		}
+		return true
+	})
+	for _, f := range fs {
+		now, _ := f.rdb.Get(ctx, keysFor(f.eventID).epoch()).Int64()
+		if now <= epochs[f.eventID] {
+			t.Fatalf("event %s: epoch %d after the takeover, want above %d", f.eventID, now, epochs[f.eventID])
+		}
+		_, err := f.store.Advance(ctx, f.eventID, epochs[f.eventID], 1)
+		mustErr(t, "advance with replica A's old epoch", err, ErrFenced)
 	}
 }

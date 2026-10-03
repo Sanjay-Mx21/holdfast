@@ -206,8 +206,9 @@ rule themselves, so the opener's timing never affects who gets a lottery
 position.
 
 Admission controllers run for every event in every queue-svc replica. Exactly
-one per event leads, holding a PostgreSQL advisory lock on a dedicated
-connection; every 250 ms it runs `advance.lua`, which refuses a stale epoch
+one per event leads, holding a PostgreSQL advisory lock; a replica holds all
+its events' locks on one shared connection (ADR 0007, amended). Every 250 ms
+the leader runs `advance.lua`, which refuses a stale epoch
 (fencing) and caps concurrent sessions (Little's Law).
 
 The **outbox relay** runs in every replica of a service that writes events
