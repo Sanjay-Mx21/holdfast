@@ -32,12 +32,12 @@ All times are IST (UTC+05:30).
 | **Project** | A flash-sale booking engine that sells exactly the available units under extreme demand, never more |
 | **Plan version** | 2.0 (1 October 2026) |
 | **Milestones complete** | M0 Foundation, M1 Correctness core, M1.5 Bring-up and baseline, M2 Fair waiting room, and M3 MVP backend |
-| **Current milestone** | M4 Resume-ready product (Phase 4): 1 of 8 tasks done (section 10); next task 4.2, [issue #34](https://github.com/Sanjay-Mx21/holdfast/issues/34) |
+| **Current milestone** | M4 Resume-ready product (Phase 4): 2 of 8 tasks done (section 10); next task 4.3, [issue #35](https://github.com/Sanjay-Mx21/holdfast/issues/35) |
 | **Progress to v1.0** | About 35% (18 of about 51 focused-work days, excluding Phase 7 stretch goals), counting Phase 2's planned 7 days |
 | **Repository** | [github.com/Sanjay-Mx21/holdfast](https://github.com/Sanjay-Mx21/holdfast), branch `main` |
 | **First commit** | `2173e50` "first commit", 2026-10-01 20:20, 82 files, 12,973 lines |
 | **Latest release** | [v0.3.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.3.0), 2026-10-03 15:48, on `5ffa271` (before it: [v0.2.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.2.0), 2026-10-02 21:51, on `cd0592a`; [v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0), 2026-10-01 23:47, on `9dcd2f8`) |
-| **CI** | Green since 2026-10-01 22:00; `main` is protected and every change needs a pull request with all 10 required checks passing (`images (booking)`, `images (payment)` and `images (mockpsp)` added on 2026-10-03) |
+| **CI** | Green since 2026-10-01 22:00; `main` is protected and every change needs a pull request with all 11 required checks passing (`images (booking)`, `images (payment)`, `images (mockpsp)` and `images (auth)` added on 2026-10-03) |
 | **Issues so far** | 100 recorded: 95 resolved, 5 open (section 6) |
 
 <Callout type="tip" title="M3 complete: the MVP backend (2026-10-03)">
@@ -227,7 +227,21 @@ The rest of the list was already covered by tests written with tasks 3.4 to 3.12
 - **Tests:** unit (phone normalisation, codes, the access-token verifier refusing 9 kinds of bad token) and 11 integration tests, 3 runs each (33 of 33). They cover: sign-in and the same user again; nothing stored in the clear; attempts, expiry and single use; 10 concurrent correct guesses signing in once; resend, concurrent and hourly limits; rotation, reuse revoking the family and a second family untouched; 6 concurrent refreshes rotating once; logout; the HTTP layer (cookie flags, no token in the body, `Retry-After`, the inbox only when enabled).
 - **Live through the edge:** request 202, inbox code, wrong 401, right 200 with the cookie flags, refresh 200, reuse 401 `REFRESH_REUSED` and the newest token then 401, logout 204, the JWKS with one key; 8 quick code requests from one address answered 202 five times, then 429; no phone in the clear; metrics and Prometheus scraping.
 - **Gates:** gofmt, test, lint (after making the cookie always Secure: gosec rightly flagged a configurable Secure flag; browsers accept Secure cookies from localhost), `make gen` stable, up, itest, E1 PASS.
-- Two slips of the assistant's own, caught before the PR: a test that put `+91...` unescaped in a query string, where `+` means a space; and a placeholder helper in the handler, replaced with `strconv.Itoa` before the first build. | Branch `feat/p4-auth`, issue #33 |
+- Two slips of the assistant's own, caught before the PR: a test that put `+91...` unescaped in a query string, where `+` means a space; and a placeholder helper in the handler, replaced with `strconv.Itoa` before the first build. | PR #95 (merged by the assistant at 17:24 after all 10 checks passed), `1f74af2`; issue #33 closed |
+| 2026-10-03 17:26 | `images (auth)` added to `main`'s required status checks (now 11) | GitHub branch protection |
+| 2026-10-03 17:43 | **Task 4.2 (wire identity in) built and verified:**
+- `authn.RequireUser` identifies buyers by auth-svc's access token in `Authorization: Bearer`, and puts the user and the role in the request context (`AccessFrom`, for the policy engine).
+- A token that fails verification is refused, never falling back to the header.
+- With `DEV_IDENTITY=true` a request with **no** token may still use `X-Dev-User-Id`, for development and load tests.
+- `authn.NewAccessIdentity` follows auth-svc's JWKS (`ACCESS_JWKS_URL`) with a readiness check `access-keys`; queue-svc and booking-svc use it.
+- Compose now leaves `DEV_IDENTITY` off by default (`${DEV_IDENTITY:-false}`); the E2 load test's override turns it on for queue-svc only. inventory-svc is unchanged.
+- The README quickstart now signs in with a phone code; the queue and booking docs, the architecture doc and the design's API table are updated.
+- **Tests:** a middleware table test (valid token with its role; no credentials, forged, garbage and non-Bearer refused; the header refused when off and accepted only without a token when on).
+- **Live through the edge:**
+  - both services' readiness includes `access-keys`;
+  - **the README quickstart, run as written**: sign in, join, rank, admit, hold, book, pay. The booking was CONFIRMED 30 s later, once booking-svc's freshly restarted saga consumer had joined its group;
+  - the dev header alone 401, no token 401, a forged token 401, another user's valid token 404 (ownership), a refreshed token 200.
+- **Gates:** gofmt, test, lint, up, itest, E1 PASS. | Branch `feat/p4-identity`, issue #34 |
 
 ## 3. What is complete, and what each piece contributes
 
@@ -521,8 +535,8 @@ Goal: a real person can buy a ticket through a web app, with real identity and t
 
 | Task | Issue | Status |
 |---|---|---|
-| 4.1 auth-svc | [#33](https://github.com/Sanjay-Mx21/holdfast/issues/33) | ✅ 2026-10-03: sign-in with a phone code (mock SMS), EdDSA access tokens and JWKS, rotating refresh tokens with reuse detection |
-| 4.2 Wire identity in | [#34](https://github.com/Sanjay-Mx21/holdfast/issues/34) | ⏳ |
+| 4.1 auth-svc | [#33](https://github.com/Sanjay-Mx21/holdfast/issues/33) | ✅ 2026-10-03 (PR #95): sign-in with a phone code (mock SMS), EdDSA access tokens and JWKS, rotating refresh tokens with reuse detection |
+| 4.2 Wire identity in | [#34](https://github.com/Sanjay-Mx21/holdfast/issues/34) | ✅ 2026-10-03: access tokens identify buyers in queue-svc and booking-svc (JWKS, readiness); the dev header only with `DEV_IDENTITY`, off by default |
 | 4.3 Policy engine (with P17) | [#35](https://github.com/Sanjay-Mx21/holdfast/issues/35) | ⏳ |
 | 4.4 Proof of work | [#36](https://github.com/Sanjay-Mx21/holdfast/issues/36) | ⏳ |
 | 4.5 Web app | [#37](https://github.com/Sanjay-Mx21/holdfast/issues/37) | ⏳ |

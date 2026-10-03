@@ -14,10 +14,13 @@ import (
 	"log/slog"
 	"net/http"
 	"net/netip"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/app"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/authn"
@@ -44,8 +47,12 @@ type config struct {
 
 	AdminToken string `env:"ADMIN_TOKEN,required,unset"`
 
-	// DevIdentity trusts the X-Dev-User-Id header as the buyer's identity
-	// until auth-svc exists (Phase 4). Never allowed in production.
+	// AccessJWKSURL is auth-svc's key set: buyers are identified by its access
+	// tokens (Authorization: Bearer). Required unless DEV_IDENTITY is on.
+	AccessJWKSURL string `env:"ACCESS_JWKS_URL"`
+	// DevIdentity also accepts the X-Dev-User-Id header on requests that carry
+	// no token, for development and load tests (E2 simulates 50,000 buyers
+	// with it). Never allowed in production.
 	DevIdentity bool `env:"DEV_IDENTITY" envDefault:"false"`
 
 	JoinIPBurst       int     `env:"JOIN_IP_BURST" envDefault:"30"`
@@ -125,6 +132,14 @@ func (c *config) Validate() error {
 	if c.DevIdentity && c.Service.Environment == "production" {
 		errs = append(errs, errors.New("DEV_IDENTITY must not be enabled in production: anyone could claim any user ID"))
 	}
+	if c.AccessJWKSURL == "" && !c.DevIdentity {
+		errs = append(errs, errors.New("set ACCESS_JWKS_URL (auth-svc's key set) so buyers can sign in"))
+	}
+	if c.AccessJWKSURL != "" {
+		if u, err := url.Parse(c.AccessJWKSURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			errs = append(errs, errors.New("ACCESS_JWKS_URL must be an http(s) URL"))
+		}
+	}
 	l := c.limits()
 	if err := l.JoinPerIP.Validate(); err != nil {
 		errs = append(errs, fmt.Errorf("JOIN_IP_BURST / JOIN_IP_PER_SECOND: %w", err))
@@ -202,7 +217,19 @@ func run(ctx context.Context) error {
 		return err
 	}
 
-	hc := health.New(2*time.Second, valkey.Check(rdb))
+	// Buyers: auth-svc's access tokens, and the development header if allowed.
+	if cfg.DevIdentity {
+		log.Warn("DEV_IDENTITY is on: requests without a token may name their buyer in X-Dev-User-Id, which anyone can set")
+	}
+	identity, accessKeys := authn.NewAccessIdentity(ctx, cfg.AccessJWKSURL, cfg.DevIdentity, 5*time.Second,
+		&http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}, reg, log)
+	var background []app.Component
+	checks := []health.Check{valkey.Check(rdb)}
+	if accessKeys != nil {
+		checks = append(checks, health.Check{Name: "access-keys", Fn: accessKeys.Check})
+		background = append(background, accessKeys)
+	}
+	hc := health.New(2*time.Second, checks...)
 	httpMetrics := httpx.NewHTTPMetrics(reg)
 	public := httpx.NewRouter(
 		httpx.Trace(), // outermost: the span covers the whole request
@@ -235,11 +262,6 @@ func run(ctx context.Context) error {
 	}
 	log.Info("signing admission tokens", "kid", authn.KeyID(published[0]), "published_keys", len(published))
 
-	identity := noIdentity
-	if cfg.DevIdentity {
-		log.Warn("DEV_IDENTITY is on: buyers are identified by the X-Dev-User-Id header, which anyone can set")
-		identity = authn.RequireDevIdentity()
-	}
 	qm := queue.NewMetrics(reg)
 	trusted, _ := cfg.trustedProxies() // validated at load
 	if len(trusted) > 0 {
@@ -249,20 +271,12 @@ func run(ctx context.Context) error {
 		TrustProxies(trusted...).
 		Register(public, admin, identity, authn.RequireStaticToken(cfg.AdminToken))
 
-	return app.Run(ctx, log, hc, cfg.HTTP.DrainDelay,
+	return app.Run(ctx, log, hc, cfg.HTTP.DrainDelay, append([]app.Component{
 		httpx.NewServer("public", cfg.HTTP.Addr, public, cfg.HTTP, log),
 		httpx.NewServer("admin", cfg.HTTP.AdminAddr, admin, cfg.HTTP, log, httpx.WithWriteTimeout(90*time.Second)),
 		queue.NewOpener(store, cfg.OpenCheckInterval, qm, log),
 		queue.NewAdmission(store, pool, queue.AdmissionConfig{
 			Tick: cfg.AdmissionTick, RetryLeadership: cfg.LeaderRetryInterval, Rescan: cfg.AdmissionRescanInterval,
 		}, qm, log),
-	)
-}
-
-// noIdentity rejects every buyer request: without DEV_IDENTITY there is no
-// way to authenticate buyers until auth-svc exists (Phase 4).
-func noIdentity(http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		httpx.WriteProblem(w, r, httpx.Unauthorized("UNAUTHENTICATED", "buyer authentication is not available yet"))
-	})
+	}, background...)...)
 }

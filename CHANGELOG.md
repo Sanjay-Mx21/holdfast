@@ -23,6 +23,13 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
   - in development, the code can be read at `GET /v1/auth/dev/inbox`.
   - The edge routes `/v1/auth/`; Compose runs it on 8086 and 9096; service
     doc `docs/services/auth.md`.
+- **Real identity** (task 4.2): queue-svc and booking-svc identify buyers by
+  auth-svc's access tokens (`Authorization: Bearer`), verified against its
+  JWKS (`ACCESS_JWKS_URL`), with the user and role in the request context
+  (`authn.RequireUser`). The development header `X-Dev-User-Id` now works
+  only with `DEV_IDENTITY=true`, which Compose leaves off (the E2 load test
+  turns it on for queue-svc). The README quickstart signs in with a phone
+  code.
 
 ### Fixed
 

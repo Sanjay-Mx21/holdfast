@@ -115,7 +115,8 @@ services:
     environment:
       ENVIRONMENT: development
       LOG_FORMAT: text
-      DEV_IDENTITY: "true" # buyers identified by X-Dev-User-Id until auth-svc (Phase 4)
+      ACCESS_JWKS_URL: http://auth:8080/.well-known/jwks.json # buyers sign in with auth-svc
+      DEV_IDENTITY: ${DEV_IDENTITY:-false} # true: X-Dev-User-Id also works (development, load tests)
       POSTGRES_DSN: postgres://holdfast:holdfast@postgres:5432/holdfast?sslmode=disable
       INVENTORY_GRPC_ADDR: inventory:7070
       SERVICE_PRIVATE_KEY_FILE: /keys/booking.key
@@ -134,6 +135,7 @@ services:
       kafka-topics: { condition: service_completed_successfully }
       inventory: { condition: service_started }
       payment: { condition: service_started }
+      auth: { condition: service_started }
     restart: unless-stopped
 
   # auth-svc: sign-in with a code sent to a phone (a mock SMS gateway whose
@@ -259,7 +261,8 @@ services:
       ENVIRONMENT: development
       LOG_FORMAT: text
       VALKEY_ADDRS: valkey:6379
-      DEV_IDENTITY: "true" # buyers identified by X-Dev-User-Id until auth-svc (Phase 4)
+      ACCESS_JWKS_URL: http://auth:8080/.well-known/jwks.json # buyers sign in with auth-svc
+      DEV_IDENTITY: ${DEV_IDENTITY:-false} # true: X-Dev-User-Id also works (development, load tests)
       POSTGRES_DSN: postgres://holdfast:holdfast@postgres:5432/holdfast?sslmode=disable # admission leader election
       ADMISSION_PRIVATE_KEY_FILE: /keys/admission.key # signs admission tokens (dev key from make keys)
       TRUSTED_PROXIES: 10.250.0.10/32 # only the edge's X-Forwarded-For is believed
@@ -274,6 +277,7 @@ services:
     depends_on:
       valkey: { condition: service_healthy }
       postgres: { condition: service_healthy }
+      auth: { condition: service_started }
     restart: unless-stopped
 
   # The edge: routes, micro-caches the status and availability documents for

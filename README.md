@@ -56,16 +56,23 @@ sells exactly 1,000 (never 1,001) and stays up while doing it.
 Requirements: Go 1.27+, Docker with Compose v2, make.
 
 ```bash
-make up                                          # dev keys (admission tokens, booking-svc), PostgreSQL, Valkey, Kafka and its topics, Redpanda Console, migrations, inventory-svc, queue-svc, booking-svc, payment-svc, mockpsp, the NGINX edge, Prometheus, Grafana, OTel Collector, Jaeger
+make up                                          # dev keys, PostgreSQL, Valkey, Kafka and its topics, Redpanda Console, migrations, inventory-svc, queue-svc, booking-svc, payment-svc, mockpsp, auth-svc, the NGINX edge, Prometheus, Grafana, OTel Collector, Jaeger
 make event NAME="Coldplay Mumbai" CAPACITY=1000  # the event, its inventory and its waiting room (opens now); prints the event ID
 export EVENT=<event id>
-export ME=$(cat /proc/sys/kernel/random/uuid)    # your buyer ID (development identity until Phase 4)
 EDGE=localhost:8088                              # the buyers' front door
 
-curl -s -X POST $EDGE/v1/queue/$EVENT/join -H "X-Dev-User-Id: $ME"   # join the waiting room
-curl -s $EDGE/v1/events/$EVENT/status                                # the shared status document (cached 1 s)
-curl -s $EDGE/v1/queue/$EVENT/me -H "X-Dev-User-Id: $ME"             # your rank
-export TOKEN=$(curl -s -X POST $EDGE/v1/queue/$EVENT/admit -H "X-Dev-User-Id: $ME" | jq -r .token)
+# Sign in: a code goes to your phone through the mock SMS gateway, whose
+# inbox is readable in development.
+curl -s -X POST $EDGE/v1/auth/otp/request -H 'Content-Type: application/json' -d '{"phone":"+919876543210"}'
+CODE=$(curl -s "$EDGE/v1/auth/dev/inbox?phone=%2B919876543210" | jq -r .text | grep -o '[0-9]\{6\}')
+export ME=$(curl -s -c cookies.txt -X POST $EDGE/v1/auth/otp/verify -H 'Content-Type: application/json' \
+  -d "{\"phone\":\"+919876543210\",\"code\":\"$CODE\"}" | jq -r .accessToken)   # 15 minutes; the refresh token is in cookies.txt
+# Later: curl -s -b cookies.txt -c cookies.txt -X POST $EDGE/v1/auth/refresh
+
+curl -s -X POST $EDGE/v1/queue/$EVENT/join -H "Authorization: Bearer $ME"   # join the waiting room
+curl -s $EDGE/v1/events/$EVENT/status                                       # the shared status document (cached 1 s)
+curl -s $EDGE/v1/queue/$EVENT/me -H "Authorization: Bearer $ME"             # your rank
+export TOKEN=$(curl -s -X POST $EDGE/v1/queue/$EVENT/admit -H "Authorization: Bearer $ME" | jq -r .token)   # admission token
 
 curl -s $EDGE/v1/events/$EVENT/availability
 curl -s -X POST $EDGE/v1/events/$EVENT/holds \
@@ -74,7 +81,7 @@ curl -s -X POST $EDGE/v1/events/$EVENT/holds \
   -H 'Content-Type: application/json' -d '{"quantity":2}'
 export HOLD=<hold id>
 
-curl -s -X POST $EDGE/v1/bookings -H "X-Dev-User-Id: $ME" \
+curl -s -X POST $EDGE/v1/bookings -H "Authorization: Bearer $ME" \
   -H "Idempotency-Key: booking-$(date +%s)" \
   -H 'Content-Type: application/json' -d "{\"eventId\":\"$EVENT\",\"holdId\":\"$HOLD\"}"   # book it
 
@@ -83,8 +90,11 @@ make fairness-e6                                 # fairness of the queue order (
 make load-e2                                     # k6 stampede on the waiting room through the edge (E2)
 ```
 
-`make -s token EVENT=$EVENT` still mints a token directly, bypassing the waiting
-room, for development and load tests.
+`make -s token EVENT=$EVENT` still mints an admission token directly,
+bypassing the waiting room, for development and load tests. Starting the
+stack with `DEV_IDENTITY=true make up` lets requests without an access token
+name their buyer in `X-Dev-User-Id` instead (the E2 load test does this for
+queue-svc); never in production.
 
 Dashboards: Grafana at http://localhost:3000 (HoldFast / Inventory and
 HoldFast / Queue) and Prometheus at http://localhost:9090. The service's own
@@ -153,14 +163,18 @@ failure with `HOLDFAST_TEST_SEED=<seed>`.
 | `DELETE /v1/events/{eventID}/holds/{holdID}` | Admission token | Release your hold |
 | `GET /v1/events/{eventID}/availability` | Public | Remaining units (cacheable for 1 s) |
 | `PUT /internal/v1/events/{eventID}/inventory` | Operator token, admin port only | Provision inventory |
-| `POST /v1/queue/{eventID}/join` | `X-Dev-User-Id` until Phase 4 (queue-svc) | Join the waiting room |
-| `GET /v1/queue/{eventID}/me` | `X-Dev-User-Id` until Phase 4 (queue-svc) | Your rank after T0, or when the lottery closes |
+| `POST /v1/auth/otp/request` | Public (auth-svc) | Send a sign-in code to a phone |
+| `POST /v1/auth/otp/verify` | Public (auth-svc) | Sign in with the code: an access token, and a refresh cookie |
+| `POST /v1/auth/refresh` | Refresh cookie (auth-svc) | A new access token; the refresh token rotates |
+| `POST /v1/auth/logout` | Refresh cookie (auth-svc) | Sign out |
+| `POST /v1/queue/{eventID}/join` | Access token (queue-svc) | Join the waiting room |
+| `GET /v1/queue/{eventID}/me` | Access token (queue-svc) | Your rank after T0, or when the lottery closes |
 | `GET /v1/events/{eventID}/status` | Public (queue-svc) | The shared status document (cacheable for 1 s) |
-| `POST /v1/queue/{eventID}/admit` | `X-Dev-User-Id` until Phase 4 (queue-svc) | Exchange your turn for an admission token |
+| `POST /v1/queue/{eventID}/admit` | Access token (queue-svc) | Exchange your turn for an admission token |
 | `GET /.well-known/jwks.json` | Public (queue-svc) | Public keys of admission tokens |
 | `PUT /internal/v1/events/{eventID}/queue` | Operator token, queue-svc admin port only | Provision the queue |
-| `POST /v1/bookings` | `X-Dev-User-Id` until Phase 4 + `Idempotency-Key` (booking-svc) | Book a hold: a booking waiting for payment |
-| `GET /v1/bookings/{bookingID}` | `X-Dev-User-Id` until Phase 4 (booking-svc) | Your booking |
+| `POST /v1/bookings` | Access token + `Idempotency-Key` (booking-svc) | Book a hold: a booking waiting for payment |
+| `GET /v1/bookings/{bookingID}` | Access token (booking-svc) | Your booking |
 
 Errors are RFC 9457 problem documents with stable `code` values; see
 [`docs/services/inventory.md`](docs/services/inventory.md).
