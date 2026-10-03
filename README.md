@@ -33,7 +33,9 @@ sells exactly 1,000 (never 1,001) and stays up while doing it.
   events, provisions their inventory and queue, rebuilds inventory, and shows
   an event's availability and waiting room (`queue status`).
 - **Experiment E1** (`cmd/contention`) fires 50,000 concurrent buyers at 1,000
-  units and fails unless exactly 1,000 holds are granted. CI runs it on every push.
+  units and fails unless exactly 1,000 holds are granted. Its part B runs
+  whole purchases (holds, bookings, payments with 10% failing, the saga) and
+  fails unless every unit is sold once or returned. CI runs it on every push.
 
 ## Quickstart
 

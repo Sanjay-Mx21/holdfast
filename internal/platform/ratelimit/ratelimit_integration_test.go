@@ -51,14 +51,16 @@ func TestBurstThenRefuseWithRetryAfter(t *testing.T) {
 
 func TestRefillsOverTime(t *testing.T) {
 	l, id := newLimiter(t)
-	rule := Rule{Capacity: 1, Rate: 20} // one token every 50 ms
+	// One token every 500 ms: wide enough that a loaded machine still makes
+	// the second call well inside it (at 50 ms it did not: P37).
+	rule := Rule{Capacity: 1, Rate: 2}
 	if d, _ := l.Allow(ctx, "test", id, rule); !d.Allowed {
 		t.Fatal("first request refused")
 	}
 	if d, _ := l.Allow(ctx, "test", id, rule); d.Allowed {
 		t.Fatal("second immediate request allowed")
 	}
-	time.Sleep(80 * time.Millisecond)
+	time.Sleep(600 * time.Millisecond)
 	if d, err := l.Allow(ctx, "test", id, rule); err != nil || !d.Allowed {
 		t.Fatalf("after refill: %+v, %v; want allowed", d, err)
 	}

@@ -305,7 +305,14 @@ in commit order, marking each batch published in the same transaction
 - Fake-clock tests (`testing/synctest`) drive the admission leader's tick loop
   through seconds of ticking with exact timings, in microseconds.
 - E1 (`make e1`, and every CI run): 50,000 buyers for 1,000 units, plus
-  10,000 concurrent confirmations through the guard.
+  10,000 concurrent confirmations through the guard. Part B (`-mode
+  purchase`) runs 2,000 whole purchases for 1,000 units through the real
+  services in one process. Holds, bookings and payments at an in-process
+  mockpsp that fails 10% of them; every payment event goes to the saga
+  twice. It checks that every booking ends confirmed or cancelled, every
+  hold SOLD or RELEASED, and that PostgreSQL, Valkey and the ledger agree on
+  the sold count. It uses its own database, `<name>_e1`, so a running stack
+  cannot act on its purchases.
 - E6 (`make fairness-e6`): 100,000 joins before T0 and 20,000 after,
   checking with Spearman's rank correlation that join time does not predict
   a lottery position and that positions after T0 are the arrival order.
