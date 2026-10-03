@@ -31,14 +31,20 @@ All times are IST (UTC+05:30).
 |---|---|
 | **Project** | A flash-sale booking engine that sells exactly the available units under extreme demand, never more |
 | **Plan version** | 2.0 (1 October 2026) |
-| **Milestones complete** | M0 Foundation, M1 Correctness core, M1.5 Bring-up and baseline, and M2 Fair waiting room |
-| **Current milestone** | M3 MVP backend (Phase 3): 14 of 14 tasks done and all 4 exit criteria met (section 9); awaiting the owner's review of M3 |
+| **Milestones complete** | M0 Foundation, M1 Correctness core, M1.5 Bring-up and baseline, M2 Fair waiting room, and M3 MVP backend |
+| **Current milestone** | M4 Resume-ready product (Phase 4), after the P39 fix and Phase 4's prerequisites (the owner's decisions of 2026-10-03) |
 | **Progress to v1.0** | About 35% (18 of about 51 focused-work days, excluding Phase 7 stretch goals), counting Phase 2's planned 7 days |
 | **Repository** | [github.com/Sanjay-Mx21/holdfast](https://github.com/Sanjay-Mx21/holdfast), branch `main` |
 | **First commit** | `2173e50` "first commit", 2026-10-01 20:20, 82 files, 12,973 lines |
 | **Latest release** | [v0.2.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.2.0), 2026-10-02 21:51, on `cd0592a` (before it: [v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0), 2026-10-01 23:47, on `9dcd2f8`) |
 | **CI** | Green since 2026-10-01 22:00; `main` is protected and every change needs a pull request with all 10 required checks passing (`images (booking)`, `images (payment)` and `images (mockpsp)` added on 2026-10-03) |
 | **Issues so far** | 98 recorded: 92 resolved, 6 open (section 6) |
+
+<Callout type="tip" title="M3 complete: the MVP backend (2026-10-03)">
+
+All 14 Phase 3 tasks are merged (PRs #74 to #90), and all 4 exit criteria are met with evidence: one purchase is one trace across every service (`loadtest/results/phase3-one-purchase-trace.png`); 1,000 purchases under injected faults kept I1, I2 and I4 at 0; E1 parts A and B pass; ADRs 0008 to 0011 are written. The owner reviewed it on 2026-10-03, had the paperwork gaps fixed (PR #92), and approved release v0.3.0. Then: fix P39, build P17 in task 4.3, start Phase 4.
+
+</Callout>
 
 <Callout type="tip" title="M2 complete: the fair waiting room (2026-10-02)">
 
@@ -201,7 +207,8 @@ The rest of the list was already covered by tests written with tasks 3.4 to 3.12
 - **Gates:** gofmt, test, lint, `make gen` stable, up, itest with the stack running.
 - **E1 with the stack running failed one check:** "no infrastructure errors" in the guard mode ("too many clients"), with every invariant passing. Cause: P39 (queue-svc holds one PostgreSQL connection per provisioned queue: 31 for this session's 35 queues). With queue-svc stopped for the run, `make e1` passed all modes with 0 failed checks; queue-svc was restarted. | PR #90 (merged by the assistant at 15:05 after all 10 checks passed), `c048014` |
 | 2026-10-03 15:10 | **Phase 3 complete:** all 14 tasks and the 4 exit criteria met (PRs #74 to #90, `39d5439..c048014`). Work stopped for the owner's review, as agreed. Not tagged: v0.3.0 waits for the owner. Open for the owner: P39 (queue-svc's connection per event) and P17 (oversubscription, still unconfirmed) | This log |
-| 2026-10-03 15:34 | **Owner's decisions after Phase 3:** do the paperwork, release v0.3.0, fix P39, build P17 inside task 4.3, then Phase 4's prerequisites and Phase 4. **Paperwork** (this PR): asked "is Phase 3 completed precisely?", the assistant found and reported five gaps: stale "in progress" status lines (README, architecture, booking and payment docs), M3 still "Next" in the milestone tracker, the undocumented idempotency deviation (no `internal/platform/idempotency` package), no Jaeger screenshot for the demo checkpoint, and the README not mentioning payment-svc, mockpsp or the saga. All fixed; the screenshot is `loadtest/results/phase3-one-purchase-trace.png` | Branch `docs/p3-paperwork` |
+| 2026-10-03 15:34 | **Owner's decisions after Phase 3:** do the paperwork, release v0.3.0, fix P39, build P17 inside task 4.3, then Phase 4's prerequisites and Phase 4. **Paperwork** (this PR): asked "is Phase 3 completed precisely?", the assistant found and reported five gaps: stale "in progress" status lines (README, architecture, booking and payment docs), M3 still "Next" in the milestone tracker, the undocumented idempotency deviation (no `internal/platform/idempotency` package), no Jaeger screenshot for the demo checkpoint, and the README not mentioning payment-svc, mockpsp or the saga. All fixed; the screenshot is `loadtest/results/phase3-one-purchase-trace.png` | PR #92 (merged by the assistant at 15:40 after all 10 checks passed), `11d0022` |
+| 2026-10-03 15:42 | **Release v0.3.0 prepared:** CHANGELOG `[0.3.0]` with its known issues, the milestone tracker (M3 released, M4 next), README status and this log. The tag and the GitHub release follow on the merge commit | Branch `release/v0.3.0` |
 
 ## 3. What is complete, and what each piece contributes
 

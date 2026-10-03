@@ -6,6 +6,15 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-03
+
+The MVP backend (milestone M3, build plan Phase 3): a buyer can book a held
+seat, pay, and end with a confirmed ticket or a refund. booking-svc,
+payment-svc and mockpsp (a fault-injecting payment provider) join the
+system, with Kafka, the transactional outbox, gRPC between services,
+OpenTelemetry tracing (one trace per purchase) and the booking saga, and
+the decision records behind them (ADRs 0008 to 0011).
+
 ### Added
 
 - **Kafka** (task 3.1): Kafka 4.3.1 in KRaft mode and Redpanda Console
@@ -160,6 +169,28 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
   packages no longer claim each other's rows (P36).
 - The rate limiter's refill test allows 500 ms per token instead of 50 ms,
   so a loaded machine no longer fails it (P37).
+- A purchase is one trace: the provider's webhook used to start a separate
+  trace for the capture, the saga and inventory's confirmation (P38; see
+  "Phase 3 exit" above).
+
+### Known issues
+
+- queue-svc holds one PostgreSQL connection per provisioned event for its
+  admission leader's lock (P39). Connections grow with the number of events;
+  locally, `make e1` fails its "no infrastructure errors" check when run
+  beside the full stack (every invariant passes). Being fixed next.
+- The queue still admits buyers after the last unit is held, and never marks
+  itself `SOLD_OUT` (P17); they get 409 `SOLD_OUT` from inventory-svc and
+  nothing oversells. Planned for Phase 4 (task 4.3).
+- No reconciler yet (Phase 5): a webhook lost and missed by polling stays
+  unresolved until then, so I3 is fully guaranteed only from Phase 5.
+- Refunds of confirmed sales are not supported; `holdfastctl refund` handles
+  bookings stuck in `REFUND_REQUIRED` only.
+- Buyers are still identified by the `X-Dev-User-Id` development header
+  (real identity in Phase 4).
+- Carried over: Compose-built images report `version: dev` on `/buildz`
+  (P8); admin routers have no body-size limit (P12); E2 at the design load
+  waits for task 6.1.
 
 ## [0.2.0] - 2026-10-02
 
@@ -368,6 +399,7 @@ M1), brought up and proven on real infrastructure (milestone M1.5).
 - Compose-built images report `version: dev` and `commit: unknown` on `/buildz`.
 - `holdfast-explained-simply.mdx` still uses the old invariant numbering.
 
-[Unreleased]: https://github.com/Sanjay-Mx21/holdfast/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Sanjay-Mx21/holdfast/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/Sanjay-Mx21/holdfast/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Sanjay-Mx21/holdfast/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0
