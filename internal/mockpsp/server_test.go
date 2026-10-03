@@ -58,6 +58,23 @@ func (rc *receiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	rc.mu.Unlock()
 }
 
+// ofType returns the one webhook of a type. Deliveries run concurrently, so
+// webhooks sent moments apart can arrive in either order (P40), as a real
+// provider's can.
+func (rc *receiver) ofType(t *testing.T, typ string) psp.Webhook {
+	t.Helper()
+	var found []psp.Webhook
+	for _, wh := range rc.webhooks() {
+		if wh.Type == typ {
+			found = append(found, wh)
+		}
+	}
+	if len(found) != 1 {
+		t.Fatalf("%d %s webhooks in %+v, want 1", len(found), typ, rc.webhooks())
+	}
+	return found[0]
+}
+
 func (rc *receiver) webhooks() []psp.Webhook {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
@@ -202,9 +219,10 @@ func TestDeclineThenPayAndExpiry(t *testing.T) {
 		t.Fatalf("pay after a decline: %d %+v", code, paid)
 	}
 	waitFor(t, "two webhooks", func() bool { return len(h.rc.webhooks()) == 2 })
-	if got := h.rc.webhooks(); got[0].Type != psp.EventPaymentFailed || got[0].Reason != "declined_by_buyer" || got[1].Type != psp.EventPaymentCaptured {
-		t.Fatalf("webhooks %+v", got)
+	if failed := h.rc.ofType(t, psp.EventPaymentFailed); failed.Reason != "declined_by_buyer" {
+		t.Fatalf("failure webhook %+v", failed)
 	}
+	h.rc.ofType(t, psp.EventPaymentCaptured)
 
 	ref := uuid.NewString()
 	open, err := h.client.CreateOrder(context.Background(), ref, psp.CreateOrder{AmountPaise: 1000, Currency: "INR", ExpiresAt: time.Now().Add(300 * time.Millisecond), Reference: ref})
@@ -214,7 +232,7 @@ func TestDeclineThenPayAndExpiry(t *testing.T) {
 	time.Sleep(400 * time.Millisecond)
 	h.p.ExpireOrders()
 	waitFor(t, "the expiry webhook", func() bool { return len(h.rc.webhooks()) == 3 })
-	if wh := h.rc.webhooks()[2]; wh.Type != psp.EventOrderExpired || wh.OrderID != open.OrderID {
+	if wh := h.rc.ofType(t, psp.EventOrderExpired); wh.OrderID != open.OrderID {
 		t.Fatalf("webhook %+v", wh)
 	}
 	if code, _ := h.payJSON(t, open.OrderID, "pay"); code != http.StatusConflict {
@@ -238,7 +256,7 @@ func TestRefundAndSettlement(t *testing.T) {
 		t.Fatalf("refund retry %+v %v", again, err)
 	}
 	waitFor(t, "the refund webhook", func() bool { return len(h.rc.webhooks()) == 2 })
-	if wh := h.rc.webhooks()[1]; wh.Type != psp.EventRefundCompleted || wh.RefundID != r.RefundID || wh.OrderID != o.OrderID || wh.PaymentID != paid.PaymentID {
+	if wh := h.rc.ofType(t, psp.EventRefundCompleted); wh.RefundID != r.RefundID || wh.OrderID != o.OrderID || wh.PaymentID != paid.PaymentID {
 		t.Fatalf("webhook %+v", wh)
 	}
 	rep, err := h.client.Settlements(ctx, time.Now().Add(-time.Hour), time.Now().Add(time.Minute))

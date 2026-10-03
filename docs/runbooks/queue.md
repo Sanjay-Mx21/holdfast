@@ -98,8 +98,9 @@ the status document is.
 ## RB-Q-6 Moving leadership to another replica
 
 Restart the leading replica (`docker compose restart queue` locally). Its
-connection closes, PostgreSQL releases the advisory lock, and a standby takes
-over within `LEADER_RETRY_INTERVAL`. The new leader's epoch is higher, so
+lock session closes, PostgreSQL releases the advisory locks of every event
+it led (they share one connection), and the standbys take over within
+`LEADER_RETRY_INTERVAL`. The new leader's epoch is higher, so
 anything the old one still tries is refused.
 
 ## RB-Q-7 Rotating the admission-token signing key

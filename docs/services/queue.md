@@ -242,10 +242,13 @@ how a stale one is stopped: ADR 0007.
 
 - **One leader per event.** Every queue-svc replica runs a controller for every
   event in `q:events`; they compete for a PostgreSQL advisory lock
-  (`pg_try_advisory_lock`, keyed by FNV-1a of the event ID) held on a dedicated
-  connection taken out of the pool. If the leader's process dies, the
-  connection drops, PostgreSQL releases the lock, and a standby takes over on
-  its next attempt (`LEADER_RETRY_INTERVAL`, 2 s).
+  (`pg_try_advisory_lock`, keyed by FNV-1a of the event ID). A replica holds
+  all of its events' locks on **one** connection taken out of the pool
+  (`LockSession`; ADR 0007's amendment, P39), so queue-svc uses one
+  connection for leadership however many events it runs. A term that ends
+  releases its lock. If the replica's process dies, or its session drops,
+  every lock it held is released at once, and the standbys take over on
+  their next attempt (`LEADER_RETRY_INTERVAL`, 2 s).
 - **Fencing.** Each new term increments `adm:{E}:epoch`. `advance.lua` refuses
   a caller whose epoch is not current, so a leader that paused and woke up
   after a successor was elected cannot admit anyone; its term ends.
@@ -375,8 +378,8 @@ built: task 2.8 decided that tokens stay reusable within their session (below).
 | Layer | What it covers | Where |
 |---|---|---|
 | Unit | The leader's allowance (rate, one-second cap, fractions); handlers, validation and error mapping; lottery scores; the Spearman helper | `admission_test.go`, `handler_test.go`, `lottery_test.go`, `model_test.go`, `internal/stats` |
-| Fake clock | The leader's tick loop under `testing/synctest`: exact tick times, no starting burst, carried allowance capped at one second, stepping down when fenced, when the lock's connection dies or when the event is gone, surviving a failed tick | `admission_synctest_test.go` |
-| Integration | Every script against real Valkey: provisioning, joins (idempotent, no re-roll, concurrent), the T0 switch by Valkey's clock, positions, a stale epoch refused, the session budget, slot expiry, the status document, claims | `store_integration_test.go`, `admission_integration_test.go` |
+| Fake clock | The leader's tick loop under `testing/synctest`: exact tick times, no starting burst, carried allowance capped at one second, stepping down when fenced, when the lock's session is lost or when the event is gone, surviving a failed tick | `admission_synctest_test.go` |
+| Integration | Every script against real Valkey: provisioning, joins (idempotent, no re-roll, concurrent), the T0 switch by Valkey's clock, positions, a stale epoch refused, the session budget, slot expiry, the status document, claims; leadership: one session holding 12 events' locks on one connection, and a killed session handing every event to the other replica with newer epochs | `store_integration_test.go`, `admission_integration_test.go` |
 | Model (F1) | Random interleavings of joins, rejoins, ticks, claims, expiring slots, T0 and freezes, checked step by step against a reference model: the queue's order, which ranks each tick admits, every claim's answer, and that no rank changes once admission has begun | `fairness_model_integration_test.go` (12 seeds × 400 steps; a failure prints its seed and step) |
 | Failover | Two real controllers on PostgreSQL and Valkey: one leader, the standby takes over with a higher epoch when the leader dies, the old epoch is fenced, only the new leader exports gauges; a controller stops when its event is removed | `admission_integration_test.go` |
 
