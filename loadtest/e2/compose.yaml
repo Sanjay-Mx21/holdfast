@@ -10,6 +10,9 @@ services:
       # 50,000 simulated buyers name themselves in X-Dev-User-Id rather than
       # each signing in with a phone code.
       DEV_IDENTITY: "true"
+      # E2 measures the waiting room, not clients' CPU: no proof of work
+      # (the design's load-test bypass; refused in production).
+      POW_DIFFICULTY: "0"
   nginx:
     volumes:
       - ./loadtest/e2/edge-limits.conf:/etc/nginx/edge-limits.conf:ro

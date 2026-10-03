@@ -8,7 +8,8 @@ T0 transition, positions, the admission controller, the status document,
 admission tokens and their trust by inventory-svc, the edge, metrics and a
 dashboard, tests, experiments E2 and E6, and operator commands. Phase 4
 (task 4.3) added the policy windows at join, the freeze switch, and admission
-by the units left with `SOLD_OUT` (P17). Decisions: ADR 0005 (lottery before
+by the units left with `SOLD_OUT` (P17); task 4.4 added proof of work at
+join. Decisions: ADR 0005 (lottery before
 T0, FIFO after), ADR 0006 (cached status polling), ADR 0007 (leader election
 with fencing).
 
@@ -20,13 +21,64 @@ with fencing).
 - Admit buyers at a controlled rate and issue admission tokens (built).
 - Publish the status document every client polls (built).
 - Apply the sale's policy windows at join: verified buyers only, no agents (built, task 4.3).
+- Make every join pay a small proof of work (built, task 4.4).
 - Pause admissions on the freeze switch, and mark a sold-out queue `SOLD_OUT` (built, task 4.3).
 
 ## API
 
+### `GET /v1/queue/{eventID}/challenge`
+
+A proof-of-work challenge for the caller and this event (`internal/pow`).
+Same identity as joining.
+
+```http
+HTTP/1.1 200 OK
+Cache-Control: no-store
+
+{"required":true,"challenge":"1759501720000.18.r4nd0m...","difficulty":18,"expiresAt":"2026-10-05T12:02:00Z"}
+```
+
+- **The work:** find a nonce, a decimal string, such that
+  SHA-256(`challenge` + `:` + nonce) starts with at least `difficulty` zero
+  bits: 2^`difficulty` hashes on average. The web app solves it in a Web
+  Worker (`web/src/lib/pow/`); `holdfastctl pow solve --challenge <c>` solves
+  it for curl and scripts.
+- **Stateless:** a challenge is an HMAC (`POW_SECRET`) over the event, the
+  user, its expiry, its difficulty and a random value. Any replica verifies
+  it with one HMAC and one SHA-256, and nothing is stored. A solved challenge
+  is bound to one user and one event, and joining is idempotent, so reusing it
+  before it expires (`POW_CHALLENGE_TTL`, 2 minutes) gains nothing.
+- **Adaptive:** the difficulty is `POW_DIFFICULTY` (18 bits) normally, plus one
+  bit for each doubling of this replica's challenge rate above
+  `POW_SURGE_RATE` (200 per second), up to `POW_MAX_DIFFICULTY` (22). Each bit
+  doubles every client's expected work, so a surge, when bots matter most,
+  costs more per join.
+- **Sizing:** the solver does about 0.9 million hashes a second on the
+  development laptop (Node 24, the same engine as Chrome), so 18 bits takes
+  about 0.3 s there. A mid-range phone is typically several times slower,
+  about 1 to 2 s: the design's target. This is an estimate; real phones have
+  not been measured yet. The time varies a lot from one challenge to the
+  next, since the work is a lottery.
+- With `POW_DIFFICULTY=0` (development and load tests; refused in production)
+  the answer is `{"required":false}` and joins need no proof.
+- An honest limit: proof of work raises the cost of automation, but it does
+  not stop a determined, well-funded attacker. It is one layer, with rate
+  limits, verified identities and the policy windows.
+
 ### `POST /v1/queue/{eventID}/join`
 
-Puts the caller in the event's waiting room. No body.
+Puts the caller in the event's waiting room. The body carries the solved
+challenge (with `POW_DIFFICULTY=0`, no body is needed):
+
+```json
+{"pow": {"challenge": "1759501720000.18.r4nd0m...", "nonce": "90165"}}
+```
+
+The proof of work is checked before anything else touches Valkey, even the
+rate limits: it costs one HMAC and one SHA-256. No body, or no `pow`, is 400
+`POW_REQUIRED`; a wrong nonce, or a challenge issued to someone else or for
+another event, is 403 `POW_INVALID`; an expired one is 403 `POW_EXPIRED` (get
+a new one).
 
 The caller is the signed-in buyer: an auth-svc access token in
 `Authorization: Bearer` (`docs/services/auth.md`), verified against
@@ -37,6 +89,9 @@ E2 load test does, to simulate 50,000 buyers.
 ```http
 POST /v1/queue/0196f0c1-.../join
 Authorization: Bearer <access token>
+Content-Type: application/json
+
+{"pow":{"challenge":"...","nonce":"90165"}}
 ```
 
 ```http
@@ -375,6 +430,9 @@ for up to 30 seconds.
 | Code | HTTP | Meaning |
 |---|---|---|
 | `UNAUTHENTICATED` | 401 | Buyer endpoints: no access token, or one that is invalid or expired (refresh it at auth-svc). Admin: missing or wrong operator token |
+| `POW_REQUIRED` | 400 | Join: no solved challenge in the body |
+| `POW_INVALID` | 403 | Join: the nonce does not solve the challenge, or the challenge was not issued to this user for this event |
+| `POW_EXPIRED` | 403 | Join: the challenge has expired; get a new one |
 | `VERIFIED_ONLY` | 403 | Join: only verified buyers may join until the window ends; `Retry-After` gives the seconds left |
 | `AGENT_LOCKOUT` | 403 | Join: agents may not join until the lockout ends; `Retry-After` gives the seconds left |
 | `INVALID_REQUEST` | 400 | Malformed event ID, or a setting outside its bounds (`detail` says which) |
@@ -446,6 +504,7 @@ built: task 2.8 decided that tokens stay reusable within their session (below).
 |---|---|---|
 | Unit | The leader's allowance (rate, one-second cap, fractions); the state gauge; handlers, validation and error mapping, policy refusals with `Retry-After`, the freeze routes; lottery scores; the policy rules; the Spearman helper | `admission_test.go`, `handler_test.go`, `lottery_test.go`, `model_test.go`, `internal/policy`, `internal/stats` |
 | Fake clock | The leader's tick loop under `testing/synctest`: exact tick times, no starting burst, carried allowance capped at one second, stepping down when fenced, when the lock's session is lost or when the event is gone, surviving a failed tick; the units cap from inventory (and none when it fails or has no sale), the sold-out mark, fencing while marking | `admission_synctest_test.go` |
+| Proof of work | Issue, solve and verify; another user, another event, a forged difficulty, a foreign MAC, bad nonces and expiry refused; the difficulty rising with the rate and falling after a quiet second; a hash vector computed independently (Python's hashlib) that the TypeScript solver must match too; the challenge route and every join refusal, none of which reaches the limiter or the service | `internal/pow`, `handler_test.go`, `web/src/lib/pow/solve.test.ts` (`node --test`) |
 | Policy and freeze | Windows stored and checked at join, replaced by re-provisioning, kept on a refused one; the freeze switch's states; the units cap in `advance.lua`; the fenced sold-out mark, which leaves a frozen queue alone | `policy_integration_test.go` |
 | Integration | Every script against real Valkey: provisioning, joins (idempotent, no re-roll, concurrent), the T0 switch by Valkey's clock, positions, a stale epoch refused, the session budget, slot expiry, the status document, claims; leadership: one session holding 12 events' locks on one connection, and a killed session handing every event to the other replica with newer epochs | `store_integration_test.go`, `admission_integration_test.go` |
 | Model (F1) | Random interleavings of joins, rejoins, ticks, claims, expiring slots, T0 and freezes, checked step by step against a reference model: the queue's order, which ranks each tick admits, every claim's answer, and that no rank changes once admission has begun | `fairness_model_integration_test.go` (12 seeds × 400 steps; a failure prints its seed and step) |
@@ -486,6 +545,11 @@ required (admission leader election). Service settings:
 | `INVENTORY_GRPC_ADDR` | none | inventory-svc's gRPC API (`inventory:7070` in Compose). Set: leaders cap sessions by the units left and mark sold-out queues `SOLD_OUT`. Empty: neither (logged at start) |
 | `SERVICE_PRIVATE_KEY_FILE` | none | Ed25519 private key (PEM) signing queue-svc's service tokens for inventory; required with `INVENTORY_GRPC_ADDR`. Compose mounts `queue.key` from `make keys`; inventory trusts `queue.pub` |
 | `OVERSUBSCRIPTION_FACTOR` | `1.3` | Sessions per unit left (1 to 10) |
+| `POW_DIFFICULTY` | `18` | Proof-of-work bits at normal load; `0` turns proof of work off (refused in production) |
+| `POW_MAX_DIFFICULTY` | `22` | Most bits during a surge (up to 30) |
+| `POW_SURGE_RATE` | `200` | Challenges per second, per replica, above which the difficulty rises |
+| `POW_CHALLENGE_TTL` | `2m` | Lifetime of a challenge (10s to 10m) |
+| `POW_SECRET` | required with proof of work | HMAC key of the challenges, at least 32 characters, the same on every replica; removed from the environment after loading |
 
 Locally, Compose maps the public port to 8082 and the admin port to 9092,
 and points `ACCESS_JWKS_URL` at auth-svc; `DEV_IDENTITY=true make up` (or
@@ -495,7 +559,9 @@ the E2 load test's override) turns the development header on.
 
 | Metric | Labels | Use |
 |---|---|---|
-| `holdfast_queue_joins_total` | `result` | Join outcomes: joined, already_joined, rate_limited_ip, rate_limited_user, closed, not_found, invalid, agent_lockout, verified_only, error |
+| `holdfast_queue_joins_total` | `result` | Join outcomes: joined, already_joined, rate_limited_ip, rate_limited_user, closed, not_found, invalid, agent_lockout, verified_only, pow_required, pow_invalid, pow_expired, error |
+| `holdfast_queue_pow_challenges_total` | | Proof-of-work challenges issued |
+| `holdfast_queue_pow_difficulty` | | Bits of the last challenge this process issued: above `POW_DIFFICULTY` during a surge |
 | `holdfast_queue_position_lookups_total` | `result` | Position lookups: ranked, randomizing, not_in_queue, not_found, rate_limited, invalid, error |
 | `holdfast_queue_admitted_total` | `event` | People admitted into the purchase path |
 | `holdfast_queue_admits_total` | `result` | Turn claims: issued, not_your_turn, expired, not_in_queue, closed, not_found, rate_limited, invalid, error |

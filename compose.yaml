@@ -270,6 +270,10 @@ services:
       # sessions stay within units left x 1.3, and a sold-out queue says so.
       INVENTORY_GRPC_ADDR: inventory:7070
       SERVICE_PRIVATE_KEY_FILE: /keys/queue.key
+      # Joins need a solved proof-of-work challenge (GET .../challenge);
+      # POW_DIFFICULTY=0 make up turns it off.
+      POW_DIFFICULTY: ${POW_DIFFICULTY:-18}
+      POW_SECRET: ${POW_SECRET:-dev-only-pow-secret-change-me-0123456789}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-only-admin-token-change-me-0123456789}
     networks: [default, edge]

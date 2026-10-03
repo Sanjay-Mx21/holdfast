@@ -35,6 +35,7 @@ import (
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/postgres"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/valkey"
 	"github.com/Sanjay-Mx21/holdfast/internal/policy"
+	"github.com/Sanjay-Mx21/holdfast/internal/pow"
 	"github.com/Sanjay-Mx21/holdfast/internal/queue"
 )
 
@@ -56,6 +57,7 @@ func commands() []command {
 		{"queue status", "show an event's waiting room: state, size, admission, sessions, leader", cmdQueueStatus},
 		{"freeze", "freeze a sale (runbook RB-1): no new holds, admissions paused", cmdFreeze},
 		{"unfreeze", "resume a frozen sale (runbook RB-1)", cmdUnfreeze},
+		{"pow solve", "solve a waiting-room proof-of-work challenge (for curl and scripts)", cmdPoWSolve},
 		{"kafka topics", "create every Kafka topic HoldFast uses (idempotent; auto-creation is off)", cmdKafkaTopics},
 		{"dlq replay", "publish a dead-letter topic's messages back to their topic (runbook RB-3)", cmdDLQReplay},
 		{"refund", "ask payment-svc again to refund a booking stuck in REFUND_REQUIRED (runbook RB-4)", cmdRefund},
@@ -649,6 +651,23 @@ func unchangedNote(changed bool) string {
 		return ""
 	}
 	return " (already so)"
+}
+
+// cmdPoWSolve prints the nonce that solves a challenge from
+// GET /v1/queue/{id}/challenge, so the quickstart and scripts can join with
+// curl. Browsers solve challenges in a Web Worker instead.
+func cmdPoWSolve(_ context.Context, args []string) error {
+	fs := flag.NewFlagSet("pow solve", flag.ContinueOnError)
+	challenge := fs.String("challenge", "", "the challenge (required)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	d, err := pow.DifficultyOf(*challenge)
+	if err != nil {
+		return errors.New("--challenge is not a waiting-room challenge")
+	}
+	fmt.Fprintln(stdout, pow.Solve(*challenge, d))
+	return nil
 }
 
 func cmdInventoryStatus(ctx context.Context, args []string) error {

@@ -47,7 +47,9 @@ sells exactly 1,000 (never 1,001) and stays up while doing it.
   its first minutes and keep agents out for longer, as IRCTC does for
   Tatkal. Admission follows the units left (about 1.3 sessions per unit), so
   thousands are not let in to fight over the last few, and the queue says
-  `SOLD_OUT` once the last unit is sold. A **freeze switch** stops new holds
+  `SOLD_OUT` once the last unit is sold. Joining costs a small **proof of
+  work**, solved by the browser in about a second, which rises with demand
+  and makes bots pay for every identity. A **freeze switch** stops new holds
   and admissions at once while purchases in flight finish (runbook RB-1).
 - **holdfastctl** runs migrations, generates dev keys and tokens, creates
   events, provisions their inventory and queue, rebuilds inventory, shows an
@@ -76,7 +78,12 @@ export ME=$(curl -s -c cookies.txt -X POST $EDGE/v1/auth/otp/verify -H 'Content-
   -d "{\"phone\":\"+919876543210\",\"code\":\"$CODE\"}" | jq -r .accessToken)   # 15 minutes; the refresh token is in cookies.txt
 # Later: curl -s -b cookies.txt -c cookies.txt -X POST $EDGE/v1/auth/refresh
 
-curl -s -X POST $EDGE/v1/queue/$EVENT/join -H "Authorization: Bearer $ME"   # join the waiting room
+# Joining takes a proof of work: a challenge to solve (a browser does it in a
+# Web Worker in about a second; here holdfastctl does it).
+CHALLENGE=$(curl -s $EDGE/v1/queue/$EVENT/challenge -H "Authorization: Bearer $ME" | jq -r .challenge)
+NONCE=$(go run ./cmd/holdfastctl pow solve --challenge "$CHALLENGE")
+curl -s -X POST $EDGE/v1/queue/$EVENT/join -H "Authorization: Bearer $ME" \
+  -H 'Content-Type: application/json' -d "{\"pow\":{\"challenge\":\"$CHALLENGE\",\"nonce\":\"$NONCE\"}}"   # join the waiting room
 curl -s $EDGE/v1/events/$EVENT/status                                       # the shared status document (cached 1 s)
 curl -s $EDGE/v1/queue/$EVENT/me -H "Authorization: Bearer $ME"             # your rank
 export TOKEN=$(curl -s -X POST $EDGE/v1/queue/$EVENT/admit -H "Authorization: Bearer $ME" | jq -r .token)   # admission token
@@ -147,8 +154,8 @@ docs/                  architecture, service reference, runbooks, ADRs, design
 scripts/               repository checks
 ```
 
-Next drops, following the design doc: the rest of Phase 4 (proof of work,
-the web client, the mission-control dashboard); then chaos drills, the
+Next drops, following the design doc: the rest of Phase 4 (the web client,
+the mission-control dashboard); then chaos drills, the
 reconciler, load tests and benchmarks (Phases 5-7).
 
 ## Testing
@@ -181,7 +188,8 @@ failure with `HOLDFAST_TEST_SEED=<seed>`.
 | `POST /v1/auth/otp/verify` | Public (auth-svc) | Sign in with the code: an access token, and a refresh cookie |
 | `POST /v1/auth/refresh` | Refresh cookie (auth-svc) | A new access token; the refresh token rotates |
 | `POST /v1/auth/logout` | Refresh cookie (auth-svc) | Sign out |
-| `POST /v1/queue/{eventID}/join` | Access token (queue-svc) | Join the waiting room |
+| `GET /v1/queue/{eventID}/challenge` | Access token (queue-svc) | A proof-of-work challenge to solve before joining |
+| `POST /v1/queue/{eventID}/join` | Access token + solved challenge (queue-svc) | Join the waiting room |
 | `GET /v1/queue/{eventID}/me` | Access token (queue-svc) | Your rank after T0, or when the lottery closes |
 | `GET /v1/events/{eventID}/status` | Public (queue-svc) | The shared status document (cacheable for 1 s) |
 | `POST /v1/queue/{eventID}/admit` | Access token (queue-svc) | Exchange your turn for an admission token |
