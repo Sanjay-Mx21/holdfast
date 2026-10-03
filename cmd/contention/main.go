@@ -3,9 +3,12 @@
 //
 //	-mode holds   buyers race for units through the real inventory service
 //	              and its atomic Valkey Lua scripts (the fast path);
-//	-mode guard   confirmations race through the PostgreSQL final guard
-//	              (conditional UPDATE + per-user cap) for the same units;
-//	-mode all     both.
+//	-mode guard     confirmations race through the PostgreSQL final guard
+//	                (conditional UPDATE + per-user cap) for the same units;
+//	-mode purchase  part B: whole purchases (hold, booking, payment with
+//	                injected failures, the saga) through the real services,
+//	                checking the final sold count in both stores;
+//	-mode all       all three.
 //
 // It exits with status 1 if any invariant is violated, so CI runs it on every
 // push: a regression that could oversell fails the build.
@@ -51,6 +54,8 @@ type options struct {
 	dsn           string
 	keep          bool
 	jsonPath      string
+	purchases     int
+	payFailure    float64
 }
 
 // Check is one invariant and whether it held.
@@ -85,7 +90,7 @@ func (r *Report) passed() bool {
 
 func main() {
 	var o options
-	flag.StringVar(&o.mode, "mode", "holds", "holds | guard | all")
+	flag.StringVar(&o.mode, "mode", "holds", "holds | guard | purchase | all")
 	flag.IntVar(&o.buyers, "buyers", 50_000, "concurrent hold attempts, one buyer each")
 	flag.IntVar(&o.guardAttempts, "guard-attempts", 10_000, "concurrent confirmations for the guard mode")
 	flag.IntVar(&o.capacity, "capacity", 1_000, "units on sale")
@@ -93,13 +98,15 @@ func main() {
 	flag.IntVar(&o.perUser, "per-user-limit", 4, "per-user cap")
 	flag.IntVar(&o.concurrency, "concurrency", 1_000, "attempts in flight at once")
 	flag.StringVar(&o.valkeyAddrs, "valkey", envOr("VALKEY_ADDRS", "localhost:6379"), "Valkey address(es)")
-	flag.StringVar(&o.dsn, "dsn", os.Getenv("POSTGRES_DSN"), "PostgreSQL DSN for -mode guard")
+	flag.StringVar(&o.dsn, "dsn", os.Getenv("POSTGRES_DSN"), "PostgreSQL DSN for -mode guard and purchase")
+	flag.IntVar(&o.purchases, "purchases", 2_000, "buyers attempting a whole purchase in -mode purchase")
+	flag.Float64Var(&o.payFailure, "pay-failure", 0.1, "share of payments the provider fails in -mode purchase")
 	flag.BoolVar(&o.keep, "keep", false, "keep the test event's data afterwards")
 	flag.StringVar(&o.jsonPath, "json", "", "also write the reports as JSON to this file")
 	flag.Parse()
 
-	if o.qty < 1 || o.qty > o.perUser || o.capacity < 1 || o.concurrency < 1 {
-		fatal(errors.New("need 1 <= qty <= per-user-limit, capacity >= 1, concurrency >= 1"))
+	if o.qty < 1 || o.qty > o.perUser || o.capacity < 1 || o.concurrency < 1 || o.purchases < 1 || o.payFailure < 0 || o.payFailure > 1 {
+		fatal(errors.New("need 1 <= qty <= per-user-limit, capacity >= 1, concurrency >= 1, purchases >= 1, 0 <= pay-failure <= 1"))
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -114,6 +121,13 @@ func main() {
 	}
 	if o.mode == "guard" || o.mode == "all" {
 		r, err := runGuard(ctx, o)
+		if err != nil {
+			fatal(err)
+		}
+		reports = append(reports, r)
+	}
+	if o.mode == "purchase" || o.mode == "all" {
+		r, err := runPurchase(ctx, o)
 		if err != nil {
 			fatal(err)
 		}

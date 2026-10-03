@@ -97,6 +97,16 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
   - payment-svc consumes `booking.refund_required.v1` (group
     `payment-refunds`) and refunds through the provider.
   - New event `booking.refunded.v1`.
+- **E1 part B** (task 3.12): `cmd/contention -mode purchase`, part of
+  `make e1` and CI.
+  - Whole purchases for 1,000 units through the real services: holds,
+    bookings, payments at an in-process mockpsp failing 10% of them, and the
+    saga, with every payment event delivered twice.
+  - It checks that every booking ends confirmed or cancelled and every hold
+    SOLD or RELEASED, and that PostgreSQL, Valkey and the ledger agree on
+    the sold count.
+  - It runs in its own database (`postgres.SiblingDatabase`, `<name>_e1`),
+    which testenv now shares.
 
 ### Fixed
 
@@ -121,6 +131,8 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
 - Integration tests that claim from a shared queue (overdue bookings, open
   intents) take a cross-process lock (`testenv.Exclusive`), so parallel test
   packages no longer claim each other's rows (P36).
+- The rate limiter's refill test allows 500 ms per token instead of 50 ms,
+  so a loaded machine no longer fails it (P37).
 
 ## [0.2.0] - 2026-10-02
 
