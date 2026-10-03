@@ -229,6 +229,12 @@ edge routes `/v1/bookings` here.
 
 ## Metrics
 
+`holdfast_capture_to_confirm_seconds` (histogram, task 4.6) times each
+confirmation from the payment's capture (the capture event's CloudEvents
+time) to the saga's committed decision; redeliveries and duplicates are not
+timed. Its p99 is the SLO of design doc 12.1 (at most 5 s), shown on the
+mission-control dashboard.
+
 | Metric | Labels | Use |
 |---|---|---|
 | `holdfast_booking_requests_total` | `result` | POST outcomes: created, replayed, key_reused, hold_not_found, hold_not_available, event_not_found, error |

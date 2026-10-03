@@ -319,6 +319,24 @@ services:
       retries: 20
     restart: unless-stopped
 
+  # Exporters for the mission-control dashboard's health row (task 4.6):
+  # Valkey's CPU and command rate, PostgreSQL's transactions and connections.
+  valkey-exporter:
+    image: oliver006/redis_exporter:v1.93.0 # speaks Valkey's protocol
+    environment:
+      REDIS_ADDR: redis://valkey:6379
+    depends_on:
+      valkey: { condition: service_healthy }
+    restart: unless-stopped
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.20.1
+    environment:
+      DATA_SOURCE_NAME: postgresql://holdfast:holdfast@postgres:5432/holdfast?sslmode=disable
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: unless-stopped
+
   prometheus:
     image: prom/prometheus:v3.15.0
     volumes:
