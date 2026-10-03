@@ -38,7 +38,7 @@ All times are IST (UTC+05:30).
 | **First commit** | `2173e50` "first commit", 2026-10-01 20:20, 82 files, 12,973 lines |
 | **Latest release** | [v0.2.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.2.0), 2026-10-02 21:51, on `cd0592a` (before it: [v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0), 2026-10-01 23:47, on `9dcd2f8`) |
 | **CI** | Green since 2026-10-01 22:00; `main` is protected and every change needs a pull request with all 9 required checks passing (`images (booking)` and `images (payment)` added on 2026-10-03) |
-| **Issues so far** | 88 recorded: 83 resolved, 5 open (section 6) |
+| **Issues so far** | 90 recorded: 85 resolved, 5 open (section 6) |
 
 <Callout type="tip" title="M2 complete: the fair waiting room (2026-10-02)">
 
@@ -154,7 +154,8 @@ Sources: the dates recorded in the ADRs and the plan, file modification times, a
   - one trace spans booking, inventory and payment, including the provider call;
   - with `duplicateRate` 1, the second webhook was counted as a duplicate and booked once;
   - Prometheus scrapes mockpsp;
-  - the poller went from 20 to all 50 open intents in 90 s (before the fix, 20 forever). | Branch `feat/p3-mockpsp`, issue #28 |
+  - the poller went from 20 to all 50 open intents in 90 s (before the fix, 20 forever).
+- CI's first run on PR #85 failed in an unchanged test (P36). Fixed on the same branch: the four affected packages ran 10 times in parallel, 310 of 310 passing. | PR #85, issue #28 |
 
 ## 3. What is complete, and what each piece contributes
 
@@ -231,10 +232,10 @@ Every problem met while bringing Drop 1 up and running the soak on 2026-10-01, i
 
 | Group | Recorded | Resolved | Open |
 |---|---|---|---|
-| P: defects in the repository | 35 | 31 | 4 |
-| E: machine and network | 18 | 17 | 1 |
+| P: defects in the repository | 36 | 32 | 4 |
+| E: machine and network | 19 | 18 | 1 |
 | D: diagnosis and process | 35 | 35 | 0 |
-| **Total** | **88** | **83** | **5** |
+| **Total** | **90** | **85** | **5** |
 
 CI took **three runs** to go green:
 
@@ -283,6 +284,7 @@ CI took **three runs** to go green:
 | P33 | `TestPublishAndConsumeInOrderPerKey` failed once in task 3.9's full `make itest`: publishing to its freshly created topic got `UNKNOWN_TOPIC_OR_PARTITION` | One failed integration run in 6 (it passed 5 of 5 rerun) | The test helper publishes as soon as `CreateTopics` returns, before the broker's metadata lists the new partitions' leaders | The helper now waits until the broker's metadata gives every partition a leader (up to 10 s); 5 of 5 runs pass with the stack up | ✅ PR after task 3.9 |
 | P34 | payment-svc's status poller claims the oldest open intents first and changes nothing when a poll fails, so the same batch is claimed every pass. Found in task 3.10's live check: 20 `get_order` calls rejected per pass, all for the same intents (left by tests, unknown to mockpsp) | A few intents whose polls keep failing (orders unknown after a mockpsp restart, or a provider error on specific orders) starve every newer intent: a lost webhook is never recovered by polling | The claim orders by `created_at` only, and nothing records a poll | In task 3.10: migration `payment/00003` adds `polled_at`; the claim takes the least recently polled first (never polled first), and every poll, failed or not, stamps it | ✅ Task 3.10 (live: the poller reached all 50 open intents of the dev database in 90 s, where it had stuck at 20) |
 | P35 | Integration tests and the `make up` stack shared one PostgreSQL database. The running payment-svc's poller polled the tests' intents (found in task 3.10's live check), the running outbox relays published the tests' events (P30), and a test of the poller could race the running one | Noise in development metrics and topics; a possible flaky poller test | One database for tests and the stack (the PostgreSQL side of P7) | `testenv` uses `<database>_test`, created on first use under an advisory lock; holdfastctl's test uses the same DSN | ✅ PR after task 3.9 |
+| P36 | `TestConcurrentDeadlineJobsTakeDisjointBatches` (bookingdb) failed in CI on PR #85, with no change to it: one of its expired bookings was claimed by neither of its two jobs | One failed CI run; latent since tasks 3.5 and 3.9, in four tests | Test packages run as parallel processes on one test database, and the claims take every eligible row: booking's deadline-job test locked or cancelled bookingdb's rows (`FOR UPDATE SKIP LOCKED` skips them). The paymentdb claim test and the payment poller tests share the same race | `testenv.Exclusive(t, pool, name)` holds a cross-process advisory lock for the test's duration; the six queue-claiming tests take `booking-deadline` or `payment-poll`. The four packages, 10 times in parallel: 310 of 310 | ✅ Task 3.10 (PR #85) |
 
 ### 6.3 Machine and network
 
@@ -306,6 +308,7 @@ CI took **three runs** to go green:
 | E16 | Downloading buf from GitHub's release assets failed twice (a connection timeout after 134 s, then the checksum file), before succeeding | A few minutes | Flaky connection to GitHub's asset host | Retried; the binary's SHA-256 matched the release's `sha256.txt` before installing | ✅ |
 | E17 | Merging PR #77: every check passed, but the merge script's GitHub API calls timed out (`dial tcp ...:443: i/o timeout`), so the PR stayed open | A retry | Network | Checked the PR through the REST API (not merged), merged it with a retry | ✅ |
 | E18 | Merging PR #81 around 01:00: every check passed, but the merge call failed on the network, and the session ended before a retry | PR #81 waited open about 8.5 hours; task 3.9 started on its branch's base | Network | Merged at 09:42 when the owner said to continue (`df90ab7`); the 3.9 branch was created from the updated `main` | ✅ |
+| E19 | Checking PR #85's checks: `gh pr checks` timed out reaching api.github.com (`dial tcp ...:443: i/o timeout`) | One retry | Network | Retried a minute later; it worked | ✅ |
 
 ### 6.4 Diagnosis and process
 

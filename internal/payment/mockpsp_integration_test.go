@@ -124,6 +124,7 @@ func TestPaymentWithMockPSP(t *testing.T) {
 
 func TestLostWebhookIsRecoveredByPolling(t *testing.T) {
 	w := newMockPSPFixture(t)
+	testenv.Exclusive(t, w.pool, "payment-poll")
 	if err := w.faults.Set(mockpsp.Faults{LossRate: 1}); err != nil {
 		t.Fatal(err)
 	}

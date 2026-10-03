@@ -106,6 +106,9 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
 - payment-svc's status poller takes the least recently polled intents first
   (migration `payment/00003` adds `polled_at`), so intents whose polls keep
   failing no longer starve the rest (P34).
+- Integration tests that claim from a shared queue (overdue bookings, open
+  intents) take a cross-process lock (`testenv.Exclusive`), so parallel test
+  packages no longer claim each other's rows (P36).
 
 ## [0.2.0] - 2026-10-02
 

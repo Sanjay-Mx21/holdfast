@@ -380,6 +380,7 @@ func TestWebhookHandler(t *testing.T) {
 
 func TestPollerAppliesWhatTheProviderKnows(t *testing.T) {
 	f := newFixture(t)
+	testenv.Exclusive(t, f.pool, "payment-poll")
 	pay6 := payID()
 	b, in, order := f.intent(t, 2000)
 	_, quiet, quietOrder := f.intent(t, 2000)
@@ -486,6 +487,7 @@ func TestGRPCContract(t *testing.T) {
 // claimed again and again ahead of the rest.
 func TestPollerRotates(t *testing.T) {
 	f := newFixture(t)
+	testenv.Exclusive(t, f.pool, "payment-poll")
 	_, a, _ := f.intent(t, 100)
 	_, b, _ := f.intent(t, 100)
 	// The two oldest open intents, a before b.
