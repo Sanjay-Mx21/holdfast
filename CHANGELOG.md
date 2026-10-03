@@ -107,6 +107,14 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
     the sold count.
   - It runs in its own database (`postgres.SiblingDatabase`, `<name>_e1`),
     which testenv now shares.
+- **Phase 3 tests** (task 3.13):
+  - the saga's decision table (every payment event against every booking
+    status);
+  - the saga behind the real Kafka consumer, with duplicates on the wire
+    and an inventory failure retried;
+  - an outbox relay that crashed after publishing republishes the same
+    event IDs;
+  - late and out-of-order webhooks, and delayed duplicates through mockpsp.
 
 ### Fixed
 

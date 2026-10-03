@@ -595,3 +595,29 @@ func TestRefundConsumerSkipsWhatItCannotUse(t *testing.T) {
 		t.Fatalf("an uncaptured intent: %v, status %s, %d refunds", err, f.status(t, in.ID), len(f.psp.refunds))
 	}
 }
+
+// TestLateAndOutOfOrderWebhooks: a capture reported after the order expired
+// wins (money moved), and an expiry reported after a capture changes nothing.
+func TestLateAndOutOfOrderWebhooks(t *testing.T) {
+	f := newFixture(t)
+	b, in, order := f.intent(t, 4500)
+	f.apply(t, hook(psp.EventOrderExpired, order, "", 4500))
+	if s := f.status(t, in.ID); s != "EXPIRED" {
+		t.Fatalf("status %s", s)
+	}
+	f.apply(t, hook(psp.EventPaymentCaptured, order, payID(), 4500))
+	if s := f.status(t, in.ID); s != "CAPTURED" || f.balance(t, in.ID, "psp_receivable") != 4500 {
+		t.Fatalf("a late capture: %s", s)
+	}
+	if got := strings.Join(f.events(t, b), ","); got != "payment.expired.v1,payment.captured.v1" {
+		t.Fatalf("events %s", got)
+	}
+
+	b2, in2, order2 := f.intent(t, 4500)
+	f.apply(t, hook(psp.EventPaymentCaptured, order2, payID(), 4500))
+	f.apply(t, hook(psp.EventOrderExpired, order2, "", 4500))
+	f.apply(t, hook(psp.EventPaymentFailed, order2, "", 4500))
+	if s := f.status(t, in2.ID); s != "CAPTURED" || len(f.events(t, b2)) != 1 {
+		t.Fatalf("after an expiry and a failure that came late: %s, events %v", s, f.events(t, b2))
+	}
+}
