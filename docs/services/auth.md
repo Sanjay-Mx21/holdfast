@@ -5,9 +5,11 @@ tokens the other services trust. Binary: `cmd/auth`. Code: `internal/auth`
 (access tokens: `internal/platform/authn/access.go`). Schema: `auth`
 (migrations in `db/migrations/auth`, queries in `internal/auth/queries`).
 
-**Status:** built in Phase 4 (task 4.1). queue-svc and booking-svc accept its
-access tokens from task 4.2; until then they still use the development
-header.
+**Status:** built in Phase 4 (task 4.1). queue-svc and booking-svc identify
+buyers by its access tokens (task 4.2); the `vrf` claim feeds the
+verified-only window (task 4.3); the web app signs in with it and serialises
+refreshes across tabs (task 4.5). Decision record: ADR 0012 (short-lived
+access tokens, refresh tokens that rotate with reuse detection).
 
 ## Responsibilities
 

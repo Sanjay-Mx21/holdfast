@@ -32,13 +32,30 @@ All times are IST (UTC+05:30).
 | **Project** | A flash-sale booking engine that sells exactly the available units under extreme demand, never more |
 | **Plan version** | 2.0 (1 October 2026) |
 | **Milestones complete** | M0 Foundation, M1 Correctness core, M1.5 Bring-up and baseline, M2 Fair waiting room, and M3 MVP backend |
-| **Current milestone** | M4 Resume-ready product (Phase 4): 6 of 8 tasks done, and 4.7's README (section 10); the demo video is the owner's; next task 4.8, [issue #40](https://github.com/Sanjay-Mx21/holdfast/issues/40) |
-| **Progress to v1.0** | About 35% (18 of about 51 focused-work days, excluding Phase 7 stretch goals), counting Phase 2's planned 7 days |
+| **Current milestone** | M4 Resume-ready product (Phase 4): all 8 tasks built, except the demo video v1, which is the owner's (section 10). **Work stopped for the owner's review** |
+| **Progress to v1.0** | About 49% (25 of about 51 focused-work days, excluding Phase 7 stretch goals), counting Phase 2's and Phase 4's planned 7 days each |
 | **Repository** | [github.com/Sanjay-Mx21/holdfast](https://github.com/Sanjay-Mx21/holdfast), branch `main` |
 | **First commit** | `2173e50` "first commit", 2026-10-01 20:20, 82 files, 12,973 lines |
 | **Latest release** | [v0.3.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.3.0), 2026-10-03 15:48, on `5ffa271` (before it: [v0.2.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.2.0), 2026-10-02 21:51, on `cd0592a`; [v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0), 2026-10-01 23:47, on `9dcd2f8`) |
 | **CI** | Green since 2026-10-01 22:00; `main` is protected and every change needs a pull request with all 12 required checks passing (`images (booking)`, `images (payment)`, `images (mockpsp)` and `images (auth)` added on 2026-10-03, `web` on 2026-10-04) |
-| **Issues so far** | 118 recorded: 114 resolved, 4 open (section 6) |
+| **Issues so far** | 119 recorded: 115 resolved, 4 open (section 6) |
+
+<Callout type="tip" title="Phase 4 built: identity, sale policies, the web app and mission control (2026-10-04)">
+
+Tasks 4.1 to 4.8 are merged (PRs #95 to #102), apart from the demo video v1, which is the owner's to record. Built:
+- auth-svc with phone codes and rotating refresh tokens (ADR 0012);
+- access tokens in queue-svc and booking-svc;
+- the verified-only and agent-lockout windows;
+- the freeze switch;
+- admission by units left with `SOLD_OUT` (P17);
+- proof of work at join;
+- the Next.js web app;
+- the mission-control dashboard;
+- README v1.
+
+The first exit criterion is met with evidence: a ticket bought by hand in a real browser during a k6 stampede while the dashboard showed it live (`loadtest/results/phase4-stampede.gif`). Left for the owner: the demo video v1 (README v1 is published) and the resume update (milestone "resume-ready"). Work stopped for review, as agreed.
+
+</Callout>
 
 <Callout type="tip" title="M3 complete: the MVP backend (2026-10-03)">
 
@@ -346,7 +363,22 @@ The rest of the list was already covered by tests written with tasks 3.4 to 3.12
   - In both, queue-svc admitted and issued a token to every join it received (3,188 and 2,481), and the origin stayed at about 0.5 status requests a second.
   - k6 itself dropped joins (66,393 and 15,995 iterations), so its threshold checks failed on the generator's side; recorded as such in `loadtest/results/README.md`.
   - The hand purchase passed both times, with capture-to-confirm 1.99 s under load.
-- **Fixed on the way:** P43 (E2's event now has as many units as users); the dashboard's capture-to-confirm tile is grey with no data, and its proof-of-work tile reads "off" when disabled (D51). | Branch `feat/p4-readme`, issue #39 (the video keeps it open) |
+- **Fixed on the way:** P43 (E2's event now has as many units as users); the dashboard's capture-to-confirm tile is grey with no data, and its proof-of-work tile reads "off" when disabled (D51). | PR #101 (merged by the assistant at 01:52 after all 12 checks passed), `b82628b`; issue #39 stays open for the demo video |
+| 2026-10-04 01:54 | **Task 4.8 (docs) done:**
+- **ADR 0012:** short-lived EdDSA access tokens verified locally; 30-day refresh tokens, hashed, in a strict cookie, rotating with family revocation on reuse; clients refresh one at a time.
+- **`docs/services/policy.md`:** every sale rule (the windows, the per-user cap, proof of work, rate limits, admission, the freeze switch), where each is enforced, and why there.
+- **`docs/services/auth.md`:** its status brought up to date. (The web app's doc was written with 4.5.)
+- **Also:** the architecture doc's security section points to both; the README's decisions table gains ADR 0012; P44 fixed (the design's ADR table). | Branch `feat/p4-docs`, issue #40 |
+| 2026-10-04 01:54 | **Phase 4 complete, apart from the owner's items; work stopped for the owner's review.**
+- **All 8 tasks are built** (PRs #95 to #102), except the demo video v1.
+- **Exit criteria:**
+  - **met:** buying a ticket by hand during a k6 rush, with the dashboard live;
+  - **half met:** README v1 is published, the demo video v1 is the owner's;
+  - **the owner's:** the resume update ("resume-ready").
+- **Open for the owner:**
+  - the video, and whether to tag a release;
+  - a `.wslconfig` memory limit (E24);
+  - E2 at design scale still needs a separate load generator (Phase 6), unchanged. | This log |
 
 ## 3. What is complete, and what each piece contributes
 
@@ -423,10 +455,10 @@ Every problem met while bringing Drop 1 up and running the soak on 2026-10-01, i
 
 | Group | Recorded | Resolved | Open |
 |---|---|---|---|
-| P: defects in the repository | 43 | 40 | 3 |
+| P: defects in the repository | 44 | 41 | 3 |
 | E: machine and network | 24 | 23 | 1 |
 | D: diagnosis and process | 51 | 51 | 0 |
-| **Total** | **118** | **114** | **4** |
+| **Total** | **119** | **115** | **4** |
 
 CI took **three runs** to go green:
 
@@ -483,6 +515,7 @@ CI took **three runs** to go green:
 | P41 | `TestOnlyOneRelayLeads` (outbox) failed once in task 4.3's full `make itest`: "timed out waiting for b to publish" | One failed run; 3 of 3 targeted runs passed | A race in the test, not the relay. The relay publishes a batch and then commits its "published" mark in one transaction. The test stopped relay A as soon as A had *published*. When the stop landed before the commit, the mark rolled back, and relay B correctly published that event again with the next one (at least once, by design). B's count was then 2, and the test waited for exactly 1 | The test now waits until A's pass has committed (no unpublished rows) before stopping it, and checks that B published the new event; 10 of 10 runs pass | ✅ Task 4.3 |
 | P42 | booking-svc's counters (`holdfast_booking_saga_outcomes_total`, `holdfast_late_confirm_total` and the rest) were created at their first event, so each series was born at 1. `increase()` and `rate()` cannot see a series' first event: the dashboard showed 0 bookings confirmed right after a confirmation | Since Phase 3; found with the mission-control dashboard | Labels were not pre-registered at zero, unlike queue-svc's and inventory-svc's | Every label value is now created at zero in `NewMetrics`; live, "Bookings confirmed" showed 1 after one purchase | ✅ Task 4.6 |
 | P43 | Experiment E2 created its event with 1,000 units, and since P17 (task 4.3) the admission leader caps open sessions at units left × 1.3. E2's simulated users never buy, so admission would stall at 1,300 sessions, and E2's requirement of a token for every user (50,000 by default) could not pass | Found before E2 was next run at full scale | P17 changed what limits admission; E2's setup predated it | `loadtest/e2/run.sh` gives the event as many units as users: E2 measures the waiting room, not inventory | ✅ Task 4.7 |
+| P44 | The design doc's ADR table still marked ADRs 0008, 0009 and 0010 "⏳" (not written), although all three were written in Phase 3 (task 3.14) | Stale paperwork since Phase 3; Phase 3's closing review missed it | The ADR table was not part of the Phase 3 paperwork checklist | Marked ✅ along with 0012 in task 4.8 | ✅ Task 4.8 |
 
 ### 6.3 Machine and network
 
@@ -664,8 +697,8 @@ Goal: a real person can buy a ticket through a web app, with real identity and t
 | 4.4 Proof of work | [#36](https://github.com/Sanjay-Mx21/holdfast/issues/36) | ✅ 2026-10-03 (PR #98): stateless HMAC challenges with adaptive difficulty, verified before any Valkey work; TypeScript solver with a Web Worker (page in 4.5); `holdfastctl pow solve` |
 | 4.5 Web app | [#37](https://github.com/Sanjay-Mx21/holdfast/issues/37) | ✅ 2026-10-04 (PR #99): Next.js static export behind the edge (events, sign-in, event and join with proof of work, waiting room, buy, booking); catalog API in booking-svc; CI job `web`; a whole purchase passes in Chromium with axe clean |
 | 4.6 Mission-control dashboard | [#38](https://github.com/Sanjay-Mx21/holdfast/issues/38) | ✅ 2026-10-04 (PR #100): HoldFast / Mission control (34 panels, 12.4's four rows); capture-to-confirm histogram; Valkey and PostgreSQL exporters; screenshot in `loadtest/results/` |
-| 4.7 README v1 and demo video v1 | [#39](https://github.com/Sanjay-Mx21/holdfast/issues/39) | 🟡 2026-10-04: README v1 done (section 19's nine parts, stampede GIF, results table); the demo video v1 is the owner's to record |
-| 4.8 Docs | [#40](https://github.com/Sanjay-Mx21/holdfast/issues/40) | ⏳ |
+| 4.7 README v1 and demo video v1 | [#39](https://github.com/Sanjay-Mx21/holdfast/issues/39) | 🟡 2026-10-04 (PR #101): README v1 done (section 19's nine parts, stampede GIF, results table); the demo video v1 is the owner's to record |
+| 4.8 Docs | [#40](https://github.com/Sanjay-Mx21/holdfast/issues/40) | ✅ 2026-10-04: ADR 0012, the sale policies doc, the auth doc's status; the design's ADR table brought up to date (P44) |
 
 ## 11. Keeping this log current
 
