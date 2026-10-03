@@ -114,9 +114,19 @@ func openPool(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 	}, "holdfastctl")
 }
 
+// openValkey connects to addrs, with VALKEY_PASSWORD and VALKEY_DB from the
+// environment like the services.
 func openValkey(ctx context.Context, addrs string) (redis.UniversalClient, error) {
+	db := 0
+	if v := os.Getenv("VALKEY_DB"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			return nil, fmt.Errorf("VALKEY_DB must be a database number, got %q", v)
+		}
+		db = n
+	}
 	return valkey.New(ctx, config.Valkey{
-		Addrs: strings.Split(addrs, ","), Password: os.Getenv("VALKEY_PASSWORD"), PoolSize: 4,
+		Addrs: strings.Split(addrs, ","), Password: os.Getenv("VALKEY_PASSWORD"), DB: db, PoolSize: 4,
 		DialTimeout: 2 * time.Second, ReadTimeout: 2 * time.Second, WriteTimeout: 2 * time.Second,
 	}, "holdfastctl")
 }

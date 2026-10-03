@@ -32,6 +32,7 @@ func testTopic(t *testing.T, cfg config.Kafka, partitions int32) string {
 	if _, err := EnsureTopics(context.Background(), cfg, TopicSpec{Partitions: partitions, ReplicationFactor: 1}, topic, DLQ(topic)); err != nil {
 		t.Fatal(err)
 	}
+	waitForLeaders(t, cfg, topic, DLQ(topic))
 	t.Cleanup(func() {
 		kc, err := kgo.NewClient(kgo.SeedBrokers(cfg.Brokers...))
 		if err != nil {
@@ -41,6 +42,43 @@ func testTopic(t *testing.T, cfg config.Kafka, partitions int32) string {
 		_, _ = kadm.NewClient(kc).DeleteTopics(context.Background(), topic, DLQ(topic))
 	})
 	return topic
+}
+
+// waitForLeaders waits until the broker's metadata gives every partition of
+// the topics a leader. CreateTopics can return before that, and a publish in
+// between fails with UNKNOWN_TOPIC_OR_PARTITION (P33).
+func waitForLeaders(t *testing.T, cfg config.Kafka, topics ...string) {
+	t.Helper()
+	kc, err := kgo.NewClient(kgo.SeedBrokers(cfg.Brokers...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer kc.Close()
+	adm := kadm.NewClient(kc)
+	ready := func() bool {
+		md, err := adm.Metadata(context.Background(), topics...)
+		if err != nil {
+			return false
+		}
+		for _, name := range topics {
+			td, ok := md.Topics[name]
+			if !ok || td.Err != nil || len(td.Partitions) == 0 {
+				return false
+			}
+			for _, p := range td.Partitions {
+				if p.Err != nil || p.Leader < 0 {
+					return false
+				}
+			}
+		}
+		return true
+	}
+	for deadline := time.Now().Add(10 * time.Second); !ready(); {
+		if time.Now().After(deadline) {
+			t.Fatalf("topics %v have no partition leaders after 10s", topics)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }
 
 func groupName() string { return "test-group-" + uuid.NewString()[:8] }

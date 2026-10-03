@@ -79,6 +79,14 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
 - booking-svc's payment deadline is now the hold's protection minus
   `PAYMENT_GRACE` (3 minutes; design doc 6.1). It used to equal the end of
   the protection, leaving no grace for a late capture (P32).
+- `make itest` no longer fails while `make up` is running (P7): integration
+  tests use Valkey logical database 1 (`testenv.ValkeyDB`), so the running
+  services, on database 0, never sweep or admit the tests' keys. holdfastctl
+  reads `VALKEY_DB` like the services. Stopping inventory-svc first is no
+  longer needed.
+- The Kafka integration tests wait for a new topic's partition leaders
+  before publishing, instead of failing now and then with
+  `UNKNOWN_TOPIC_OR_PARTITION` (P33).
 
 ## [0.2.0] - 2026-10-02
 
