@@ -25,8 +25,12 @@ const (
 )
 
 // AccessClaims identify a signed-in user: the subject is the user's ID.
+// Verified says the user's identity is verified (a phone code, in this
+// build); the policy engine opens a sale's first window to verified buyers
+// only.
 type AccessClaims struct {
-	Role string `json:"role"`
+	Role     string `json:"role"`
+	Verified bool   `json:"vrf"`
 	jwt.RegisteredClaims
 }
 
@@ -44,12 +48,14 @@ func NewAccessIssuer(key ed25519.PrivateKey, ttl time.Duration) *AccessIssuer {
 	return &AccessIssuer{key: key, kid: KeyID(key.Public().(ed25519.PublicKey)), ttl: ttl, now: time.Now}
 }
 
-// Issue signs a token for userID with role and returns it with its expiry.
-func (i *AccessIssuer) Issue(userID, role string) (string, time.Time, error) {
+// Issue signs a token for userID with role, saying whether the user's
+// identity is verified, and returns it with its expiry.
+func (i *AccessIssuer) Issue(userID, role string, verified bool) (string, time.Time, error) {
 	now := i.now()
 	exp := now.Add(i.ttl)
 	claims := AccessClaims{
-		Role: role,
+		Role:     role,
+		Verified: verified,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    IssuerAuth,
 			Subject:   userID,

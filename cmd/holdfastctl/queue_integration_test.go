@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/Sanjay-Mx21/holdfast/internal/booking/catalog"
+	"github.com/Sanjay-Mx21/holdfast/internal/inventory"
 	"github.com/Sanjay-Mx21/holdfast/internal/queue"
 	"github.com/Sanjay-Mx21/holdfast/internal/testenv"
 )
@@ -127,5 +128,66 @@ func TestQueueProvisionNeedsAnOpeningTime(t *testing.T) {
 	out, err := run(t, "queue", "provision", "--valkey", valkeyAddr, "--event", ev, "--opens-at", "2026-10-05T12:00:00Z")
 	if err != nil || !strings.Contains(out, "queue provisioned: opens 2026-10-05T12:00:00Z, 83 admissions/s") {
 		t.Fatalf("provision with --opens-at: %q %v", out, err)
+	}
+}
+
+// TestPolicyWindowsAndFreeze: the catalog's windows reach the queue, and
+// freeze and unfreeze switch both halves of the sale.
+func TestPolicyWindowsAndFreeze(t *testing.T) {
+	rdb := testenv.Valkey(t)
+	pool := testenv.Postgres(t)
+	ctx := context.Background()
+	valkeyAddr := os.Getenv(testenv.EnvValkeyAddr)
+	dsn := testenv.PostgresDSN(t)
+	store := queue.NewStore(rdb)
+
+	opensAt := time.Now().Add(-time.Minute).UTC().Truncate(time.Second)
+	verified, lockout := opensAt.Add(time.Hour), opensAt.Add(30*time.Minute)
+	id, err := catalog.Create(ctx, pool, catalog.NewEvent{
+		Name: "holdfastctl freeze test", SaleOpensAt: opensAt, PerUserLimit: 4, UnitPricePaise: 100, Capacity: 10,
+		VerifiedWindowEndsAt: &verified, AgentLockoutEndsAt: &lockout,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev := id.String()
+	t.Cleanup(func() {
+		_ = store.Purge(context.Background(), ev)
+		_ = inventory.NewStore(rdb).Purge(context.Background(), ev)
+	})
+
+	if _, err := run(t, "freeze", "--valkey", valkeyAddr, "--event", ev); !errors.Is(err, inventory.ErrEventNotProvisioned) {
+		t.Fatalf("freeze before provisioning: %v, want ErrEventNotProvisioned", err)
+	}
+	out, err := run(t, "queue", "provision", "--valkey", valkeyAddr, "--dsn", dsn, "--event", ev)
+	want := "verified buyers only until " + verified.Format(time.RFC3339) + "; no agents until " + lockout.Format(time.RFC3339)
+	if err != nil || !strings.Contains(out, want) {
+		t.Fatalf("provision: %q %v; want %q", out, err, want)
+	}
+	if _, err := run(t, "inventory", "provision", "--valkey", valkeyAddr, "--dsn", dsn, "--event", ev); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := store.Open(ctx, ev); err != nil { // T0 has passed
+		t.Fatal(err)
+	}
+
+	out, err = run(t, "freeze", "--valkey", valkeyAddr, "--event", ev)
+	if err != nil || !strings.Contains(out, "inventory: holds frozen: no new holds\n") || !strings.Contains(out, "queue: FROZEN: admissions paused\n") {
+		t.Fatalf("freeze: %q %v", out, err)
+	}
+	out, err = run(t, "freeze", "--valkey", valkeyAddr, "--event", ev)
+	if err != nil || strings.Count(out, "(already so)") != 2 {
+		t.Fatalf("freeze again: %q %v", out, err)
+	}
+	out, err = run(t, "queue", "status", "--valkey", valkeyAddr, "--event", ev)
+	if err != nil || !strings.Contains(out, "FROZEN") || !strings.Contains(out, want) {
+		t.Fatalf("status while frozen: %q %v", out, err)
+	}
+	out, err = run(t, "unfreeze", "--valkey", valkeyAddr, "--event", ev)
+	if err != nil || !strings.Contains(out, "inventory: holds resumed\n") || !strings.Contains(out, "queue: OPEN: admissions resumed\n") {
+		t.Fatalf("unfreeze: %q %v", out, err)
+	}
+	if _, err := run(t, "freeze", "--valkey", valkeyAddr, "--event", "nope"); err == nil {
+		t.Fatal("a bad event ID was accepted")
 	}
 }

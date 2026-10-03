@@ -7,10 +7,11 @@ Code: `internal/inventory`.
 
 - Create, read and cancel holds for admitted buyers.
 - Protect holds during checkout (`MarkPaying`) and settle them (`Confirm`,
-  `ReleaseForFailedPayment`). These are service methods today; booking-svc
-  will call them over gRPC in Phase 3.
+  `ReleaseForFailedPayment`), for booking-svc over gRPC.
 - Release expired holds (sweeper).
-- Serve availability for the waiting room and clients.
+- Serve availability for clients, and for queue-svc's admission leaders over
+  gRPC (units left and open holds; P17).
+- Stop new holds while the sale is frozen (runbook RB-1; task 4.3).
 
 ## API
 
@@ -39,6 +40,11 @@ Repeating the request with the same key returns the same hold with
 rejected with `IDEMPOTENCY_KEY_REUSED`. A released hold keeps its key for one
 hour (`HOLD_EXPIRED`); after that the key can create a new hold.
 
+While the sale is frozen, a new hold is refused with 503 `SALE_PAUSED` and
+`Retry-After: 10`; the buyer keeps their admission and retries. A retry of a
+hold made before the freeze still returns that hold, and existing holds go
+through checkout, confirmation and release as usual.
+
 ### `GET /v1/events/{eventID}/holds/{holdID}`
 
 Returns the caller's hold. Another user's hold is reported as `HOLD_NOT_FOUND`,
@@ -62,18 +68,30 @@ Operator token required. Body: `{"capacity":1000,"perUserLimit":4}`. Returns
 201 when created and 200 when already provisioned with identical settings;
 different settings return 409 `PROVISION_CONFLICT`.
 
+### `POST /internal/v1/events/{eventID}/freeze` and `/unfreeze` (admin port)
+
+Operator token required. No body. Sets or clears the event's freeze flag
+(`freeze.lua`), the inventory half of the freeze switch (runbook RB-1):
+`{"eventId":"...","frozen":true,"changed":true}`. Switching again returns
+`"changed": false`; an unknown event returns 404 `EVENT_NOT_FOUND`.
+queue-svc's endpoint of the same path pauses admissions; `holdfastctl freeze
+--event <id>` and `unfreeze` switch both.
+
 ### Internal gRPC API (`GRPC_ADDR`, default `:7070`)
 
 `holdfast.inventory.v1.InventoryService` (`proto/holdfast/inventory/v1/inventory.proto`)
-is booking-svc's API: `GetHold`, `MarkPaying`, `Confirm` and
-`ReleaseForFailedPayment`, each a thin adapter over the same service methods as
-the HTTP API (`internal/inventory/grpc.go`), and each safe to retry. Errors are
+is booking-svc's and queue-svc's API: `GetHold`, `MarkPaying`, `Confirm` and
+`ReleaseForFailedPayment` for booking-svc, and `GetAvailability` (units left,
+capacity, open holds, the freeze flag) for queue-svc's admission leaders, each
+a thin adapter over the same service methods as the HTTP API
+(`internal/inventory/grpc.go`), and each safe to retry. Errors are
 gRPC status codes with a `google.rpc.ErrorInfo` reason (`INVALID_REQUEST`,
 `EVENT_NOT_PROVISIONED`, `HOLD_NOT_FOUND`, `HOLD_EXPIRED`); `inventory.Client`
 turns them back into the domain errors, so callers never see protobuf.
 
 - Every call needs a service token from a trusted caller (below) and a
-  deadline; only `booking` may call these methods. The standard gRPC health
+  deadline; only `booking` may call the hold methods, and only `queue` may
+  call `GetAvailability`. The standard gRPC health
   service needs neither, for probes.
 - Locally, Compose maps it to host port 7071 for services run on the host.
   It is internal: never expose it.
@@ -84,8 +102,8 @@ turns them back into the domain errors, so callers never see protobuf.
 (5-minute) Ed25519 JWT with its own key: issuer and subject
 `service:<caller>`, audience `service:inventory`, header `typ: svc+jwt`.
 inventory-svc trusts the public keys listed in `GRPC_TRUSTED_CALLERS`
-(`booking=/keys/booking.pub`), and lets each caller use only the methods it
-needs (`inventory.GRPCAllow`, deny by default).
+(`booking=/keys/booking.pub,queue=/keys/queue.pub`), and lets each caller use
+only the methods it needs (`inventory.GRPCAllow`, deny by default).
 
 - It reuses the Ed25519 machinery of admission tokens, needs no certificate
   authority, and identifies the caller on every call, so access is per method,
@@ -114,6 +132,7 @@ needs (`inventory.GRPCAllow`, deny by default).
 | `USER_LIMIT` | 422 | Per-user cap reached |
 | `IDEMPOTENCY_KEY_REUSED` | 422 | Same key, different quantity |
 | `SOLD_OUT` | 409 | Not enough units left |
+| `SALE_PAUSED` | 503 | The sale is frozen (runbook RB-1): no new holds; retry after `Retry-After` (10 s) |
 | `HOLD_EXPIRED` | 409 | Hold expired or released |
 | `HOLD_NOT_CANCELLABLE` | 409 | Hold in checkout or sold |
 | `PROVISION_CONFLICT` | 409 | Event already provisioned differently |
@@ -138,10 +157,10 @@ RELEASED <-------------+       (Confirm on RELEASED = late: units re-taken)
 | Key | Type | Content |
 |---|---|---|
 | `inv:{E}:avail` | string (int) | Units left; can dip below 0 after a late confirm |
-| `inv:{E}:config` | hash | `capacity`, `per_user_limit` |
+| `inv:{E}:config` | hash | `capacity`, `per_user_limit`; `frozen` (`1` while the sale is frozen) |
 | `inv:{E}:user:{U}` | string (int) | Units the user currently holds or bought |
 | `inv:{E}:hold:{H}` | hash | `user`, `qty`, `state`, `expires_at`, `created_at`, `released_by`; released holds expire after 1 h |
-| `inv:{E}:expiry` | sorted set | Member `H|U`, score = expiry in ms |
+| `inv:{E}:expiry` | sorted set | Member `H|U`, score = expiry in ms; its size is the open holds (HELD or PAYING, or expired and not yet swept) |
 | `inv:events` | set | Provisioned events (the sweeper's work list) |
 
 ## Scripts
@@ -149,7 +168,8 @@ RELEASED <-------------+       (Confirm on RELEASED = late: units re-taken)
 | Script | Replies |
 |---|---|
 | `provision.lua` | 1 created, 0 identical settings, -1 conflict |
-| `hold.lua` | {1 held, 2 replay, 0 sold out, -1 user limit, -2 bad quantity, -3 not provisioned} |
+| `hold.lua` | {1 held, 2 replay, 0 sold out, -1 user limit, -2 bad quantity, -3 not provisioned, -4 frozen}; a replay is answered before the freeze check |
+| `freeze.lua` | 1 changed, 0 already so, -1 not provisioned |
 | `mark_paying.lua` | {1 marked, 2 already paying, 0 expired or missing, -1 not owner} |
 | `release.lua` | 1 released, 0 nothing to do, -1 not expired yet, -2 paying (cannot cancel), -3 not owner |
 | `confirm.lua` | 1 confirmed, 2 replay, 3 late, -1 not owner |
@@ -179,7 +199,7 @@ are defined in `internal/platform/config`. Service settings:
 
 | Metric | Labels | Use |
 |---|---|---|
-| `holdfast_holds_total` | `result` | Outcomes: held, replay, sold_out, user_limit, invalid, not_provisioned, error |
+| `holdfast_holds_total` | `result` | Outcomes: held, replay, sold_out, user_limit, paused, invalid, not_provisioned, error |
 | `holdfast_hold_script_duration_seconds` | | Valkey round-trip latency of `hold.lua` |
 | `holdfast_hold_releases_total` | `mode` | EXPIRE, USER_CANCEL, PAYMENT_FAILED |
 | `holdfast_hold_confirms_total` | `outcome` | confirmed, replay, late |

@@ -28,8 +28,9 @@ var (
 	markPayingScript = loadScript("mark_paying.lua")
 	releaseScript    = loadScript("release.lua")
 	confirmScript    = loadScript("confirm.lua")
+	freezeScript     = loadScript("freeze.lua")
 
-	allScripts = []*redis.Script{provisionScript, holdScript, markPayingScript, releaseScript, confirmScript}
+	allScripts = []*redis.Script{provisionScript, holdScript, markPayingScript, releaseScript, confirmScript, freezeScript}
 )
 
 // Store is the Valkey-backed hot state of inventory. It runs the atomic
@@ -181,12 +182,15 @@ func (s *Store) Confirm(ctx context.Context, eventID, userID, holdID string, qty
 	}
 }
 
-// Availability reads an event's remaining and total units.
+// Availability reads an event's remaining and total units, its open holds
+// and whether it is frozen.
 func (s *Store) Availability(ctx context.Context, eventID string) (Availability, error) {
 	k := keysFor(eventID)
-	pipe := s.rdb.Pipeline() // both keys share a hash slot, so this is one round trip
+	pipe := s.rdb.Pipeline() // the keys share a hash slot, so this is one round trip
 	availCmd := pipe.Get(ctx, k.avail())
 	capCmd := pipe.HGet(ctx, k.config(), "capacity")
+	frozenCmd := pipe.HGet(ctx, k.config(), "frozen")
+	holdsCmd := pipe.ZCard(ctx, k.expiry())
 	if _, err := pipe.Exec(ctx); err != nil && !errors.Is(err, redis.Nil) {
 		return Availability{}, fmt.Errorf("inventory: availability: %w", err)
 	}
@@ -201,7 +205,27 @@ func (s *Store) Availability(ctx context.Context, eventID string) (Availability,
 	if err != nil && !errors.Is(err, redis.Nil) {
 		return Availability{}, fmt.Errorf("inventory: availability: %w", err)
 	}
-	return Availability{EventID: eventID, Available: avail, Capacity: capacity}, nil
+	return Availability{
+		EventID: eventID, Available: avail, Capacity: capacity,
+		ActiveHolds: int(holdsCmd.Val()), Frozen: frozenCmd.Val() == "1",
+	}, nil
+}
+
+// SetFrozen sets or clears the event's freeze flag. It reports whether this
+// call changed it.
+func (s *Store) SetFrozen(ctx context.Context, eventID string, frozen bool) (bool, error) {
+	flag := "0"
+	if frozen {
+		flag = "1"
+	}
+	code, err := freezeScript.Run(ctx, s.rdb, []string{keysFor(eventID).config()}, flag).Int64()
+	if err != nil {
+		return false, fmt.Errorf("inventory: freeze: %w", err)
+	}
+	if code < 0 {
+		return false, ErrEventNotProvisioned
+	}
+	return code == 1, nil
 }
 
 // Events lists provisioned events (the sweeper's work list).

@@ -61,9 +61,10 @@ build: ## Build every binary into ./bin
 	@mkdir -p bin
 	@for b in $(BINARIES); do $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o bin/$$b ./cmd/$$b || exit 1; done
 
-keys: ## Generate dev key pairs in .local/keys: admission tokens, booking-svc's service tokens, auth-svc's access tokens (idempotent)
+keys: ## Generate dev key pairs in .local/keys: admission tokens, booking-svc's and queue-svc's service tokens, auth-svc's access tokens (idempotent)
 	$(GO) run ./cmd/holdfastctl keys generate --out-dir .local/keys --if-missing
 	$(GO) run ./cmd/holdfastctl keys generate --out-dir .local/keys --name booking --if-missing
+	$(GO) run ./cmd/holdfastctl keys generate --out-dir .local/keys --name queue --if-missing
 	$(GO) run ./cmd/holdfastctl keys generate --out-dir .local/keys --name auth --if-missing
 
 infra: ## Start only PostgreSQL, Valkey and Kafka

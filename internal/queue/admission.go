@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/Sanjay-Mx21/holdfast/internal/inventory"
 )
 
 // AdmissionConfig tunes the admission controllers.
@@ -23,6 +25,21 @@ type AdmissionConfig struct {
 	RetryLeadership time.Duration
 	// Rescan is how often the manager looks for newly provisioned events.
 	Rescan time.Duration
+	// Inventory, if set, is read on every tick (P17): the leader keeps open
+	// sessions within the units left times Oversubscription, and marks the
+	// queue SOLD_OUT once no units are left and no open hold can return
+	// any. Without it, neither happens; inventory still refuses every hold
+	// beyond capacity.
+	Inventory Inventory
+	// Oversubscription is the factor (design: 1.3 to start): how many
+	// sessions to open per unit left, since not everyone admitted buys.
+	Oversubscription float64
+}
+
+// Inventory is what the admission leader needs from inventory-svc
+// (*inventory.Client, over gRPC).
+type Inventory interface {
+	GetAvailability(ctx context.Context, eventID string) (inventory.Availability, error)
 }
 
 // Admission runs one admission controller per provisioned event. Every
@@ -100,6 +117,11 @@ type Controller struct {
 	cfg     AdmissionConfig
 	m       *Metrics
 	log     *slog.Logger
+
+	// invFailing is true while inventory cannot be read, so the failure is
+	// logged once rather than on every tick. Only the leading goroutine
+	// touches it.
+	invFailing bool
 }
 
 // NewController returns the controller for one event. Its leadership lock is
@@ -165,17 +187,21 @@ func (c *Controller) term(ctx context.Context) error {
 	c.m.leaderTerm(c.eventID, epoch, maxSessions, true)
 	defer c.m.leaderTerm(c.eventID, epoch, maxSessions, false)
 	c.log.Info("admission: became leader", "epoch", epoch, "rate_per_second", rate, "max_sessions", maxSessions)
-	return c.lead(ctx, epoch, rate, func(ctx context.Context) error { return c.locks.Alive(ctx, gen) }, c.store.Advance)
+	return c.lead(ctx, epoch, rate, func(ctx context.Context) error { return c.locks.Alive(ctx, gen) }, c.store)
 }
 
-// advanceFunc is one fenced admission tick (Store.Advance).
-type advanceFunc func(ctx context.Context, eventID string, epoch int64, n int) (Advance, error)
+// leaderOps are the leader's fenced writes (*Store).
+type leaderOps interface {
+	AdvanceWithin(ctx context.Context, eventID string, epoch int64, n, unitsCap int) (Advance, error)
+	MarkSoldOut(ctx context.Context, eventID string, epoch int64) (bool, error)
+}
 
 // lead is the leader's tick loop: every Tick it checks that the lock is
-// still held (ping), then admits what the rate allows. It returns nil when
-// ctx ends, and an error when the lock's session is lost, a newer leader has
-// fenced this one off, or the event no longer exists.
-func (c *Controller) lead(ctx context.Context, epoch int64, rate int, ping func(context.Context) error, advance advanceFunc) error {
+// still held (ping), reads the units left, then admits what the rate, the
+// session budget and the units left allow. It returns nil when ctx ends, and
+// an error when the lock's session is lost, a newer leader has fenced this
+// one off, or the event no longer exists.
+func (c *Controller) lead(ctx context.Context, epoch int64, rate int, ping func(context.Context) error, ops leaderOps) error {
 	bucket := newAllowance(float64(rate), time.Now())
 	t := time.NewTicker(c.cfg.Tick)
 	defer t.Stop()
@@ -187,7 +213,21 @@ func (c *Controller) lead(ctx context.Context, epoch int64, rate int, ping func(
 			if err := ping(ctx); err != nil {
 				return fmt.Errorf("lost the lock: %w", err) // step down; a standby takes over
 			}
-			adv, err := advance(ctx, c.eventID, epoch, bucket.available(now))
+			unitsCap, soldOut := c.unitsLeft(ctx)
+			if soldOut {
+				marked, err := ops.MarkSoldOut(ctx, c.eventID, epoch)
+				switch {
+				case errors.Is(err, ErrFenced):
+					c.m.tick(tickFenced)
+					c.log.Warn("admission: fenced off by a newer leader; stepping down", "epoch", epoch)
+					return err
+				case err != nil:
+					c.log.Warn("admission: marking the queue sold out failed", "err", err)
+				case marked:
+					c.log.Info("admission: inventory is sold out; queue marked SOLD_OUT")
+				}
+			}
+			adv, err := ops.AdvanceWithin(ctx, c.eventID, epoch, bucket.available(now), unitsCap)
 			switch {
 			case errors.Is(err, ErrFenced):
 				c.m.tick(tickFenced)
@@ -211,6 +251,44 @@ func (c *Controller) lead(ctx context.Context, epoch int64, rate int, ping func(
 			}
 		}
 	}
+}
+
+// unitsLeft asks inventory how many open sessions the units left justify:
+// the units left times the oversubscription factor (P17), or -1 for no cap.
+// It also reports a sold-out sale: no units left and no open hold that could
+// return any. If inventory cannot be read in time, the cap is lifted rather
+// than admissions stopped: inventory still refuses every hold beyond
+// capacity, so failing open costs buyers a SOLD_OUT answer, never a unit.
+func (c *Controller) unitsLeft(ctx context.Context) (unitsCap int, soldOut bool) {
+	if c.cfg.Inventory == nil {
+		return -1, false
+	}
+	readCtx, cancel := context.WithTimeout(ctx, c.cfg.Tick)
+	defer cancel()
+	a, err := c.cfg.Inventory.GetAvailability(readCtx, c.eventID)
+	if errors.Is(err, inventory.ErrEventNotProvisioned) {
+		// A waiting room without a sale behind it (a load test's, or one
+		// provisioned before its inventory): nothing to cap by.
+		c.m.inventoryRead(inventoryReadNotProvisioned)
+		return -1, false
+	}
+	if err != nil {
+		c.m.inventoryRead(inventoryReadError)
+		if !c.invFailing && ctx.Err() == nil {
+			c.log.Warn("admission: cannot read inventory; admitting without the units cap until it can", "err", err)
+		}
+		c.invFailing = true
+		return -1, false
+	}
+	c.m.inventoryRead(inventoryReadOK)
+	if c.invFailing {
+		c.log.Info("admission: inventory readable again; units cap restored")
+		c.invFailing = false
+	}
+	if a.Available <= 0 {
+		return 0, a.ActiveHolds == 0
+	}
+	return int(math.Floor(float64(a.Available) * c.cfg.Oversubscription)), false
 }
 
 // leaderLockKey maps an event to its advisory-lock key. FNV-1a over a

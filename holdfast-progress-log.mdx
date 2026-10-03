@@ -32,13 +32,13 @@ All times are IST (UTC+05:30).
 | **Project** | A flash-sale booking engine that sells exactly the available units under extreme demand, never more |
 | **Plan version** | 2.0 (1 October 2026) |
 | **Milestones complete** | M0 Foundation, M1 Correctness core, M1.5 Bring-up and baseline, M2 Fair waiting room, and M3 MVP backend |
-| **Current milestone** | M4 Resume-ready product (Phase 4): 2 of 8 tasks done (section 10); next task 4.3, [issue #35](https://github.com/Sanjay-Mx21/holdfast/issues/35) |
+| **Current milestone** | M4 Resume-ready product (Phase 4): 3 of 8 tasks done (section 10); next task 4.4, [issue #36](https://github.com/Sanjay-Mx21/holdfast/issues/36) |
 | **Progress to v1.0** | About 35% (18 of about 51 focused-work days, excluding Phase 7 stretch goals), counting Phase 2's planned 7 days |
 | **Repository** | [github.com/Sanjay-Mx21/holdfast](https://github.com/Sanjay-Mx21/holdfast), branch `main` |
 | **First commit** | `2173e50` "first commit", 2026-10-01 20:20, 82 files, 12,973 lines |
 | **Latest release** | [v0.3.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.3.0), 2026-10-03 15:48, on `5ffa271` (before it: [v0.2.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.2.0), 2026-10-02 21:51, on `cd0592a`; [v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0), 2026-10-01 23:47, on `9dcd2f8`) |
 | **CI** | Green since 2026-10-01 22:00; `main` is protected and every change needs a pull request with all 11 required checks passing (`images (booking)`, `images (payment)`, `images (mockpsp)` and `images (auth)` added on 2026-10-03) |
-| **Issues so far** | 100 recorded: 95 resolved, 5 open (section 6) |
+| **Issues so far** | 106 recorded: 102 resolved, 4 open (section 6) |
 
 <Callout type="tip" title="M3 complete: the MVP backend (2026-10-03)">
 
@@ -241,7 +241,32 @@ The rest of the list was already covered by tests written with tasks 3.4 to 3.12
   - both services' readiness includes `access-keys`;
   - **the README quickstart, run as written**: sign in, join, rank, admit, hold, book, pay. The booking was CONFIRMED 30 s later, once booking-svc's freshly restarted saga consumer had joined its group;
   - the dev header alone 401, no token 401, a forged token 401, another user's valid token 404 (ownership), a refreshed token 200.
-- **Gates:** gofmt, test, lint, up, itest, E1 PASS. | Branch `feat/p4-identity`, issue #34 |
+- **Gates:** gofmt, test, lint, up, itest, E1 PASS. | PR #96 (merged by the assistant at 17:50 after all 11 checks passed), `b9eac6c`; issue #34 closed |
+| 2026-10-03 18:34 | **Task 4.3 (policy engine, with P17) built and verified:**
+- **Policy windows** (`internal/policy`, a pure `Check`): until each window ends, only verified buyers may join, and agents may not. Refusals are 403 `VERIFIED_ONLY` or `AGENT_LOCKOUT` with `Retry-After`; when both apply, the later window is reported.
+- Access tokens gained a `vrf` (verified) claim, true after a phone-code sign-in; the development header is never verified.
+- The windows are stored per event in `q:{E}:policy`, set on every accepted queue provisioning (unlike the fixed settings), and come from the catalog (`booking.events`, whose columns existed since Phase 1). `holdfastctl event create` gained `--verified-only-for` and `--agent-lockout-for`, both off by default.
+- **The per-user cap** stays where it was enforced already: inventory's `hold.lua` and booking's final guard.
+- **Freeze switch** (runbook RB-1, new `docs/runbooks/sale.md`):
+  - the queue moves `OPEN`↔`FROZEN` (`state.lua`, a compare-and-set);
+  - inventory gains a `frozen` flag (`freeze.lua`), and `hold.lua` checks it after the replay check: 503 `SALE_PAUSED` with Retry-After 10, while existing holds, checkouts and payments carry on;
+  - admin endpoints on both services, and `holdfastctl freeze`/`unfreeze` switching both, holds first.
+- **P17:** admission leaders read units left and open holds from a new inventory gRPC method `GetAvailability` (allowlisted for `queue` only; queue-svc got its own service key, `make keys --name queue`). Active sessions are capped at units left × `OVERSUBSCRIPTION_FACTOR` (1.3) inside `advance.lua`; the fenced `soldout.lua` marks the queue `SOLD_OUT` once no units and no open holds remain. A failed read lifts the cap for that tick (fail open; inventory still guards capacity), and an event with no sale in inventory is never capped.
+- **Metrics:** join results `agent_lockout` and `verified_only`; `holdfast_queue_state{event,state}` (set by the leader every tick, so it follows switches made by holdfastctl too); `holdfast_queue_inventory_reads_total{result}`; hold result `paused`.
+- **Also fixed:** P41, a race in the outbox relay's leadership test, found in this task's full `make itest`.
+- **Tests:**
+  - the policy table;
+  - fake-clock tests of the units cap, the sold-out mark and fencing while marking;
+  - integration tests of the windows, the freeze switch's states, the units cap in `advance.lua`, `soldout.lua` and inventory's freeze;
+  - gRPC `GetAvailability` (queue allowed, booking refused);
+  - handler tests; a holdfastctl freeze and windows test.
+- **Live through the edge** (1-unit sale, both windows):
+  - a verified buyer joined; an agent got 403 `AGENT_LOCKOUT` with Retry-After 1799;
+  - 9 in line but only 1 admitted (the units cap);
+  - frozen: a new hold got 503 `SALE_PAUSED` while the retry of the earlier hold got 201;
+  - after the purchase the queue went `SOLD_OUT` within 4 s, and a late joiner got 409 `QUEUE_CLOSED`.
+- **Docs:** queue, inventory and auth service docs, runbooks RB-1, RB-Q-5 and RB-Q-9, the architecture doc, README, and the design doc (task 4.3, the API table, 9.2's as-built note, the layout).
+- **Gates:** gofmt, test, lint, `make gen`, up, itest, E1 PASS. | Branch `feat/p4-policy`, issue #35 |
 
 ## 3. What is complete, and what each piece contributes
 
@@ -318,10 +343,10 @@ Every problem met while bringing Drop 1 up and running the soak on 2026-10-01, i
 
 | Group | Recorded | Resolved | Open |
 |---|---|---|---|
-| P: defects in the repository | 40 | 36 | 4 |
-| E: machine and network | 21 | 20 | 1 |
-| D: diagnosis and process | 39 | 39 | 0 |
-| **Total** | **100** | **95** | **5** |
+| P: defects in the repository | 41 | 38 | 3 |
+| E: machine and network | 22 | 21 | 1 |
+| D: diagnosis and process | 43 | 43 | 0 |
+| **Total** | **106** | **102** | **4** |
 
 CI took **three runs** to go green:
 
@@ -351,7 +376,7 @@ CI took **three runs** to go green:
 | P14 | The per-IP join limit sees the connection's address. Locally every request comes from the Docker gateway (`rl:join-ip:172.19.0.1`); behind NGINX every request would share NGINX's address | Until fixed, the per-IP bucket is one bucket for everybody behind the proxy, so it limits the whole site, not one machine | Forwarded-for headers are deliberately not trusted yet: trusting them without a known proxy lets any client choose its own IP | Planned in task 2.9 (NGINX), which must pass the client address and make queue-svc trust it only from NGINX | ✅ Task 2.9: the edge overwrites `X-Forwarded-For`; queue-svc believes it only from `TRUSTED_PROXIES` (the edge's fixed address) |
 | P15 | The plan (task 2.3 and design doc 9.1) had the admission leader flip the queue from PRE to OPEN at T0 | The leader ticks every 250 ms and re-election waits 2 s, so joins arriving after T0 but before the flip would still get lottery positions: at the design's T0 rush of 17,000+ joins per second, hundreds to thousands of late arrivals jumping ahead. It also made T0 depend on task 2.5, which comes later | The flip time, not the clock, decided who counted as early | T0 is judged by Valkey's clock inside `join.lua`, which flips the state itself; an idempotent opener in every replica handles the no-join case; plan 9.1 and task 2.3 updated | ✅ PR #59 |
 | P16 | The join integration tests merged in PR #58 provisioned queues with a fixed opening date, 2026-10-05 | Harmless while joins ignored the clock; once task 2.3 made joins read it, every "before T0" test would have started failing on 5 October 2026 | A literal date in a test fixture | Caught while building task 2.3, before it fired: join fixtures now open queues relative to the current time | ✅ PR #59 |
-| P17 | The plan's admission controller (design doc 9.2) also limits admissions to the units left times an oversubscription factor, and marks the queue SOLD_OUT when inventory is gone. Task 2.5 builds neither | Until built, the queue keeps admitting people (within the session budget) after the last unit is held, and never reaches SOLD_OUT on its own; inventory still refuses every hold beyond capacity, so nothing oversells | Both need inventory's state, which queue-svc may not read from inventory's Valkey keys (one owner per keyspace, AGENTS.md rule 4); it must call inventory-svc's API, and the units in active holds are not exposed by that API yet | To decide before the end of Phase 2: poll `GET /v1/events/{id}/availability` from the leader, or defer to Phase 3 when booking adds the cross-service calls | ⏳ Open: the assistant recommends Phase 3 (recorded in `docs/services/queue.md`); for the owner to confirm at the Phase 2 review |
+| P17 | The plan's admission controller (design doc 9.2) also limits admissions to the units left times an oversubscription factor, and marks the queue SOLD_OUT when inventory is gone. Task 2.5 builds neither | Until built, the queue keeps admitting people (within the session budget) after the last unit is held, and never reaches SOLD_OUT on its own; inventory still refuses every hold beyond capacity, so nothing oversells | Both need inventory's state, which queue-svc may not read from inventory's Valkey keys (one owner per keyspace, AGENTS.md rule 4); it must call inventory-svc's API, and the units in active holds are not exposed by that API yet | To decide before the end of Phase 2: poll `GET /v1/events/{id}/availability` from the leader, or defer to Phase 3 when booking adds the cross-service calls | ✅ The owner chose task 4.3 (2026-10-03). Built there: inventory's gRPC `GetAvailability` (units left, open holds), the units cap in `advance.lua` (units left × 1.3) and the fenced `soldout.lua` |
 | P18 | With inventory-svc following the JWKS, an abrupt switch of queue-svc's signing key gets new tokens refused (401) until inventory-svc refetches, which an unknown key ID may trigger only 30 seconds after its last fetch. Found in the rotation test: a token signed with the new key 25 seconds after inventory's last fetch was refused | Up to 30 seconds of refused holds for buyers admitted right after a careless rotation | The fetch throttle that stops made-up key IDs from hammering queue-svc | Kept the throttle; RB-Q-7 now publishes the new key before signing with it and waits one refresh interval, so no token is ever refused; RB-INV-5 points to it | ✅ Runbook |
 | P19 | The inventory dashboard's HTTP panels queried `holdfast_http_*` without a `job` filter. Once queue-svc existed (task 2.1), its requests were added to inventory's latency and status panels | The inventory dashboard overstated inventory's traffic and mixed two services' latencies | Both services share the platform's HTTP metric names; the panels were written when inventory was the only service | Found while building task 2.10: the panels filter `job="inventory"` and say "(inventory-svc)"; queue-svc's HTTP panels are on the new queue dashboard | ✅ Task 2.10 |
 | P20 | Grafana did not show the new HoldFast / Queue dashboard after `make up`: the provisioned dashboards are read at start-up, and `docker compose up -d` does not restart a container when only a mounted file changed (the same cause as P11) | New dashboards and scrape targets invisible on a running stack | Bind-mounted config is read once | `make up` now runs `docker compose restart prometheus grafana` after starting the stack; verified that both dashboards load | ✅ Task 2.10 |
@@ -375,6 +400,7 @@ CI took **three runs** to go green:
 | P38 | A purchase was two traces, not one: the provider's webhook starts its own trace, so the capture, booking-svc's saga and inventory's Confirm were in a different trace from the booking request. `docs/architecture.md` had claimed since task 3.2 that "a purchase is one trace across asynchronous hops" | Phase 3's first exit criterion (one trace spanning every service) was not met; the doc overstated what was built | The trace context crossed Kafka but not the provider: a webhook carries no `traceparent`, and nothing linked it back to the booking | Found during the exit check. payment-svc stores the trace with the intent and continues it when settling (migration `payment/00004`; `TestPaymentContinuesTheBookingsTrace`); live, one purchase is one trace of 20 spans. The architecture doc now describes how | ✅ Phase 3 exit |
 | P39 | queue-svc holds one PostgreSQL connection per provisioned queue: each event's admission leader keeps its advisory lock on a dedicated connection (ADR 0007), and every replica runs a controller for every queue. On 2026-10-03 queue-svc held 31 connections for 35 queues, so `make e1`'s guard mode (64 connections) no longer fitted under PostgreSQL's 100 beside the stack | Connections grow with the number of events, unbounded: many events on sale at once would exhaust PostgreSQL (`max_connections`) and starve every service sharing it. Locally, E1 fails "no infrastructure errors" while the stack runs | The per-event dedicated connection in `internal/queue/admission.go` | Not fixed: it changes ADR 0007's design (reviewed in Phase 2), so it is for the owner. Recommendation: one session per replica holds all of its events' advisory locks (they are per session, and a session can hold many), with the fencing epoch unchanged; or stop running controllers for events that have ended. Meanwhile, E1 passes with queue-svc stopped | ✅ Fixed 2026-10-03 after the owner's decision: one lock session per replica (ADR 0007 amended); live, 31 connections became 3 and `make e1` passes beside the stack |
 | P40 | `TestDeclineThenPayAndExpiry` (mockpsp) failed once in a full `make itest`: it expected the decline's webhook before the capture's, but the two were sent 4 ms apart from separate goroutines and arrived the other way round | One failed run | The test assumed webhooks arrive in the order they were sent, which neither mockpsp nor a real provider guarantees (payment-svc is built for exactly that) | The tests find webhooks by type (`receiver.ofType`), not position; 40 of 40 runs under `-race` and the next full `make itest` pass | ✅ P39's PR |
+| P41 | `TestOnlyOneRelayLeads` (outbox) failed once in task 4.3's full `make itest`: "timed out waiting for b to publish" | One failed run; 3 of 3 targeted runs passed | A race in the test, not the relay. The relay publishes a batch and then commits its "published" mark in one transaction. The test stopped relay A as soon as A had *published*. When the stop landed before the commit, the mark rolled back, and relay B correctly published that event again with the next one (at least once, by design). B's count was then 2, and the test waited for exactly 1 | The test now waits until A's pass has committed (no unpublished rows) before stopping it, and checks that B published the new event; 10 of 10 runs pass | ✅ Task 4.3 |
 
 ### 6.3 Machine and network
 
@@ -401,6 +427,7 @@ CI took **three runs** to go green:
 | E19 | Checking PR #85's checks: `gh pr checks` timed out reaching api.github.com (`dial tcp ...:443: i/o timeout`) | One retry | Network | Retried a minute later; it worked | ✅ |
 | E20 | Merging PR #85: all 10 checks passed, but the merge script's call timed out reaching api.github.com, and a status check timed out twice more within minutes | The PR waited a few minutes | Network | Checked the PR (open, all green) and merged it with a direct retry | ✅ |
 | E21 | Pushing task 3.12's branch: `git push` hung for several minutes and `git ls-remote` timed out; GitHub was unreachable from the machine | About 10 minutes | Network | Stopped the hung push and retried with a 90-second timeout and a check that the branch arrived; the first retry worked | ✅ |
+| E22 | Creating task 4.3's branch from Git Bash: `git checkout -b` created the branch but failed to switch to it ("unable to write symref for HEAD: Permission denied"), and the stash was not popped | No work lost: the stash held the uncommitted 4.3 work, and `git stash list` confirmed it | A transient lock on `.git/HEAD` on the Windows side (no `.lock` file was left) | Switched to the existing branch from WSL, then popped the stash; every file came back | ✅ |
 
 ### 6.4 Diagnosis and process
 
@@ -445,6 +472,10 @@ CI took **three runs** to go green:
 | D37 | To stop the hung push (E21), the assistant ran `pkill -f "git push ... feat/p3-e1-purchase"` inside a `bash -c` whose own command line contained that text, so pkill also killed the shell running the retry | One wasted attempt; the hung push was stopped as intended | Retried without pkill; in future, match a pattern the calling command does not contain (or use the process ID) | ✅ |
 | D38 | Task 3.14's live check of runbooks RB-3 and RB-4 went wrong twice before it worked. First the script set PostgreSQL's capacity to 0, which the table's CHECK refuses, so no sale was refused and nothing needed refunding. Then it paused mockpsp after the buyers paid, but the capture, saga and refund request take about a second, so the refunds completed before the pause and nothing was dead-lettered | Two runs that did not exercise the runbooks (the refusal of `refund` for a confirmed booking was shown) | The third run sells one unit, lowers capacity to the sold count, stops booking-svc while the buyers pay, switches on mockpsp's outage fault, then restarts booking-svc: the refunds fail deterministically and are dead-lettered | ✅ |
 | D39 | Starting task 4.1, the assistant's usual sync (`git stash push .gitignore && git checkout main && git pull && git stash pop`) stopped when `git pull` failed on the network, so the owner's `.gitignore` edit stayed in the stash, and the new branch was cut from an old `main`. To fix the branch, the assistant ran `git reset --hard origin/main` without first checking the stash or `git status` | A near miss: had the edit still been in the working tree, `reset --hard` would have destroyed it. Nothing was lost: the edit was in `stash@{0}`, was verified (the 3 lines ignoring `explanation/`) and restored, and the owner's `explanation/` files were never touched | The edit was restored and the branch now starts at the real `main` (`b9c9c49`). Lesson: never run `reset --hard` (or anything that discards changes) without checking `git status` and `git stash list` first, and stop a sync chain at a failed step | ✅ |
+| D40 | Task 4.3's first queue metric for the freeze switch counted state changes in the process that made them: queue-svc's admin endpoint and the leader's sold-out mark. The live check froze through `holdfastctl`, which writes Valkey directly, so the counter stayed at 0 while the queue was `FROZEN` | Caught in the live check, before any commit | A counter kept by whoever makes the change cannot see changes made by other processes | Replaced it with `holdfast_queue_state{event,state}`, which the leader sets every tick from the state it reads. It follows every switch, whoever made it; tested with a unit test, and seen live | ✅ |
+| D41 | The leaders' inventory reads counted "event not provisioned in inventory" as `error`. Leftover load-test events with a waiting room but no sale pushed the error counter up by about 25 a second, burying real failures | Caught in the live check, before any commit | Two different outcomes shared one label | A new result `not_provisioned`: such an event is never capped, and is not an error. Live: errors went to 0 | ✅ |
+| D42 | Two scripting slips while fixing P41. A stray `python -` at the start of a command waited on stdin until the 2-minute timeout. Because of it, the heredoc in the same command, which was meant to write the fix script, never ran | About 3 minutes; the fix was then applied with the edit tool | Haste. It also broke the recorded practice (D36): write scripts with the file tool, not shell heredocs | Stopped the task and applied the edit directly | ✅ |
+| D43 | A doc-edit script for task 4.3 still held a placeholder edit (`iss` replaced with `iss` in the auth doc). Its uniqueness check failed, which stopped the chained scripts after the first two had run | Caught at once; one rerun | A leftover from drafting the script | Ran the remaining script alone, and checked the diff | ✅ |
 
 ### 6.5 Owner setup actions
 
@@ -536,8 +567,8 @@ Goal: a real person can buy a ticket through a web app, with real identity and t
 | Task | Issue | Status |
 |---|---|---|
 | 4.1 auth-svc | [#33](https://github.com/Sanjay-Mx21/holdfast/issues/33) | ✅ 2026-10-03 (PR #95): sign-in with a phone code (mock SMS), EdDSA access tokens and JWKS, rotating refresh tokens with reuse detection |
-| 4.2 Wire identity in | [#34](https://github.com/Sanjay-Mx21/holdfast/issues/34) | ✅ 2026-10-03: access tokens identify buyers in queue-svc and booking-svc (JWKS, readiness); the dev header only with `DEV_IDENTITY`, off by default |
-| 4.3 Policy engine (with P17) | [#35](https://github.com/Sanjay-Mx21/holdfast/issues/35) | ⏳ |
+| 4.2 Wire identity in | [#34](https://github.com/Sanjay-Mx21/holdfast/issues/34) | ✅ 2026-10-03 (PR #96): access tokens identify buyers in queue-svc and booking-svc (JWKS, readiness); the dev header only with `DEV_IDENTITY`, off by default |
+| 4.3 Policy engine (with P17) | [#35](https://github.com/Sanjay-Mx21/holdfast/issues/35) | ✅ 2026-10-03: verified-only and agent-lockout windows at join (`vrf` claim), the freeze switch across queue and inventory (`holdfastctl freeze`, RB-1), admission capped by units left and `SOLD_OUT` (P17) |
 | 4.4 Proof of work | [#36](https://github.com/Sanjay-Mx21/holdfast/issues/36) | ⏳ |
 | 4.5 Web app | [#37](https://github.com/Sanjay-Mx21/holdfast/issues/37) | ⏳ |
 | 4.6 Mission-control dashboard | [#38](https://github.com/Sanjay-Mx21/holdfast/issues/38) | ⏳ |

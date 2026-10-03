@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"testing"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
+
+	"github.com/Sanjay-Mx21/holdfast/internal/inventory"
 )
 
 // The leader's tick loop under testing/synctest: time is fake and advances
@@ -21,20 +24,28 @@ const syncEvent = "0196f0c1-7a3e-7c51-9b0e-5d2f8a1c4e77"
 
 // tickCall is one call the loop made to advance.
 type tickCall struct {
-	at time.Duration // since the term started
-	n  int
+	at       time.Duration // since the term started
+	n        int
+	unitsCap int
 }
 
 // fakeAdvance admits min(n, budget()) and records every call.
 type fakeAdvance struct {
-	start  time.Time
-	calls  []tickCall
-	budget func() int
-	err    func(call int) error
+	start   time.Time
+	calls   []tickCall
+	budget  func() int
+	err     func(call int) error
+	soldOut int   // MarkSoldOut calls
+	markErr error // what MarkSoldOut returns
 }
 
-func (f *fakeAdvance) advance(_ context.Context, eventID string, _ int64, n int) (Advance, error) {
-	f.calls = append(f.calls, tickCall{at: time.Since(f.start), n: n})
+func (f *fakeAdvance) MarkSoldOut(context.Context, string, int64) (bool, error) {
+	f.soldOut++
+	return f.markErr == nil && f.soldOut == 1, f.markErr
+}
+
+func (f *fakeAdvance) AdvanceWithin(_ context.Context, eventID string, _ int64, n, unitsCap int) (Advance, error) {
+	f.calls = append(f.calls, tickCall{at: time.Since(f.start), n: n, unitsCap: unitsCap})
 	if eventID != syncEvent {
 		return Advance{}, errors.New("wrong event")
 	}
@@ -64,7 +75,7 @@ func runFor(t *testing.T, c *Controller, rate int, d time.Duration, ping func(co
 	ctx, cancel := context.WithCancel(t.Context())
 	f.start = time.Now()
 	done := make(chan error, 1)
-	go func() { done <- c.lead(ctx, 7, rate, ping, f.advance) }()
+	go func() { done <- c.lead(ctx, 7, rate, ping, f) }()
 	time.Sleep(d)
 	synctest.Wait()
 	cancel()
@@ -144,7 +155,7 @@ func TestLeadStepsDownWhenFenced(t *testing.T) {
 			return nil
 		}}
 		f.start = time.Now()
-		err := c.lead(t.Context(), 7, 80, alive, f.advance)
+		err := c.lead(t.Context(), 7, 80, alive, f)
 		if !errors.Is(err, ErrFenced) {
 			t.Fatalf("lead returned %v, want ErrFenced", err)
 		}
@@ -195,7 +206,7 @@ func TestLeadStepsDownWhenTheLockConnectionDies(t *testing.T) {
 			return nil
 		}
 		f := &fakeAdvance{start: time.Now()}
-		err := c.lead(t.Context(), 7, 80, ping, f.advance)
+		err := c.lead(t.Context(), 7, 80, ping, f)
 		if !errors.Is(err, dead) {
 			t.Fatalf("lead returned %v, want the ping error", err)
 		}
@@ -224,9 +235,95 @@ func TestLeadStopsWhenTheEventIsGone(t *testing.T) {
 			}
 			return nil
 		}}
-		err := c.lead(t.Context(), 7, 80, alive, f.advance)
+		err := c.lead(t.Context(), 7, 80, alive, f)
 		if !errors.Is(err, ErrEventNotFound) || len(f.calls) != 2 {
 			t.Fatalf("lead returned %v after %d ticks, want ErrEventNotFound after 2", err, len(f.calls))
+		}
+	})
+}
+
+// fakeInventory answers GetAvailability from avail(call), counting calls.
+type fakeInventory struct {
+	calls int
+	avail func(call int) (inventory.Availability, error)
+}
+
+func (f *fakeInventory) GetAvailability(_ context.Context, eventID string) (inventory.Availability, error) {
+	f.calls++
+	if eventID != syncEvent {
+		return inventory.Availability{}, errors.New("wrong event")
+	}
+	return f.avail(f.calls)
+}
+
+func TestLeadCapsSessionsByUnitsLeft(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		c, m := syncController(250 * time.Millisecond)
+		inv := &fakeInventory{avail: func(call int) (inventory.Availability, error) {
+			switch {
+			case call == 2:
+				return inventory.Availability{}, errors.New("inventory unreachable")
+			case call == 3:
+				return inventory.Availability{}, fmt.Errorf("inventory: %w", inventory.ErrEventNotProvisioned)
+			case call <= 4:
+				return inventory.Availability{Available: 100, ActiveHolds: 7}, nil
+			default: // the last unit went into a hold
+				return inventory.Availability{Available: 0, ActiveHolds: 3}, nil
+			}
+		}}
+		c.cfg.Inventory, c.cfg.Oversubscription = inv, 1.3
+		f := &fakeAdvance{}
+		if err := runFor(t, c, 80, 2*time.Second, alive, f); err != nil {
+			t.Fatal(err)
+		}
+		want := []int{130, -1, -1, 130, 0, 0, 0, 0}
+		if len(f.calls) != len(want) {
+			t.Fatalf("%d ticks, want %d", len(f.calls), len(want))
+		}
+		for i, call := range f.calls {
+			if call.unitsCap != want[i] {
+				t.Fatalf("tick %d: units cap %d, want %d (100 units x 1.3; no cap when inventory fails or has no such sale; 0 with no units)", i+1, call.unitsCap, want[i])
+			}
+		}
+		if f.soldOut != 0 {
+			t.Fatal("open holds may still return units: not sold out yet")
+		}
+		for result, want := range map[string]float64{inventoryReadOK: 6, inventoryReadError: 1, inventoryReadNotProvisioned: 1} {
+			var out dto.Metric
+			_ = m.invReads.WithLabelValues(result).Write(&out)
+			if out.GetCounter().GetValue() != want {
+				t.Fatalf("inventory reads %s = %v, want %v", result, out.GetCounter().GetValue(), want)
+			}
+		}
+	})
+}
+
+func TestLeadMarksSoldOutWhenNoUnitsAndNoHolds(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		c, _ := syncController(250 * time.Millisecond)
+		c.cfg.Inventory = &fakeInventory{avail: func(int) (inventory.Availability, error) {
+			return inventory.Availability{Available: 0, ActiveHolds: 0}, nil
+		}}
+		c.cfg.Oversubscription = 1.3
+		f := &fakeAdvance{}
+		if err := runFor(t, c, 80, time.Second, alive, f); err != nil {
+			t.Fatal(err)
+		}
+		if f.soldOut != 4 || len(f.calls) != 4 {
+			t.Fatalf("%d sold-out marks and %d ticks, want 4 and 4: the status document is still written", f.soldOut, len(f.calls))
+		}
+	})
+}
+
+func TestLeadStepsDownWhenFencedMarkingSoldOut(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		c, _ := syncController(250 * time.Millisecond)
+		c.cfg.Inventory = &fakeInventory{avail: func(int) (inventory.Availability, error) {
+			return inventory.Availability{}, nil
+		}}
+		f := &fakeAdvance{markErr: ErrFenced}
+		if err := c.lead(t.Context(), 7, 80, alive, f); !errors.Is(err, ErrFenced) || len(f.calls) != 0 {
+			t.Fatalf("lead returned %v after %d advances, want ErrFenced before any", err, len(f.calls))
 		}
 	})
 }

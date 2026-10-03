@@ -6,8 +6,9 @@ how fast. Binary: `cmd/queue`. Code: `internal/queue`.
 **Status:** built in Phase 2 (tasks 2.1 to 2.14): provisioning, joining, the
 T0 transition, positions, the admission controller, the status document,
 admission tokens and their trust by inventory-svc, the edge, metrics and a
-dashboard, tests, experiments E2 and E6, and operator commands. Not built:
-oversubscription and `SOLD_OUT` (below). Decisions: ADR 0005 (lottery before
+dashboard, tests, experiments E2 and E6, and operator commands. Phase 4
+(task 4.3) added the policy windows at join, the freeze switch, and admission
+by the units left with `SOLD_OUT` (P17). Decisions: ADR 0005 (lottery before
 T0, FIFO after), ADR 0006 (cached status polling), ADR 0007 (leader election
 with fencing).
 
@@ -18,6 +19,8 @@ with fencing).
 - Switch from PRE to OPEN at T0 and tell buyers their rank (built).
 - Admit buyers at a controlled rate and issue admission tokens (built).
 - Publish the status document every client polls (built).
+- Apply the sale's policy windows at join: verified buyers only, no agents (built, task 4.3).
+- Pause admissions on the freeze switch, and mark a sold-out queue `SOLD_OUT` (built, task 4.3).
 
 ## API
 
@@ -50,7 +53,24 @@ Cache-Control: no-store
   It never re-rolls the lottery and never creates a second place.
 - Joins are accepted while the sale is `FROZEN` (arrival order); `SOLD_OUT` and
   `CLOSED` refuse them.
+- The event's policy windows (below) may refuse the caller with 403 and
+  `Retry-After`: the seconds until they may join.
 - Your rank: `GET /v1/queue/{eventID}/me` (below).
+
+**Policy windows** (`internal/policy`, task 4.3). An event may have two,
+set when its queue is provisioned (`verifiedOnlyUntil`, `agentLockoutUntil`):
+
+| Window | Until it ends | Refusal |
+|---|---|---|
+| Verified only | Only buyers whose identity is verified may join: the access token's `vrf` claim, true after a phone-code sign-in. The development header is never verified | 403 `VERIFIED_ONLY` |
+| Agent lockout | Buyers with the `AGENT` role may not join (the IRCTC Tatkal rule) | 403 `AGENT_LOCKOUT` |
+
+When both refuse a caller, the window that ends later is reported, so a
+buyer is never told to come back too early. The check runs before the join,
+by queue-svc's clock (windows are minutes long; skew between hosts is
+negligible). A refused caller gets no place. The windows only govern
+joining: someone who joined is never removed. The per-user cap (I4) is
+enforced where units are held and sold (inventory-svc and booking-svc).
 
 **Rate limits.** Each join takes a token from two buckets, and the first
 empty one refuses the request with 429 `RATE_LIMITED` and `Retry-After`:
@@ -191,28 +211,57 @@ HTTP/1.1 201 Created
 | `maxSessions` | Most concurrent checkout sessions (L in Little's Law) | 1 to 10,000,000 |
 | `sessionTtlSeconds` | Lifetime of an admitted buyer's session | 60 to 3,600 |
 
+| `verifiedOnlyUntil` | Optional, RFC 3339: verified buyers only until then | After 2020-01-01; absent means no window |
+| `agentLockoutUntil` | Optional, RFC 3339: no agents until then | After 2020-01-01; absent means no window |
+
 Returns 201 when created and 200 when already provisioned with identical
 settings, so retries are safe. Different settings return 409
 `PROVISION_CONFLICT` and change nothing. Provisioning never moves a queue that
-is already past `PRE` back to `PRE`.
+is already past `PRE` back to `PRE`. The policy windows are not part of the
+fixed settings: every accepted call (201 or 200) sets them to its own, so an
+operator can move or lift a window by provisioning again with the same
+settings.
 
 `holdfastctl event create` provisions the queue together with inventory:
 `--admission-rate` (default 83), `--max-sessions` (default 10,000) and
 `--session-ttl` (default 10m); the opening time is the event's `--opens-at`.
-It validates these flags before writing anything to PostgreSQL.
+`--verified-only-for` and `--agent-lockout-for` (durations after opening;
+default 0, no window) set the policy windows, stored in the catalog
+(`booking.events`) and in the queue. It validates these flags before writing
+anything to PostgreSQL.
 
 `holdfastctl queue provision --event <id>` provisions the queue of an event
 that already exists (created with `--no-provision`, or after Valkey lost its
-keys: RB-Q-8). It takes the same three flags; the opening time comes from the
-event in PostgreSQL unless `--opens-at` is given. It is idempotent, and a
-conflict says how to read the stored settings.
+keys: RB-Q-8). It takes the same three flags; the opening time and the policy
+windows come from the event in PostgreSQL unless `--opens-at` is given (then
+there are no windows). It is idempotent, and a conflict says how to read the
+stored settings.
+
+### `POST /internal/v1/events/{eventID}/freeze` and `/unfreeze` (admin port)
+
+Operator token required. No body. The queue's half of the freeze switch
+(runbook RB-1): `freeze` turns an `OPEN` queue `FROZEN`, so the leader admits
+nobody; `unfreeze` turns it back. Joins, positions and claims of turns
+already given carry on.
+
+```http
+HTTP/1.1 200 OK
+
+{"eventId":"0196f0c1-...","state":"FROZEN","changed":true}
+```
+
+Switching again returns 200 with `"changed": false`. A queue in another state
+(before T0, sold out, closed) returns 409 `STATE_CONFLICT` and is left alone.
+inventory-svc's endpoint of the same path stops new holds; `holdfastctl
+freeze --event <id>` and `unfreeze` switch both halves, holds first.
 
 `holdfastctl queue status --event <id>` shows what an operator needs in one
 place: the state (and the stored state, if T0 has passed but nobody has
 flipped it yet), the opening time, the queue size, `admittedUpTo`, active
 session slots (unexpired by Valkey's clock) against the budget, the admission
 rate and session TTL, the leader's epoch, the status document's age, and
-whether the event is on the work list. `--json` prints the same as JSON.
+whether the event is on the work list, and the policy windows. `--json`
+prints the same as JSON.
 
 ## The T0 transition
 
@@ -261,6 +310,21 @@ how a stale one is stopped: ADR 0007.
   last member, moves `admittedUpTo`, and gives each newly admitted rank a slot
   in `adm:{E}:sessions` that lasts the session TTL.
 - **Only `OPEN` admits.** `FROZEN` pauses admission; slots keep expiring.
+- **By the units left (P17).** With `INVENTORY_GRPC_ADDR` set, the leader
+  reads the event's availability from inventory-svc (`GetAvailability` over
+  gRPC, with a deadline of one tick) before each advance. Active sessions are
+  then also capped at the units left × `OVERSUBSCRIPTION_FACTOR` (1.3: not
+  everyone admitted buys), inside the same `advance.lua` step, so thousands
+  are not admitted to fight over the last few units; units returned by
+  expired holds reopen admission. When no units are left and no hold is open
+  (none can return any), the leader marks the queue `SOLD_OUT` with the
+  fenced `soldout.lua`: joins and claims are refused from then on, and the
+  status document says so on the same tick. A `FROZEN` queue is never marked
+  (freezing is the operator's call). If inventory cannot be read, the tick
+  admits without the units cap rather than stopping: inventory still refuses
+  every hold beyond capacity, so failing open costs buyers a `SOLD_OUT` answer
+  from inventory, never a unit. A queue with no sale in inventory (a load
+  test's) is never capped.
 - **Controllers follow the work list.** A replica starts a controller for each
   event in `q:events` (rescanned every `ADMISSION_RESCAN_INTERVAL`). A
   controller whose event no longer exists (its settings are gone) stops, and
@@ -269,14 +333,8 @@ how a stale one is stopped: ADR 0007.
 - PostgreSQL is used only for elections. Readiness does not depend on it: if it
   is down, admissions pause and joining and positions keep working.
 
-Not built: limiting admissions by the units left in inventory
-(oversubscription) and marking the queue `SOLD_OUT` (progress log P17). Both
-need inventory's state, which queue-svc may only get through inventory-svc's
-API, and the units in active holds are not exposed there yet. Recommended at
-the end of Phase 2: build them in Phase 3, alongside booking-svc's
-cross-service calls. Until then the queue keeps admitting (within the session
-budget) after the last unit is held, and those buyers get 409 `SOLD_OUT` from
-inventory: nothing oversells. Adaptive admission (AIMD) is Phase 5.
+The oversubscription factor is fixed for now; tuning it from the observed
+conversion rate, and adaptive admission (AIMD), are Phase 5.
 
 ## Decisions: how admission tokens are trusted (task 2.8)
 
@@ -317,6 +375,8 @@ for up to 30 seconds.
 | Code | HTTP | Meaning |
 |---|---|---|
 | `UNAUTHENTICATED` | 401 | Buyer endpoints: no access token, or one that is invalid or expired (refresh it at auth-svc). Admin: missing or wrong operator token |
+| `VERIFIED_ONLY` | 403 | Join: only verified buyers may join until the window ends; `Retry-After` gives the seconds left |
+| `AGENT_LOCKOUT` | 403 | Join: agents may not join until the lockout ends; `Retry-After` gives the seconds left |
 | `INVALID_REQUEST` | 400 | Malformed event ID, or a setting outside its bounds (`detail` says which) |
 | `INVALID_BODY`, `MALFORMED_JSON`, `EMPTY_BODY`, `TRAILING_DATA`, `INVALID_FIELD_TYPE` | 400 | Provisioning body problems, including unknown fields |
 | `UNSUPPORTED_MEDIA_TYPE` | 415 | Provisioning body is not JSON |
@@ -326,6 +386,7 @@ for up to 30 seconds.
 | `NOT_YOUR_TURN` | 409 | Admit: your rank is above `admittedUpTo` |
 | `TURN_EXPIRED` | 409 | Admit: you were admitted, but your session slot has run out |
 | `PROVISION_CONFLICT` | 409 | Queue already provisioned with different settings |
+| `STATE_CONFLICT` | 409 | Freeze or unfreeze: the queue is in a state the switch does not apply to (`detail` says which) |
 | `RATE_LIMITED` | 429 | Join, position or admit: a rate-limit bucket is empty; retry after `Retry-After` seconds |
 | `ROUTE_NOT_FOUND`, `METHOD_NOT_ALLOWED` | 404, 405 | No such endpoint or method |
 | `UNAVAILABLE` | 503 | Valkey unreachable or timed out; retry after `Retry-After` |
@@ -341,7 +402,9 @@ PRE --T0--> OPEN --> SOLD_OUT --> CLOSED
 ```
 
 Provisioning creates `PRE`; T0 turns it into `OPEN` (see above). The freeze
-switch is task 4.3; `SOLD_OUT` and `CLOSED` come with the admission controller.
+switch moves `OPEN` to `FROZEN` and back (`state.lua`, a compare-and-set).
+The admission leader moves `OPEN` to `SOLD_OUT` when inventory is gone
+(`soldout.lua`). Nothing sets `CLOSED` yet.
 
 ## Keyspace
 
@@ -353,6 +416,7 @@ switch is task 4.3; `SOLD_OUT` and `CLOSED` come with the admission controller.
 | `q:{E}:seq` | integer | Arrival counter for joins after T0 |
 | `q:{E}:admitted` | integer | `admittedUpTo`, the highest admitted rank |
 | `q:{E}:status` | string (JSON) | The status document: `state`, `opensAtMs`, `admittedUpTo`, `queueSize`, `updatedAtMs`; rewritten every tick by the leader |
+| `q:{E}:policy` | hash | `verified_only_until_ms`, `agent_lockout_until_ms` (0: no window); set by every accepted `provision.lua` call |
 | `adm:{E}:epoch` | integer | Fencing token: incremented by every new admission leader |
 | `adm:{E}:sessions` | sorted set | Admitted rank → session expiry in ms; the concurrency budget |
 | `q:events` | set | Provisioned events: the opener's and the admission controllers' work list (one global key, never used inside multi-key scripts) |
@@ -365,11 +429,13 @@ built: task 2.8 decided that tokens stay reusable within their session (below).
 
 | Script | Replies |
 |---|---|
-| `provision.lua` | 1 created, 0 identical settings, -1 conflict |
+| `provision.lua` | 1 created, 0 identical settings, -1 conflict; sets the policy windows unless -1 |
 | `join.lua` | {1 joined, 0 already joined, -1 closed, -2 not provisioned, member's score, 1 if this join opened the queue at T0} |
 | `open.lua` | {1 opened, 0 nothing to do, -1 not provisioned; ms late after T0, or ms left until T0} |
 | `position.lua` | {1 ranked, 0 before T0, -1 not in queue, -2 not provisioned; rank or opens_at_ms; state} |
-| `advance.lua` | {1 admitted some, 0 nothing to admit, -1 fenced, -2 not provisioned; admittedUpTo, admitted now, active sessions, queue size}; also rewrites `q:{E}:status` unless fenced |
+| `advance.lua` | {1 admitted some, 0 nothing to admit, -1 fenced, -2 not provisioned; admittedUpTo, admitted now, active sessions, queue size, state shown}; takes the units cap (-1: none); also rewrites `q:{E}:status` unless fenced |
+| `soldout.lua` | 1 marked `SOLD_OUT`, 0 not `OPEN`, -1 fenced |
+| `state.lua` | {1 moved, 0 already in the target state, -1 in another state, -2 not provisioned; the state after} |
 | `status.lua` | {1 the leader's document, 0 fallback without `updatedAtMs`, -2 not provisioned; the document as JSON} |
 | `admit.lua` | {1 admitted, 0 not your turn, -1 not in queue, -2 not provisioned, -3 turn expired (slot gone, or past its expiry by Valkey's clock), -4 closed; rank; slot expiry ms or admittedUpTo} |
 | `token_bucket.lua` (`internal/platform/ratelimit`) | {allowed 1 or 0, remaining tokens × 1000, retry after ms} |
@@ -378,8 +444,9 @@ built: task 2.8 decided that tokens stay reusable within their session (below).
 
 | Layer | What it covers | Where |
 |---|---|---|
-| Unit | The leader's allowance (rate, one-second cap, fractions); handlers, validation and error mapping; lottery scores; the Spearman helper | `admission_test.go`, `handler_test.go`, `lottery_test.go`, `model_test.go`, `internal/stats` |
-| Fake clock | The leader's tick loop under `testing/synctest`: exact tick times, no starting burst, carried allowance capped at one second, stepping down when fenced, when the lock's session is lost or when the event is gone, surviving a failed tick | `admission_synctest_test.go` |
+| Unit | The leader's allowance (rate, one-second cap, fractions); the state gauge; handlers, validation and error mapping, policy refusals with `Retry-After`, the freeze routes; lottery scores; the policy rules; the Spearman helper | `admission_test.go`, `handler_test.go`, `lottery_test.go`, `model_test.go`, `internal/policy`, `internal/stats` |
+| Fake clock | The leader's tick loop under `testing/synctest`: exact tick times, no starting burst, carried allowance capped at one second, stepping down when fenced, when the lock's session is lost or when the event is gone, surviving a failed tick; the units cap from inventory (and none when it fails or has no sale), the sold-out mark, fencing while marking | `admission_synctest_test.go` |
+| Policy and freeze | Windows stored and checked at join, replaced by re-provisioning, kept on a refused one; the freeze switch's states; the units cap in `advance.lua`; the fenced sold-out mark, which leaves a frozen queue alone | `policy_integration_test.go` |
 | Integration | Every script against real Valkey: provisioning, joins (idempotent, no re-roll, concurrent), the T0 switch by Valkey's clock, positions, a stale epoch refused, the session budget, slot expiry, the status document, claims; leadership: one session holding 12 events' locks on one connection, and a killed session handing every event to the other replica with newer epochs | `store_integration_test.go`, `admission_integration_test.go` |
 | Model (F1) | Random interleavings of joins, rejoins, ticks, claims, expiring slots, T0 and freezes, checked step by step against a reference model: the queue's order, which ranks each tick admits, every claim's answer, and that no rank changes once admission has begun | `fairness_model_integration_test.go` (12 seeds × 400 steps; a failure prints its seed and step) |
 | Failover | Two real controllers on PostgreSQL and Valkey: one leader, the standby takes over with a higher epoch when the leader dies, the old epoch is fenced, only the new leader exports gauges; a controller stops when its event is removed | `admission_integration_test.go` |
@@ -416,6 +483,9 @@ required (admission leader election). Service settings:
 | `ADMISSION_TICK` | `250ms` | How often a leader admits (10ms to 10s) |
 | `LEADER_RETRY_INTERVAL` | `2s` | How often a standby tries to become leader (100ms to 1m) |
 | `ADMISSION_RESCAN_INTERVAL` | `2s` | How often new events get a controller (100ms to 1m) |
+| `INVENTORY_GRPC_ADDR` | none | inventory-svc's gRPC API (`inventory:7070` in Compose). Set: leaders cap sessions by the units left and mark sold-out queues `SOLD_OUT`. Empty: neither (logged at start) |
+| `SERVICE_PRIVATE_KEY_FILE` | none | Ed25519 private key (PEM) signing queue-svc's service tokens for inventory; required with `INVENTORY_GRPC_ADDR`. Compose mounts `queue.key` from `make keys`; inventory trusts `queue.pub` |
+| `OVERSUBSCRIPTION_FACTOR` | `1.3` | Sessions per unit left (1 to 10) |
 
 Locally, Compose maps the public port to 8082 and the admin port to 9092,
 and points `ACCESS_JWKS_URL` at auth-svc; `DEV_IDENTITY=true make up` (or
@@ -425,7 +495,7 @@ the E2 load test's override) turns the development header on.
 
 | Metric | Labels | Use |
 |---|---|---|
-| `holdfast_queue_joins_total` | `result` | Join outcomes: joined, already_joined, rate_limited_ip, rate_limited_user, closed, not_found, invalid, error |
+| `holdfast_queue_joins_total` | `result` | Join outcomes: joined, already_joined, rate_limited_ip, rate_limited_user, closed, not_found, invalid, agent_lockout, verified_only, error |
 | `holdfast_queue_position_lookups_total` | `result` | Position lookups: ranked, randomizing, not_in_queue, not_found, rate_limited, invalid, error |
 | `holdfast_queue_admitted_total` | `event` | People admitted into the purchase path |
 | `holdfast_queue_admits_total` | `result` | Turn claims: issued, not_your_turn, expired, not_in_queue, closed, not_found, rate_limited, invalid, error |
@@ -437,6 +507,8 @@ the E2 load test's override) turns the development header on.
 | `holdfast_queue_admitted_up_to` | `event` | `admittedUpTo`, the highest admitted rank; set by the leader on every tick |
 | `holdfast_queue_active_sessions` | `event` | Unexpired session slots; set by the leader on every tick |
 | `holdfast_queue_max_sessions` | `event` | The session budget (Little's Law L); set when a term starts |
+| `holdfast_queue_state` | `event`, `state` | 1 for the queue's state as the status document shows it, 0 for the four others; set by the leader on every tick, so it follows switches made by `holdfastctl` too |
+| `holdfast_queue_inventory_reads_total` | `result` | Leaders' availability reads: ok, not_provisioned (no sale in inventory: no cap), error (no cap this tick) |
 | `holdfast_queue_status_age_seconds` | `event` | Age of the status document by Valkey's clock (the clock that stamped it), measured by the opener in every replica; absent until a leader has written one |
 | `holdfast_queue_opened_total` | `by` | T0 transitions: `join` (a join got there first) or `opener` |
 | `holdfast_queue_opener_runs_total` | `result` | Opener passes: ok, error |

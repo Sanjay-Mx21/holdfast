@@ -237,8 +237,8 @@ services:
       # Trust whatever queue-svc publishes: key rotation needs no restart here.
       ADMISSION_JWKS_URL: http://queue:8080/.well-known/jwks.json
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-      # Internal gRPC API: booking-svc's service tokens are trusted (dev key from make keys).
-      GRPC_TRUSTED_CALLERS: booking=/keys/booking.pub
+      # Internal gRPC API: booking-svc's and queue-svc's service tokens are trusted (dev keys from make keys).
+      GRPC_TRUSTED_CALLERS: booking=/keys/booking.pub,queue=/keys/queue.pub
       ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-only-admin-token-change-me-0123456789}
     networks: [default, edge]
     ports:
@@ -266,6 +266,10 @@ services:
       POSTGRES_DSN: postgres://holdfast:holdfast@postgres:5432/holdfast?sslmode=disable # admission leader election
       ADMISSION_PRIVATE_KEY_FILE: /keys/admission.key # signs admission tokens (dev key from make keys)
       TRUSTED_PROXIES: 10.250.0.10/32 # only the edge's X-Forwarded-For is believed
+      # Admission leaders read inventory's units left over gRPC (P17): open
+      # sessions stay within units left x 1.3, and a sold-out queue says so.
+      INVENTORY_GRPC_ADDR: inventory:7070
+      SERVICE_PRIVATE_KEY_FILE: /keys/queue.key
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-only-admin-token-change-me-0123456789}
     networks: [default, edge]

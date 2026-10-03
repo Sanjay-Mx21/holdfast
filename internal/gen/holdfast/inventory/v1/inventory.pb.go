@@ -645,6 +645,123 @@ func (x *ReleaseForFailedPaymentResponse) GetReleased() bool {
 	return false
 }
 
+type GetAvailabilityRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EventId       string                 `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetAvailabilityRequest) Reset() {
+	*x = GetAvailabilityRequest{}
+	mi := &file_holdfast_inventory_v1_inventory_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAvailabilityRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAvailabilityRequest) ProtoMessage() {}
+
+func (x *GetAvailabilityRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holdfast_inventory_v1_inventory_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAvailabilityRequest.ProtoReflect.Descriptor instead.
+func (*GetAvailabilityRequest) Descriptor() ([]byte, []int) {
+	return file_holdfast_inventory_v1_inventory_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *GetAvailabilityRequest) GetEventId() string {
+	if x != nil {
+		return x.EventId
+	}
+	return ""
+}
+
+type GetAvailabilityResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// available is the units neither held nor sold. Late confirmations can
+	// push it below zero.
+	Available int64 `protobuf:"varint,1,opt,name=available,proto3" json:"available,omitempty"`
+	Capacity  int64 `protobuf:"varint,2,opt,name=capacity,proto3" json:"capacity,omitempty"`
+	// active_holds counts holds that are HELD or PAYING, including expired
+	// ones not released yet: holds that may still return units.
+	ActiveHolds int64 `protobuf:"varint,3,opt,name=active_holds,json=activeHolds,proto3" json:"active_holds,omitempty"`
+	// frozen says the sale is frozen (runbook RB-1): no new holds.
+	Frozen        bool `protobuf:"varint,4,opt,name=frozen,proto3" json:"frozen,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetAvailabilityResponse) Reset() {
+	*x = GetAvailabilityResponse{}
+	mi := &file_holdfast_inventory_v1_inventory_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAvailabilityResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAvailabilityResponse) ProtoMessage() {}
+
+func (x *GetAvailabilityResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holdfast_inventory_v1_inventory_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAvailabilityResponse.ProtoReflect.Descriptor instead.
+func (*GetAvailabilityResponse) Descriptor() ([]byte, []int) {
+	return file_holdfast_inventory_v1_inventory_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *GetAvailabilityResponse) GetAvailable() int64 {
+	if x != nil {
+		return x.Available
+	}
+	return 0
+}
+
+func (x *GetAvailabilityResponse) GetCapacity() int64 {
+	if x != nil {
+		return x.Capacity
+	}
+	return 0
+}
+
+func (x *GetAvailabilityResponse) GetActiveHolds() int64 {
+	if x != nil {
+		return x.ActiveHolds
+	}
+	return 0
+}
+
+func (x *GetAvailabilityResponse) GetFrozen() bool {
+	if x != nil {
+		return x.Frozen
+	}
+	return false
+}
+
 var File_holdfast_inventory_v1_inventory_proto protoreflect.FileDescriptor
 
 const file_holdfast_inventory_v1_inventory_proto_rawDesc = "" +
@@ -678,7 +795,14 @@ const file_holdfast_inventory_v1_inventory_proto_rawDesc = "" +
 	"\x1eReleaseForFailedPaymentRequest\x122\n" +
 	"\x04hold\x18\x01 \x01(\v2\x1e.holdfast.inventory.v1.HoldRefR\x04hold\"=\n" +
 	"\x1fReleaseForFailedPaymentResponse\x12\x1a\n" +
-	"\breleased\x18\x01 \x01(\bR\breleased*\x81\x01\n" +
+	"\breleased\x18\x01 \x01(\bR\breleased\"3\n" +
+	"\x16GetAvailabilityRequest\x12\x19\n" +
+	"\bevent_id\x18\x01 \x01(\tR\aeventId\"\x8e\x01\n" +
+	"\x17GetAvailabilityResponse\x12\x1c\n" +
+	"\tavailable\x18\x01 \x01(\x03R\tavailable\x12\x1a\n" +
+	"\bcapacity\x18\x02 \x01(\x03R\bcapacity\x12!\n" +
+	"\factive_holds\x18\x03 \x01(\x03R\vactiveHolds\x12\x16\n" +
+	"\x06frozen\x18\x04 \x01(\bR\x06frozen*\x81\x01\n" +
 	"\tHoldState\x12\x1a\n" +
 	"\x16HOLD_STATE_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fHOLD_STATE_HELD\x10\x01\x12\x15\n" +
@@ -689,13 +813,14 @@ const file_holdfast_inventory_v1_inventory_proto_rawDesc = "" +
 	"\x1bCONFIRM_OUTCOME_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19CONFIRM_OUTCOME_CONFIRMED\x10\x01\x12\x1a\n" +
 	"\x16CONFIRM_OUTCOME_REPLAY\x10\x02\x12\x18\n" +
-	"\x14CONFIRM_OUTCOME_LATE\x10\x032\xb4\x03\n" +
+	"\x14CONFIRM_OUTCOME_LATE\x10\x032\xa6\x04\n" +
 	"\x10InventoryService\x12X\n" +
 	"\aGetHold\x12%.holdfast.inventory.v1.GetHoldRequest\x1a&.holdfast.inventory.v1.GetHoldResponse\x12a\n" +
 	"\n" +
 	"MarkPaying\x12(.holdfast.inventory.v1.MarkPayingRequest\x1a).holdfast.inventory.v1.MarkPayingResponse\x12X\n" +
 	"\aConfirm\x12%.holdfast.inventory.v1.ConfirmRequest\x1a&.holdfast.inventory.v1.ConfirmResponse\x12\x88\x01\n" +
-	"\x17ReleaseForFailedPayment\x125.holdfast.inventory.v1.ReleaseForFailedPaymentRequest\x1a6.holdfast.inventory.v1.ReleaseForFailedPaymentResponseB\xf1\x01\n" +
+	"\x17ReleaseForFailedPayment\x125.holdfast.inventory.v1.ReleaseForFailedPaymentRequest\x1a6.holdfast.inventory.v1.ReleaseForFailedPaymentResponse\x12p\n" +
+	"\x0fGetAvailability\x12-.holdfast.inventory.v1.GetAvailabilityRequest\x1a..holdfast.inventory.v1.GetAvailabilityResponseB\xf1\x01\n" +
 	"\x19com.holdfast.inventory.v1B\x0eInventoryProtoP\x01ZNgithub.com/Sanjay-Mx21/holdfast/internal/gen/holdfast/inventory/v1;inventoryv1\xa2\x02\x03HIX\xaa\x02\x15Holdfast.Inventory.V1\xca\x02\x15Holdfast\\Inventory\\V1\xe2\x02!Holdfast\\Inventory\\V1\\GPBMetadata\xea\x02\x17Holdfast::Inventory::V1b\x06proto3"
 
 var (
@@ -711,7 +836,7 @@ func file_holdfast_inventory_v1_inventory_proto_rawDescGZIP() []byte {
 }
 
 var file_holdfast_inventory_v1_inventory_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_holdfast_inventory_v1_inventory_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_holdfast_inventory_v1_inventory_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_holdfast_inventory_v1_inventory_proto_goTypes = []any{
 	(HoldState)(0),                          // 0: holdfast.inventory.v1.HoldState
 	(ConfirmOutcome)(0),                     // 1: holdfast.inventory.v1.ConfirmOutcome
@@ -725,15 +850,17 @@ var file_holdfast_inventory_v1_inventory_proto_goTypes = []any{
 	(*ConfirmResponse)(nil),                 // 9: holdfast.inventory.v1.ConfirmResponse
 	(*ReleaseForFailedPaymentRequest)(nil),  // 10: holdfast.inventory.v1.ReleaseForFailedPaymentRequest
 	(*ReleaseForFailedPaymentResponse)(nil), // 11: holdfast.inventory.v1.ReleaseForFailedPaymentResponse
-	(*timestamppb.Timestamp)(nil),           // 12: google.protobuf.Timestamp
+	(*GetAvailabilityRequest)(nil),          // 12: holdfast.inventory.v1.GetAvailabilityRequest
+	(*GetAvailabilityResponse)(nil),         // 13: holdfast.inventory.v1.GetAvailabilityResponse
+	(*timestamppb.Timestamp)(nil),           // 14: google.protobuf.Timestamp
 }
 var file_holdfast_inventory_v1_inventory_proto_depIdxs = []int32{
 	0,  // 0: holdfast.inventory.v1.Hold.state:type_name -> holdfast.inventory.v1.HoldState
-	12, // 1: holdfast.inventory.v1.Hold.expires_at:type_name -> google.protobuf.Timestamp
+	14, // 1: holdfast.inventory.v1.Hold.expires_at:type_name -> google.protobuf.Timestamp
 	2,  // 2: holdfast.inventory.v1.GetHoldRequest.hold:type_name -> holdfast.inventory.v1.HoldRef
 	3,  // 3: holdfast.inventory.v1.GetHoldResponse.hold:type_name -> holdfast.inventory.v1.Hold
 	2,  // 4: holdfast.inventory.v1.MarkPayingRequest.hold:type_name -> holdfast.inventory.v1.HoldRef
-	12, // 5: holdfast.inventory.v1.MarkPayingResponse.protected_until:type_name -> google.protobuf.Timestamp
+	14, // 5: holdfast.inventory.v1.MarkPayingResponse.protected_until:type_name -> google.protobuf.Timestamp
 	2,  // 6: holdfast.inventory.v1.ConfirmRequest.hold:type_name -> holdfast.inventory.v1.HoldRef
 	1,  // 7: holdfast.inventory.v1.ConfirmResponse.outcome:type_name -> holdfast.inventory.v1.ConfirmOutcome
 	2,  // 8: holdfast.inventory.v1.ReleaseForFailedPaymentRequest.hold:type_name -> holdfast.inventory.v1.HoldRef
@@ -741,12 +868,14 @@ var file_holdfast_inventory_v1_inventory_proto_depIdxs = []int32{
 	6,  // 10: holdfast.inventory.v1.InventoryService.MarkPaying:input_type -> holdfast.inventory.v1.MarkPayingRequest
 	8,  // 11: holdfast.inventory.v1.InventoryService.Confirm:input_type -> holdfast.inventory.v1.ConfirmRequest
 	10, // 12: holdfast.inventory.v1.InventoryService.ReleaseForFailedPayment:input_type -> holdfast.inventory.v1.ReleaseForFailedPaymentRequest
-	5,  // 13: holdfast.inventory.v1.InventoryService.GetHold:output_type -> holdfast.inventory.v1.GetHoldResponse
-	7,  // 14: holdfast.inventory.v1.InventoryService.MarkPaying:output_type -> holdfast.inventory.v1.MarkPayingResponse
-	9,  // 15: holdfast.inventory.v1.InventoryService.Confirm:output_type -> holdfast.inventory.v1.ConfirmResponse
-	11, // 16: holdfast.inventory.v1.InventoryService.ReleaseForFailedPayment:output_type -> holdfast.inventory.v1.ReleaseForFailedPaymentResponse
-	13, // [13:17] is the sub-list for method output_type
-	9,  // [9:13] is the sub-list for method input_type
+	12, // 13: holdfast.inventory.v1.InventoryService.GetAvailability:input_type -> holdfast.inventory.v1.GetAvailabilityRequest
+	5,  // 14: holdfast.inventory.v1.InventoryService.GetHold:output_type -> holdfast.inventory.v1.GetHoldResponse
+	7,  // 15: holdfast.inventory.v1.InventoryService.MarkPaying:output_type -> holdfast.inventory.v1.MarkPayingResponse
+	9,  // 16: holdfast.inventory.v1.InventoryService.Confirm:output_type -> holdfast.inventory.v1.ConfirmResponse
+	11, // 17: holdfast.inventory.v1.InventoryService.ReleaseForFailedPayment:output_type -> holdfast.inventory.v1.ReleaseForFailedPaymentResponse
+	13, // 18: holdfast.inventory.v1.InventoryService.GetAvailability:output_type -> holdfast.inventory.v1.GetAvailabilityResponse
+	14, // [14:19] is the sub-list for method output_type
+	9,  // [9:14] is the sub-list for method input_type
 	9,  // [9:9] is the sub-list for extension type_name
 	9,  // [9:9] is the sub-list for extension extendee
 	0,  // [0:9] is the sub-list for field type_name
@@ -763,7 +892,7 @@ func file_holdfast_inventory_v1_inventory_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_holdfast_inventory_v1_inventory_proto_rawDesc), len(file_holdfast_inventory_v1_inventory_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   10,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -15,7 +15,7 @@ func TestAccessTokenRoundTrip(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
 	issuer := NewAccessIssuer(priv, 15*time.Minute)
 	user := uuid.NewString()
-	tok, exp, err := issuer.Issue(user, RoleBuyer)
+	tok, exp, err := issuer.Issue(user, RoleBuyer, true)
 	if err != nil || time.Until(exp) < 14*time.Minute {
 		t.Fatalf("Issue = %v, expires %s", err, exp)
 	}
@@ -30,7 +30,7 @@ func TestAccessTokenRoundTrip(t *testing.T) {
 		return nil, false
 	}
 	claims, err := NewAccessVerifier(lookup, time.Second).Verify(tok)
-	if err != nil || claims.Subject != user || claims.Role != RoleBuyer || claims.Issuer != IssuerAuth {
+	if err != nil || claims.Subject != user || claims.Role != RoleBuyer || !claims.Verified || claims.Issuer != IssuerAuth {
 		t.Fatalf("Verify = %+v, %v", claims, err)
 	}
 }

@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
+	"google.golang.org/grpc/codes"
 
 	inventoryv1 "github.com/Sanjay-Mx21/holdfast/internal/gen/holdfast/inventory/v1"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/authn"
@@ -24,10 +25,13 @@ import (
 
 // grpcClient serves f's service over gRPC on a real TCP port with the
 // production interceptors and returns booking-svc's typed client.
-func (f *fixture) grpcClient(t *testing.T) *Client {
+func (f *fixture) grpcClient(t *testing.T) *Client { return f.grpcClientAs(t, "booking") }
+
+// grpcClientAs is grpcClient for the service named caller.
+func (f *fixture) grpcClientAs(t *testing.T, caller string) *Client {
 	t.Helper()
-	_, bookingKey, _ := ed25519.GenerateKey(rand.Reader)
-	v := authn.NewServiceVerifier("inventory", map[string]ed25519.PublicKey{"booking": bookingKey.Public().(ed25519.PublicKey)}, time.Second)
+	_, callerKey, _ := ed25519.GenerateKey(rand.Reader)
+	v := authn.NewServiceVerifier("inventory", map[string]ed25519.PublicKey{caller: callerKey.Public().(ed25519.PublicKey)}, time.Second)
 	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
 	srv := grpcx.NewServer(grpcx.ServerConfig{Verifier: v, Allow: GRPCAllow()}, prometheus.NewRegistry(), quiet)
 	inventoryv1.RegisterInventoryServiceServer(srv, NewGRPCServer(f.svc))
@@ -38,7 +42,7 @@ func (f *fixture) grpcClient(t *testing.T) *Client {
 	}
 	go func() { _ = srv.Serve(ln) }()
 	t.Cleanup(srv.Stop)
-	conn, err := grpcx.Dial(grpcx.ClientConfig{Target: ln.Addr().String(), Tokens: authn.NewServiceTokenSource(bookingKey, "booking", "inventory")})
+	conn, err := grpcx.Dial(grpcx.ClientConfig{Target: ln.Addr().String(), Tokens: authn.NewServiceTokenSource(callerKey, caller, "inventory")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,5 +130,27 @@ func TestGRPCExpiredAndFailedPayments(t *testing.T) {
 	}
 	if _, err := c.GetHold(ctx, uuid.NewString(), user, res.Hold.ID); !errors.Is(err, ErrHoldNotFound) && !errors.Is(err, ErrEventNotProvisioned) {
 		t.Fatalf("unknown event: %v", err)
+	}
+}
+
+// TestGRPCAvailabilityForQueue: queue-svc reads units left, open holds and
+// the freeze flag; booking-svc may not.
+func TestGRPCAvailabilityForQueue(t *testing.T) {
+	f := newFixture(t, 10, 4)
+	if _, err := f.create(uuid.NewString(), "grpc-key-0001", 3); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.SetFrozen(ctx, f.eventID, true); err != nil {
+		t.Fatal(err)
+	}
+	a, err := f.grpcClientAs(t, "queue").GetAvailability(ctx, f.eventID)
+	if err != nil || a.Available != 7 || a.Capacity != 10 || a.ActiveHolds != 1 || !a.Frozen {
+		t.Fatalf("GetAvailability = %+v, %v; want 7 of 10, 1 open hold, frozen", a, err)
+	}
+	if _, err := f.grpcClientAs(t, "queue").GetAvailability(ctx, uuid.NewString()); !errors.Is(err, ErrEventNotProvisioned) {
+		t.Fatalf("unknown event: %v, want ErrEventNotProvisioned", err)
+	}
+	if _, err := f.grpcClient(t).GetAvailability(ctx, f.eventID); grpcx.Code(err) != codes.PermissionDenied {
+		t.Fatal("booking-svc must not read availability over gRPC")
 	}
 }

@@ -30,8 +30,8 @@ IDs match section 2.3 of the design doc.
 
 | Service | Status | Owns | Talks to |
 |---|---|---|---|
-| inventory-svc (`cmd/inventory`) | Built; internal gRPC API from task 3.4 | Valkey keys `inv:*` | Valkey; called by booking-svc over gRPC |
-| queue-svc (`cmd/queue`) | Built (Phase 2): provisioning, joining, the T0 transition, positions, admission, the status document, admission tokens and their JWKS | Valkey keys `q:*`, `adm:*`, `rl:*` | Valkey; PostgreSQL for leader election only |
+| inventory-svc (`cmd/inventory`) | Built; internal gRPC API from task 3.4; the freeze flag from task 4.3 | Valkey keys `inv:*` | Valkey; called by booking-svc and queue-svc over gRPC |
+| queue-svc (`cmd/queue`) | Built (Phase 2): provisioning, joining, the T0 transition, positions, admission, the status document, admission tokens and their JWKS; task 4.3: policy windows, the freeze switch, admission by units left and `SOLD_OUT` | Valkey keys `q:*`, `adm:*`, `rl:*` | Valkey; PostgreSQL for leader election only; inventory-svc over gRPC (units left) |
 | NGINX edge (`deploy/nginx`) | Built (Phase 2) | Nothing | queue-svc, inventory-svc |
 | booking-svc (`cmd/booking`) | Built (Phase 3): the idempotent booking API, the deadline job, the saga (ADR 0010) | `booking` schema (with the final guard, `internal/booking/guard`) | PostgreSQL; inventory-svc and payment-svc over gRPC |
 | payment-svc (`cmd/payment`) | Built (Phase 3): intents, provider orders, webhooks, the ledger, status polling, refunds | `payment` schema | PostgreSQL; the payment provider over HTTPS; called by booking-svc over gRPC; receives the provider's webhooks |
@@ -76,17 +76,21 @@ door, the role a CDN plays in production:
 
 ### The buyer's journey (through the edge)
 
-1. Before or after T0: `POST /v1/queue/{id}/join`. `join.lua` gives a lottery
-   score before T0 (by Valkey's clock), an arrival number after, and never a
-   second place (ADR 0005).
+1. Before or after T0: `POST /v1/queue/{id}/join`. The event's policy windows
+   come first (`internal/policy`): until they end, only verified buyers may
+   join and agents may not (403 with `Retry-After`). Then `join.lua` gives a
+   lottery score before T0 (by Valkey's clock), an arrival number after, and
+   never a second place (ADR 0005).
 2. After T0: `GET /v1/queue/{id}/me` once, for the buyer's rank.
 3. Every few seconds: `GET /v1/events/{id}/status`, answered by the edge's
    one-second cache; the origin sees about one request every second or two
    per event, whatever the crowd (ADR 0006, experiment E2).
-4. Meanwhile one admission leader per event (ADR 0007) runs `advance.lua`
-   every 250 ms: it moves `admittedUpTo` at the event's rate, gives each newly
-   admitted rank a session slot for the session TTL, and never exceeds the
-   session budget.
+4. Meanwhile one admission leader per event (ADR 0007) reads the units left
+   from inventory-svc over gRPC and runs `advance.lua` every 250 ms: it moves
+   `admittedUpTo` at the event's rate, gives each newly admitted rank a
+   session slot for the session TTL, and never exceeds the session budget nor
+   the units left × 1.3. With no units left and no open hold, the leader
+   marks the queue `SOLD_OUT`.
 5. Once `admittedUpTo` reaches the buyer's rank: `POST /v1/queue/{id}/admit`.
    `admit.lua` checks the rank and that the slot is alive by Valkey's clock;
    queue-svc signs an Ed25519 admission token that expires with the slot.
@@ -120,11 +124,11 @@ door, the role a CDN plays in production:
    `Idempotency-Key` and strictly decodes `{"quantity": n}`.
 4. The service canonicalises the IDs, validates the key and quantity, and
    derives the hold ID as UUIDv5(user, idempotency key).
-5. The store runs `hold.lua`: provisioned? quantity valid? replay? per-user cap?
-   units left? Then it decrements, records the hold and indexes its expiry,
-   all in one atomic step.
+5. The store runs `hold.lua`: provisioned? quantity valid? replay? sale frozen?
+   per-user cap? units left? Then it decrements, records the hold and indexes
+   its expiry, all in one atomic step.
 6. The reply code maps to 201 (held or replayed) or to a problem document
-   (409 SOLD_OUT, 422 USER_LIMIT, and so on).
+   (409 SOLD_OUT, 422 USER_LIMIT, 503 SALE_PAUSED, and so on).
 
 ## 6. Data
 
@@ -208,8 +212,17 @@ position.
 Admission controllers run for every event in every queue-svc replica. Exactly
 one per event leads, holding a PostgreSQL advisory lock; a replica holds all
 its events' locks on one shared connection (ADR 0007, amended). Every 250 ms
-the leader runs `advance.lua`, which refuses a stale epoch
-(fencing) and caps concurrent sessions (Little's Law).
+the leader reads the units left from inventory-svc (`GetAvailability`, a
+deadline of one tick) and runs `advance.lua`, which refuses a stale epoch
+(fencing) and caps concurrent sessions by Little's Law and by the units left
+× `OVERSUBSCRIPTION_FACTOR`. If inventory cannot be read, the tick admits
+without the units cap (inventory still refuses every hold beyond capacity).
+The fenced `soldout.lua` marks a queue `SOLD_OUT` once no units are left and
+no hold is open.
+
+**The freeze switch** (runbook RB-1, `docs/runbooks/sale.md`) is two flags:
+inventory's `frozen` field stops new holds, and the queue's `FROZEN` state
+stops admissions. `holdfastctl freeze` sets both, holds first.
 
 The **outbox relay** runs in every replica of a service that writes events
 (booking-svc and payment-svc); exactly one per schema leads, holding a
@@ -257,6 +270,9 @@ provider about quiet intents, least recently polled first.
   `DEV_IDENTITY=true` (development and load tests only; refused in
   production) a request without a token may name its buyer in
   `X-Dev-User-Id`.
+- The policy windows (`internal/policy`) use the access token's `role` and
+  `vrf` (verified) claims: verified buyers only, and no agents, until each
+  window ends. A development-header caller is never verified.
 - Joining passes per-IP (IPv6 per /64) and per-user token buckets in Valkey
   (`internal/platform/ratelimit`), shared by every replica.
 - Services call each other over gRPC with service tokens: short-lived
@@ -283,8 +299,9 @@ provider about quiet intents, least recently polled first.
   `holdfast_sweeper_*`, `holdfast_http_*` (labelled by route pattern, never
   raw paths) and `holdfast_build_info`. queue-svc adds `holdfast_queue_*`:
   join, position, claim, tick and opener outcomes, and per-event gauges for
-  queue size, `admittedUpTo`, sessions, the session budget, the leader's epoch
-  and the status document's age (`docs/services/queue.md`). Kafka consumers
+  queue size, `admittedUpTo`, sessions, the session budget, the leader's epoch,
+  the queue's state and the status document's age, and the leaders' inventory
+  reads (`docs/services/queue.md`). Kafka consumers
   count `holdfast_kafka_consumed_total{topic,result}` (ok, retried,
   dead_lettered).
 - **Dashboards:** Grafana, HoldFast / Inventory and HoldFast / Queue.
@@ -314,6 +331,8 @@ provider about quiet intents, least recently polled first.
 |---|---|---|
 | Valkey unreachable | 503 `UNAVAILABLE` with `Retry-After`; readiness fails | RB-INV-1 |
 | Valkey data lost | Rebuild the pool from PostgreSQL (capacity minus sold) | RB-INV-4 |
+| Something looks wrong during a sale | Freeze: no new holds, no admissions; holds and payments in flight carry on | RB-1 |
+| inventory-svc unreachable from queue-svc | Admission ignores the units left until it is back (fails open; inventory still guards capacity) | RB-Q-5 |
 | Sweeper failing | Expired holds keep units; any healthy replica recovers them | RB-INV-2 |
 | Payment confirmed after hold expiry | `confirm.lua` re-takes the units ("late") instead of dropping the sale | RB-INV-6 |
 | Pod killed | Readiness drains first; in-flight requests finish within `SHUTDOWN_TIMEOUT` | n/a |

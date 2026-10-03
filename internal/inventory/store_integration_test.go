@@ -571,3 +571,47 @@ func indexOf(xs []string, x string) int {
 	}
 	return -1
 }
+
+// TestFreezeStopsNewHoldsOnly: a frozen sale refuses new holds, but a retry
+// of a hold made before the freeze still gets its hold, and existing holds
+// go through checkout and release as usual. Unfreezing resumes sales.
+func TestFreezeStopsNewHoldsOnly(t *testing.T) {
+	f := newFixture(t, 10, 4)
+	user := uuid.NewString()
+	before, err := f.create(user, "order-0001", 2)
+	mustErr(t, "hold before the freeze", err, nil)
+
+	changed, err := f.svc.SetFrozen(ctx, f.eventID, true)
+	mustErr(t, "freeze", err, nil)
+	mustEqual(t, "freeze changed the flag", changed, true)
+	changed, err = f.svc.SetFrozen(ctx, f.eventID, true)
+	mustErr(t, "freeze again", err, nil)
+	mustEqual(t, "freezing twice changes nothing", changed, false)
+
+	_, err = f.create(uuid.NewString(), "order-0002", 1)
+	mustErr(t, "a new hold while frozen", err, ErrSalePaused)
+	again, err := f.create(user, "order-0001", 2)
+	mustErr(t, "a retry of the earlier hold", err, nil)
+	mustEqual(t, "replayed", again.Replayed, true)
+	_, err = f.svc.MarkPaying(ctx, f.eventID, user, before.Hold.ID)
+	mustErr(t, "checkout of an existing hold", err, nil)
+
+	a, err := f.svc.Availability(ctx, f.eventID)
+	mustErr(t, "availability", err, nil)
+	mustEqual(t, "frozen", a.Frozen, true)
+	mustEqual(t, "available", a.Available, 8)
+	mustEqual(t, "active holds", a.ActiveHolds, 1)
+
+	_, err = f.svc.SetFrozen(ctx, f.eventID, false)
+	mustErr(t, "unfreeze", err, nil)
+	_, err = f.create(uuid.NewString(), "order-0003", 1)
+	mustErr(t, "a new hold after unfreezing", err, nil)
+	a, _ = f.svc.Availability(ctx, f.eventID)
+	mustEqual(t, "frozen after unfreezing", a.Frozen, false)
+	mustEqual(t, "active holds", a.ActiveHolds, 2)
+
+	_, err = f.svc.SetFrozen(ctx, uuid.NewString(), true)
+	mustErr(t, "freeze an unknown event", err, ErrEventNotProvisioned)
+	_, err = f.svc.SetFrozen(ctx, "not-a-uuid", true)
+	mustErr(t, "freeze a bad ID", err, ErrInvalidRequest)
+}

@@ -18,10 +18,15 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/Sanjay-Mx21/holdfast/internal/policy"
 	"github.com/Sanjay-Mx21/holdfast/internal/testenv"
 )
 
 var ctx = context.Background()
+
+// anyone is a caller the policy windows know nothing about: the development
+// header's. With no windows, everyone may join.
+var anyone = policy.Buyer{}
 
 type fixture struct {
 	svc     *Service
@@ -41,7 +46,7 @@ func newFixture(t *testing.T) *fixture {
 	k := keysFor(eventID)
 	t.Cleanup(func() {
 		c := context.Background()
-		_ = rdb.Del(c, k.config(), k.state(), k.members(), k.seq(), k.admitted(), k.epoch(), k.sessions(), k.status()).Err()
+		_ = rdb.Del(c, k.config(), k.state(), k.members(), k.seq(), k.admitted(), k.epoch(), k.sessions(), k.status(), k.policy()).Err()
 		_ = rdb.SRem(c, eventsKey, eventID).Err()
 	})
 	return &fixture{svc: NewService(store), store: store, rdb: rdb, eventID: eventID}
@@ -187,8 +192,8 @@ func (f *fixture) provisionAt(t *testing.T, opensAt time.Time) {
 	cfg := validConfig()
 	cfg.OpensAt = opensAt
 	k := keysFor(f.eventID)
-	code, err := provisionScript.Run(ctx, f.rdb, []string{k.config(), k.state()},
-		cfg.OpensAt.UnixMilli(), cfg.AdmissionRate, cfg.MaxSessions, cfg.SessionTTL.Milliseconds()).Int64()
+	code, err := provisionScript.Run(ctx, f.rdb, []string{k.config(), k.state(), k.policy()},
+		cfg.OpensAt.UnixMilli(), cfg.AdmissionRate, cfg.MaxSessions, cfg.SessionTTL.Milliseconds(), 0, 0).Int64()
 	if err != nil || code != 1 {
 		t.Fatalf("provision: code %d, err %v", code, err)
 	}
@@ -214,7 +219,7 @@ func TestJoinBeforeT0GetsLotteryPositionOnce(t *testing.T) {
 	f := newFixture(t)
 	f.provision(t)
 	user := uuid.NewString()
-	res, err := f.svc.Join(ctx, f.eventID, user)
+	res, err := f.svc.Join(ctx, f.eventID, user, anyone)
 	mustErr(t, "join", err, nil)
 	mustEqual(t, "joined", res.Joined, true)
 	mustEqual(t, "ordering", res.Ordering, OrderingLottery)
@@ -224,7 +229,7 @@ func TestJoinBeforeT0GetsLotteryPositionOnce(t *testing.T) {
 	}
 	// Joining again, even many times, never re-rolls the lottery.
 	for range 20 {
-		res, err := f.svc.Join(ctx, f.eventID, strings.ToUpper(user))
+		res, err := f.svc.Join(ctx, f.eventID, strings.ToUpper(user), anyone)
 		mustErr(t, "rejoin", err, nil)
 		mustEqual(t, "joined on rejoin", res.Joined, false)
 		mustEqual(t, "ordering on rejoin", res.Ordering, OrderingLottery)
@@ -240,7 +245,7 @@ func TestJoinAfterT0IsFIFOBehindEveryLotteryJoiner(t *testing.T) {
 	early := make([]string, 50)
 	for i := range early {
 		early[i] = uuid.NewString()
-		if _, err := f.svc.Join(ctx, f.eventID, early[i]); err != nil {
+		if _, err := f.svc.Join(ctx, f.eventID, early[i], anyone); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -248,7 +253,7 @@ func TestJoinAfterT0IsFIFOBehindEveryLotteryJoiner(t *testing.T) {
 	late := make([]string, 5)
 	for i := range late {
 		late[i] = uuid.NewString()
-		res, err := f.svc.Join(ctx, f.eventID, late[i])
+		res, err := f.svc.Join(ctx, f.eventID, late[i], anyone)
 		mustErr(t, "join after T0", err, nil)
 		mustEqual(t, "ordering after T0", res.Ordering, OrderingFIFO)
 	}
@@ -272,12 +277,12 @@ func TestJoinWhileFrozenStaysBehindEarlierJoiners(t *testing.T) {
 	f.provision(t)
 	f.setState(t, StateOpen)
 	before := uuid.NewString()
-	if _, err := f.svc.Join(ctx, f.eventID, before); err != nil {
+	if _, err := f.svc.Join(ctx, f.eventID, before, anyone); err != nil {
 		t.Fatal(err)
 	}
 	f.setState(t, StateFrozen)
 	during := uuid.NewString()
-	res, err := f.svc.Join(ctx, f.eventID, during)
+	res, err := f.svc.Join(ctx, f.eventID, during, anyone)
 	mustErr(t, "join while frozen", err, nil)
 	mustEqual(t, "joined while frozen", res.Joined, true)
 	mustEqual(t, "ordering while frozen", res.Ordering, OrderingFIFO)
@@ -288,13 +293,13 @@ func TestJoinWhileFrozenStaysBehindEarlierJoiners(t *testing.T) {
 
 func TestJoinRefusedWhenClosedOrNotProvisioned(t *testing.T) {
 	f := newFixture(t)
-	_, err := f.svc.Join(ctx, f.eventID, uuid.NewString())
+	_, err := f.svc.Join(ctx, f.eventID, uuid.NewString(), anyone)
 	mustErr(t, "join before provisioning", err, ErrEventNotFound)
 
 	f.provision(t)
 	for _, s := range []State{StateSoldOut, StateClosed} {
 		f.setState(t, s)
-		_, err := f.svc.Join(ctx, f.eventID, uuid.NewString())
+		_, err := f.svc.Join(ctx, f.eventID, uuid.NewString(), anyone)
 		mustErr(t, "join when "+string(s), err, ErrQueueClosed)
 	}
 	n, _ := f.rdb.ZCard(ctx, keysFor(f.eventID).members()).Result()
@@ -304,9 +309,9 @@ func TestJoinRefusedWhenClosedOrNotProvisioned(t *testing.T) {
 func TestJoinRejectsBadIDs(t *testing.T) {
 	f := newFixture(t)
 	f.provision(t)
-	_, err := f.svc.Join(ctx, f.eventID, "{not-a-uuid}")
+	_, err := f.svc.Join(ctx, f.eventID, "{not-a-uuid}", anyone)
 	mustErr(t, "bad user", err, ErrInvalidRequest)
-	_, err = f.svc.Join(ctx, "not-a-uuid", uuid.NewString())
+	_, err = f.svc.Join(ctx, "not-a-uuid", uuid.NewString(), anyone)
 	mustErr(t, "bad event", err, ErrInvalidRequest)
 }
 
@@ -326,7 +331,7 @@ func TestConcurrentJoinsOneSlotPerUser(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				res, err := f.svc.Join(ctx, f.eventID, u)
+				res, err := f.svc.Join(ctx, f.eventID, u, anyone)
 				if err != nil {
 					t.Error(err)
 					return
@@ -353,14 +358,14 @@ func TestJoinAtT0OpensTheQueueItself(t *testing.T) {
 	mustEqual(t, "state before the join", f.state(t), string(StatePre))
 
 	first := uuid.NewString()
-	res, err := f.svc.Join(ctx, f.eventID, first)
+	res, err := f.svc.Join(ctx, f.eventID, first, anyone)
 	mustErr(t, "join", err, nil)
 	mustEqual(t, "ordering of a join after T0", res.Ordering, OrderingFIFO)
 	mustEqual(t, "join opened the queue", res.openedQueue, true)
 	mustEqual(t, "state after the join", f.state(t), string(StateOpen))
 	mustEqual(t, "first FIFO score", f.score(t, first), float64(2))
 
-	res, err = f.svc.Join(ctx, f.eventID, uuid.NewString())
+	res, err = f.svc.Join(ctx, f.eventID, uuid.NewString(), anyone)
 	mustErr(t, "second join", err, nil)
 	mustEqual(t, "second join opened the queue", res.openedQueue, false)
 	mustEqual(t, "second ordering", res.Ordering, OrderingFIFO)
@@ -369,7 +374,7 @@ func TestJoinAtT0OpensTheQueueItself(t *testing.T) {
 func TestJoinBeforeT0LeavesTheQueueInPre(t *testing.T) {
 	f := newFixture(t)
 	f.provisionAt(t, time.Now().Add(time.Minute))
-	res, err := f.svc.Join(ctx, f.eventID, uuid.NewString())
+	res, err := f.svc.Join(ctx, f.eventID, uuid.NewString(), anyone)
 	mustErr(t, "join", err, nil)
 	mustEqual(t, "ordering", res.Ordering, OrderingLottery)
 	mustEqual(t, "opened", res.openedQueue, false)
@@ -391,7 +396,7 @@ func TestJoinsAcrossT0(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for time.Now().Before(deadline) {
-				res, err := f.svc.Join(ctx, f.eventID, uuid.NewString())
+				res, err := f.svc.Join(ctx, f.eventID, uuid.NewString(), anyone)
 				if err != nil {
 					t.Error(err)
 					return
@@ -511,7 +516,7 @@ func TestOverview(t *testing.T) {
 func TestPurgeRemovesEveryKeyAndTheWorkListEntry(t *testing.T) {
 	f := newFixture(t)
 	f.provisionAt(t, time.Now().Add(-time.Second))
-	if _, err := f.svc.Join(ctx, f.eventID, uuid.NewString()); err != nil {
+	if _, err := f.svc.Join(ctx, f.eventID, uuid.NewString(), anyone); err != nil {
 		t.Fatal(err)
 	}
 	epoch, _ := f.store.NewTerm(ctx, f.eventID)
@@ -612,7 +617,7 @@ func TestPositionBeforeT0IsRandomizing(t *testing.T) {
 	opensAt := time.Now().Add(time.Hour).Truncate(time.Millisecond)
 	f.provisionAt(t, opensAt)
 	user := uuid.NewString()
-	if _, err := f.svc.Join(ctx, f.eventID, user); err != nil {
+	if _, err := f.svc.Join(ctx, f.eventID, user, anyone); err != nil {
 		t.Fatal(err)
 	}
 	pos, err := f.svc.Position(ctx, f.eventID, strings.ToUpper(user))
@@ -630,13 +635,13 @@ func TestPositionAfterT0IsRankInLine(t *testing.T) {
 	lottery := make([]string, 30)
 	for i := range lottery {
 		lottery[i] = uuid.NewString()
-		if _, err := f.svc.Join(ctx, f.eventID, lottery[i]); err != nil {
+		if _, err := f.svc.Join(ctx, f.eventID, lottery[i], anyone); err != nil {
 			t.Fatal(err)
 		}
 	}
 	f.setState(t, StateOpen)
 	late := uuid.NewString()
-	if _, err := f.svc.Join(ctx, f.eventID, late); err != nil {
+	if _, err := f.svc.Join(ctx, f.eventID, late, anyone); err != nil {
 		t.Fatal(err)
 	}
 	// Every rank 1..30 goes to exactly one lottery joiner, in score order.
@@ -664,7 +669,7 @@ func TestPositionPreButPastT0ReadsAsOpen(t *testing.T) {
 	f := newFixture(t)
 	f.provision(t) // T0 an hour away: the join below is certainly before it
 	user := uuid.NewString()
-	if _, err := f.svc.Join(ctx, f.eventID, user); err != nil {
+	if _, err := f.svc.Join(ctx, f.eventID, user, anyone); err != nil {
 		t.Fatal(err)
 	}
 	// Now move T0 into the past without anyone flipping the state. (Waiting
@@ -686,7 +691,7 @@ func TestPositionKeepsRankInLaterStates(t *testing.T) {
 	f := newFixture(t)
 	f.provision(t)
 	user := uuid.NewString()
-	if _, err := f.svc.Join(ctx, f.eventID, user); err != nil {
+	if _, err := f.svc.Join(ctx, f.eventID, user, anyone); err != nil {
 		t.Fatal(err)
 	}
 	for _, s := range []State{StateFrozen, StateSoldOut, StateClosed} {

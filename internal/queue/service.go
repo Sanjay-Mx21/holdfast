@@ -3,18 +3,22 @@ package queue
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/Sanjay-Mx21/holdfast/internal/policy"
 )
 
 // Service implements the queue use cases: it validates and canonicalises
 // input, then delegates every state change to one atomic Store operation.
 type Service struct {
 	store *Store
+	now   func() time.Time
 }
 
 // NewService returns a Service backed by store.
-func NewService(store *Store) *Service { return &Service{store: store} }
+func NewService(store *Store) *Service { return &Service{store: store, now: time.Now} }
 
 // Provision stores an event's queue settings and opens its waiting room in
 // state PRE. It is idempotent for identical settings and refuses to silently
@@ -32,14 +36,23 @@ func (s *Service) Provision(ctx context.Context, eventID string, cfg EventConfig
 
 // Join puts userID in the event's waiting room: before T0 with a random
 // lottery position, after T0 in arrival order. Joining again is harmless and
-// keeps the original position.
-func (s *Service) Join(ctx context.Context, eventID, userID string) (JoinResult, error) {
+// keeps the original position. The event's policy windows decide whether
+// buyer may join yet; if not, the error is a *policy.Refused saying until
+// when.
+func (s *Service) Join(ctx context.Context, eventID, userID string, buyer policy.Buyer) (JoinResult, error) {
 	ev, err := canonicalUUID("eventId", eventID)
 	if err != nil {
 		return JoinResult{}, err
 	}
 	user, err := canonicalUUID("userId", userID)
 	if err != nil {
+		return JoinResult{}, err
+	}
+	rules, err := s.store.Policy(ctx, ev)
+	if err != nil {
+		return JoinResult{}, err
+	}
+	if err := policy.Check(rules, buyer, s.now()); err != nil {
 		return JoinResult{}, err
 	}
 	score, err := lotteryScore()
@@ -92,6 +105,28 @@ func (s *Service) Overview(ctx context.Context, eventID string) (Overview, error
 	}
 	o.Status = st
 	return o, nil
+}
+
+// Freeze pauses admissions (runbook RB-1): an OPEN queue becomes FROZEN.
+// Joins and rank lookups carry on, and people admitted already may still
+// claim their turn. It reports whether this call froze the queue; freezing
+// a frozen queue is harmless. A queue before T0, sold out or closed is
+// ErrStateConflict.
+func (s *Service) Freeze(ctx context.Context, eventID string) (bool, error) {
+	return s.transition(ctx, eventID, StateOpen, StateFrozen)
+}
+
+// Unfreeze resumes admissions: a FROZEN queue becomes OPEN again.
+func (s *Service) Unfreeze(ctx context.Context, eventID string) (bool, error) {
+	return s.transition(ctx, eventID, StateFrozen, StateOpen)
+}
+
+func (s *Service) transition(ctx context.Context, eventID string, from, to State) (bool, error) {
+	ev, err := canonicalUUID("eventId", eventID)
+	if err != nil {
+		return false, err
+	}
+	return s.store.Transition(ctx, ev, from, to)
 }
 
 // Admit lets userID claim their turn once their rank is within

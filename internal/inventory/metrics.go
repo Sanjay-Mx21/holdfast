@@ -18,7 +18,7 @@ type Metrics struct {
 
 // Hold results, pre-initialised so every series exists from the first scrape
 // (rate() over a series that appears mid-incident is misleading).
-var holdResults = []string{"held", "replay", "sold_out", "user_limit", "invalid", "not_provisioned", "error"}
+var holdResults = []string{"held", "replay", "sold_out", "user_limit", "paused", "invalid", "not_provisioned", "error"}
 
 // NewMetrics registers inventory metrics on reg.
 func NewMetrics(reg prometheus.Registerer) *Metrics {

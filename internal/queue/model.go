@@ -3,6 +3,8 @@ package queue
 import (
 	"fmt"
 	"time"
+
+	"github.com/Sanjay-Mx21/holdfast/internal/policy"
 )
 
 // State is the lifecycle state of an event's queue (q:{E}:state).
@@ -41,6 +43,10 @@ type EventConfig struct {
 	MaxSessions int
 	// SessionTTL is how long an admitted buyer's session lasts.
 	SessionTTL time.Duration
+	// Policy holds the event's policy windows (zero times: none), checked
+	// at join. Unlike the settings above, they are not fixed: provisioning
+	// again with the same settings replaces them.
+	Policy policy.Rules
 }
 
 // Validate checks the configuration's bounds.
@@ -59,6 +65,11 @@ func (c EventConfig) Validate() error {
 	}
 	if c.SessionTTL%time.Second != 0 {
 		return fmt.Errorf("%w: session TTL must be a whole number of seconds", ErrInvalidRequest)
+	}
+	for name, t := range map[string]time.Time{"verifiedOnlyUntil": c.Policy.VerifiedOnlyUntil, "agentLockoutUntil": c.Policy.AgentLockoutUntil} {
+		if !t.IsZero() && t.Before(earliestOpening) {
+			return fmt.Errorf("%w: %s must be a time after 2020-01-01, or absent for no window", ErrInvalidRequest, name)
+		}
 	}
 	return nil
 }
@@ -117,6 +128,8 @@ type Advance struct {
 	ActiveSessions int64
 	// QueueSize counts everyone in the queue (q:{E}:members).
 	QueueSize int64
+	// State is the queue's state as the status document shows it.
+	State State
 }
 
 // Status is an event's status document: the same for every client, so the

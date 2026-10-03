@@ -3,7 +3,8 @@
 // Ports: HTTP_ADDR serves the public API (joining the queue, positions);
 // ADMIN_ADDR (internal only) serves /metrics, /livez, /readyz, /buildz,
 // /debug/pprof and operator endpoints. Background work: the T0 opener and
-// the admission controllers (one per event, leader-elected in PostgreSQL).
+// the admission controllers (one per event, leader-elected in PostgreSQL),
+// which read inventory-svc's units left over gRPC.
 package main
 
 import (
@@ -22,10 +23,12 @@ import (
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
+	"github.com/Sanjay-Mx21/holdfast/internal/inventory"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/app"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/authn"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/buildinfo"
 	cfgpkg "github.com/Sanjay-Mx21/holdfast/internal/platform/config"
+	"github.com/Sanjay-Mx21/holdfast/internal/platform/grpcx"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/health"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/httpx"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/logging"
@@ -86,6 +89,15 @@ type config struct {
 	AdmissionTick           time.Duration `env:"ADMISSION_TICK" envDefault:"250ms"`
 	LeaderRetryInterval     time.Duration `env:"LEADER_RETRY_INTERVAL" envDefault:"2s"`
 	AdmissionRescanInterval time.Duration `env:"ADMISSION_RESCAN_INTERVAL" envDefault:"2s"`
+
+	// inventory-svc's internal gRPC API: each admission leader reads the
+	// units left every tick, keeps open sessions within the units left times
+	// OVERSUBSCRIPTION_FACTOR, and marks a sold-out queue SOLD_OUT. Empty:
+	// neither happens. SERVICE_PRIVATE_KEY_FILE signs queue-svc's service
+	// tokens (inventory trusts the matching public key).
+	InventoryGRPCAddr     string  `env:"INVENTORY_GRPC_ADDR"`
+	ServicePrivateKeyFile string  `env:"SERVICE_PRIVATE_KEY_FILE"`
+	OversubscriptionRatio float64 `env:"OVERSUBSCRIPTION_FACTOR" envDefault:"1.3"`
 }
 
 func (c *config) trustedProxies() ([]netip.Prefix, error) {
@@ -155,6 +167,12 @@ func (c *config) Validate() error {
 	}
 	if c.AdmissionTokenTTL < time.Minute || c.AdmissionTokenTTL > time.Hour {
 		errs = append(errs, errors.New("ADMISSION_TOKEN_TTL must be between 1m and 1h"))
+	}
+	if c.InventoryGRPCAddr != "" && c.ServicePrivateKeyFile == "" {
+		errs = append(errs, errors.New("INVENTORY_GRPC_ADDR needs SERVICE_PRIVATE_KEY_FILE: inventory accepts only signed callers"))
+	}
+	if c.OversubscriptionRatio < 1 || c.OversubscriptionRatio > 10 {
+		errs = append(errs, errors.New("OVERSUBSCRIPTION_FACTOR must be between 1 and 10"))
 	}
 	return errors.Join(errs...)
 }
@@ -271,12 +289,38 @@ func run(ctx context.Context) error {
 		TrustProxies(trusted...).
 		Register(public, admin, identity, authn.RequireStaticToken(cfg.AdminToken))
 
+	admission := queue.AdmissionConfig{
+		Tick: cfg.AdmissionTick, RetryLeadership: cfg.LeaderRetryInterval, Rescan: cfg.AdmissionRescanInterval,
+		Oversubscription: cfg.OversubscriptionRatio,
+	}
+	if cfg.InventoryGRPCAddr != "" {
+		raw, err := os.ReadFile(filepath.Clean(cfg.ServicePrivateKeyFile))
+		if err != nil {
+			return fmt.Errorf("read service key: %w", err)
+		}
+		key, err := authn.ParsePrivateKeyPEM(raw)
+		if err != nil {
+			return err
+		}
+		conn, err := grpcx.Dial(grpcx.ClientConfig{
+			Target: cfg.InventoryGRPCAddr, Tokens: authn.NewServiceTokenSource(key, serviceName, "inventory"),
+			Timeout: cfg.AdmissionTick,
+		})
+		if err != nil {
+			return err
+		}
+		defer func() { _ = conn.Close() }()
+		admission.Inventory = inventory.NewClient(conn)
+		log.Info("admissions follow inventory's units left", "addr", cfg.InventoryGRPCAddr,
+			"oversubscription_factor", cfg.OversubscriptionRatio, "kid", authn.KeyID(key.Public().(ed25519.PublicKey)))
+	} else {
+		log.Warn("INVENTORY_GRPC_ADDR is not set: admissions ignore the units left, and no queue is marked SOLD_OUT")
+	}
+
 	return app.Run(ctx, log, hc, cfg.HTTP.DrainDelay, append([]app.Component{
 		httpx.NewServer("public", cfg.HTTP.Addr, public, cfg.HTTP, log),
 		httpx.NewServer("admin", cfg.HTTP.AdminAddr, admin, cfg.HTTP, log, httpx.WithWriteTimeout(90*time.Second)),
 		queue.NewOpener(store, cfg.OpenCheckInterval, qm, log),
-		queue.NewAdmission(store, pool, queue.AdmissionConfig{
-			Tick: cfg.AdmissionTick, RetryLeadership: cfg.LeaderRetryInterval, Rescan: cfg.AdmissionRescanInterval,
-		}, qm, log),
+		queue.NewAdmission(store, pool, admission, qm, log),
 	}, background...)...)
 }

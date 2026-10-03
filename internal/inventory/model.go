@@ -83,6 +83,12 @@ type Availability struct {
 	EventID   string
 	Available int
 	Capacity  int
+	// ActiveHolds counts holds that are HELD or PAYING, including expired
+	// ones the sweeper has not released yet: holds that may still return
+	// units to the pool.
+	ActiveHolds int
+	// Frozen says the sale is frozen (runbook RB-1): no new holds.
+	Frozen bool
 }
 
 // SoldOut reports whether no units are left. Late confirmations can push

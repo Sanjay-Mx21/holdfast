@@ -14,6 +14,7 @@ var (
 	ErrHoldNotCancellable   = errors.New("inventory: hold is in checkout and cannot be cancelled")
 	ErrIdempotencyKeyReused = errors.New("inventory: idempotency key reused with different parameters")
 	ErrProvisionConflict    = errors.New("inventory: event already provisioned with different settings")
+	ErrSalePaused           = errors.New("inventory: the sale is frozen; no new holds until it resumes")
 
 	// errNotExpiredYet is internal: the sweeper saw a hold its clock thought
 	// had expired but the server's clock did not. It retries on the next tick.
