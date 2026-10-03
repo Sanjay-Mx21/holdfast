@@ -3,6 +3,56 @@
 Raw evidence for every number HoldFast publishes. A number that is not backed
 by a file in this folder must not appear in the README, a resume or a post.
 
+## Phase 4 demo: a ticket bought by hand during a stampede, 2026-10-04
+
+**Result: the buyer's purchase went through mid-rush and the dashboard showed
+it live (Phase 4's first exit criterion). Every join queue-svc received was
+admitted and got a token; the origin stayed at about 0.5 status requests a
+second. The scaled-down E2 thresholds failed on the load generator's side:
+k6 could not send every planned join while two browsers and Grafana shared
+the laptop.**
+
+| File | Content |
+|---|---|
+| `phase4-stampede.gif` | The mission-control dashboard during run 2, one frame every 4 s: the queue fills, admissions flow, then the hand purchase appears (hold, confirmed booking, payment, capture-to-confirm) |
+| `phase4-mission-control.png` | The whole dashboard after a purchase, all four rows |
+| `e2-2026-10-03T2001-2255911.log`, `-summary.json`, `-queue-metrics.txt` | Run 2: k6 output and summary, queue-svc's metrics at the end |
+| `e2-2026-10-03T1955-2255911.log`, `-summary.json`, `-queue-metrics.txt` | Run 1, at a larger load |
+
+### Method
+
+- `make load-e2` (`loadtest/e2/run.sh`) scaled down. Run 1: 5,000 users,
+  500 joins a second at peak, 100 admissions a second. Run 2: 3,000 users,
+  300 joins a second, 60 admissions a second. Both polled every 3 s, with
+  proof of work off for the load test (`POW_DIFFICULTY=0`, E2's override).
+- At the same time, on the same event: headless Chromium captured the
+  dashboard every 4 s (the GIF), and a second Chromium ran the web app's
+  Playwright test (`web/e2e/purchase.spec.ts`), 25 s into the rush: sign in,
+  join, wait for the turn, hold 2, book, pay at mockpsp, see it confirmed,
+  with axe on every page.
+- Commit `2255911` (run.sh stamps the files with it); the E2 event now has
+  as many units as users (P43), so the units cap does not limit E2.
+
+### Numbers
+
+| | Run 1 | Run 2 |
+|---|---|---|
+| Users planned | 5,000 | 3,000 |
+| Joins queue-svc received (k6, plus the hand buyer) | 3,188 | 2,481 |
+| Tokens issued | 3,187 to k6 users, every one that joined | 2,480 to k6 users, every one that joined |
+| Claims refused | 1,801, all `NOT_IN_QUEUE`: users whose joins k6 never sent | 520, likewise |
+| k6 iterations dropped | 66,393 | 15,995 |
+| Status polls at the edge, requests at the origin | 88,967 and 49 | 76,641 and 50 |
+| The hand purchase | Passed, joined in 262 ms | Passed, joined in 3,712 ms; capture to confirm 1.99 s (p99 over 5 minutes) |
+
+### Caveats
+
+- These are demo runs, not E2 results: the generator, two browsers, Grafana
+  and the whole stack shared one laptop, and k6 dropped joins in both runs.
+  E2 at design scale needs a separate load generator (Phase 6, task 6.1).
+- The thresholds k6 reports as failed (tokens issued, join p99) fail for that
+  reason; the server-side counts above are the meaningful ones.
+
 ## One purchase, one trace, 2026-10-03 (Phase 3 demo checkpoint)
 
 `phase3-one-purchase-trace.png` is Jaeger's view of one purchase made

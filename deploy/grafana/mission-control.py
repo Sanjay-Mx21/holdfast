@@ -74,9 +74,11 @@ def add(*ps, height):
     y += height
 
 
+
 # Grey with no data (nothing measured yet: never a false green), green at 0,
 # red from 1.
-green_red = [{"color": "#6e7079", "value": None}, {"color": "green", "value": 0}, {"color": "red", "value": 1}]
+GREY = "#6e7079"
+green_red = [{"color": GREY, "value": None}, {"color": "green", "value": 0}, {"color": "red", "value": 1}]
 
 # Row 1: the queue ---------------------------------------------------------
 row("The queue: who is waiting, and how fast they get in")
@@ -100,8 +102,9 @@ add(state,
     stat("Admission rate", [(f'sum(rate(holdfast_queue_admitted_total{EV}[1m]))', "")], 16, 4, unit="reqps",
          desc="People admitted per second (one-minute rate)."),
     stat("Proof-of-work difficulty", [('max(holdfast_queue_pow_difficulty)', "")], 20, 4, unit="none",
-         desc="Bits of the last challenge issued; rises one bit per doubling of the challenge rate above the surge rate.",
-         thresholds=[{"color": "green", "value": None}, {"color": "orange", "value": 19}, {"color": "red", "value": 22}]),
+         desc="Bits of the last challenge issued; rises one bit per doubling of the challenge rate above the surge rate. Off: POW_DIFFICULTY=0 (load tests).",
+         thresholds=[{"color": GREY, "value": None}, {"color": "green", "value": 1}, {"color": "orange", "value": 19}, {"color": "red", "value": 22}],
+         mappings=[{"type": "value", "options": {"0": {"text": "off"}}}], no_value="off"),
     height=4)
 add(series("Queue size and admittedUpTo", [(f'max by (event) (holdfast_queue_size{EV})', "queue {{event}}"),
                                            (f'max by (event) (holdfast_queue_admitted_up_to{EV})', "admitted {{event}}")], 0, 12),
@@ -119,7 +122,7 @@ add(stat("Units available", [(f'sum(holdfast_inventory_available{EV})', "")], 0,
          desc="Bookings the saga confirmed in the dashboard's time range.", decimals=0),
     stat("Capture to confirm, p99", [('histogram_quantile(0.99, sum by (le) (rate(holdfast_capture_to_confirm_seconds_bucket[5m])))', "")],
          18, 6, unit="s", desc="From the payment's capture to the booking's confirmation. SLO: p99 at most 5 s.",
-         thresholds=[{"color": "green", "value": None}, {"color": "orange", "value": 3}, {"color": "red", "value": 5}],
+         thresholds=[{"color": GREY, "value": None}, {"color": "green", "value": 0}, {"color": "orange", "value": 3}, {"color": "red", "value": 5}],
          no_value="no confirmations yet"),
     height=4)
 add(series("Holds per second by result", [('sum by (result) (rate(holdfast_holds_total[1m]))', "{{result}}")], 0, 8, unit="reqps", stack=True),

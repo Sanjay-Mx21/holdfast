@@ -37,7 +37,9 @@ docker compose exec -T nginx nginx -T 2>/dev/null | grep -q "x_holdfast_e2_unuse
 for _ in $(seq 1 50); do curl -sf localhost:9092/readyz >/dev/null && break; sleep 0.2; done
 
 OPENS=$(date -u -d '+8 seconds' +%Y-%m-%dT%H:%M:%SZ)
-EVENT=$(go run ./cmd/holdfastctl event create --name "E2 $STAMP" --capacity 1000 --opens-at "$OPENS" \
+# As many units as users: E2 measures the waiting room, so the admission
+# leader's units cap (units left x 1.3, P17) must not be what limits it.
+EVENT=$(go run ./cmd/holdfastctl event create --name "E2 $STAMP" --capacity "$USERS" --opens-at "$OPENS" \
   --admission-rate "$ADMIT_RATE" --max-sessions "$USERS" --dsn "$DSN" 2>&1 |
   grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
 [ -n "$EVENT" ] || { echo "could not create the event"; exit 1; }
