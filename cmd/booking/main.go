@@ -20,6 +20,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/Sanjay-Mx21/holdfast/internal/booking"
+	"github.com/Sanjay-Mx21/holdfast/internal/booking/catalog"
 	"github.com/Sanjay-Mx21/holdfast/internal/inventory"
 	"github.com/Sanjay-Mx21/holdfast/internal/payment"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/app"
@@ -240,6 +241,7 @@ func run(ctx context.Context) error {
 	admin := httpx.NewAdminRouter(metrics.Handler(reg), hc)
 
 	booking.NewHandler(svc).Register(public, identity)
+	catalog.NewHandler(pool).Register(public) // GET /v1/events, /v1/events/{id}: what is on sale
 
 	return app.Run(ctx, log, hc, cfg.HTTP.DrainDelay, append([]app.Component{
 		httpx.NewServer("public", cfg.HTTP.Addr, public, cfg.HTTP, log),

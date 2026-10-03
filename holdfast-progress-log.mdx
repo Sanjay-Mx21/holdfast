@@ -32,13 +32,13 @@ All times are IST (UTC+05:30).
 | **Project** | A flash-sale booking engine that sells exactly the available units under extreme demand, never more |
 | **Plan version** | 2.0 (1 October 2026) |
 | **Milestones complete** | M0 Foundation, M1 Correctness core, M1.5 Bring-up and baseline, M2 Fair waiting room, and M3 MVP backend |
-| **Current milestone** | M4 Resume-ready product (Phase 4): 4 of 8 tasks done (section 10); next task 4.5, [issue #37](https://github.com/Sanjay-Mx21/holdfast/issues/37) |
+| **Current milestone** | M4 Resume-ready product (Phase 4): 5 of 8 tasks done (section 10); next task 4.6, [issue #38](https://github.com/Sanjay-Mx21/holdfast/issues/38) |
 | **Progress to v1.0** | About 35% (18 of about 51 focused-work days, excluding Phase 7 stretch goals), counting Phase 2's planned 7 days |
 | **Repository** | [github.com/Sanjay-Mx21/holdfast](https://github.com/Sanjay-Mx21/holdfast), branch `main` |
 | **First commit** | `2173e50` "first commit", 2026-10-01 20:20, 82 files, 12,973 lines |
 | **Latest release** | [v0.3.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.3.0), 2026-10-03 15:48, on `5ffa271` (before it: [v0.2.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.2.0), 2026-10-02 21:51, on `cd0592a`; [v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0), 2026-10-01 23:47, on `9dcd2f8`) |
 | **CI** | Green since 2026-10-01 22:00; `main` is protected and every change needs a pull request with all 11 required checks passing (`images (booking)`, `images (payment)`, `images (mockpsp)` and `images (auth)` added on 2026-10-03) |
-| **Issues so far** | 108 recorded: 104 resolved, 4 open (section 6) |
+| **Issues so far** | 113 recorded: 109 resolved, 4 open (section 6) |
 
 <Callout type="tip" title="M3 complete: the MVP backend (2026-10-03)">
 
@@ -289,7 +289,32 @@ The rest of the list was already covered by tests written with tasks 3.4 to 3.12
   - a wrong nonce, and a solution for another event: 403;
   - the README's join: 202;
   - metrics as expected after one fix (D45).
-- **Gates:** gofmt, test, lint, itest, E1 PASS, solver tests pass. | Branch `feat/p4-pow`, issue #36 |
+- **Gates:** gofmt, test, lint, itest, E1 PASS, solver tests pass. | PR #98 (merged by the assistant at 20:10 after all 11 checks passed), `eb424b7`; issue #36 closed |
+| 2026-10-04 00:10 | **The machine ran out of memory (E24).** WSL could not start (`E_UNEXPECTED`); Windows had 37.7 of 39.7 GB committed, and Docker Desktop was hung. The assistant asked before restarting WSL, since that also stops the owner's other project's containers (citybrain). **The owner chose: restart WSL.** Then, mid-task: **"remove everything from the docker and just run the holdfast"**. Done: WSL shut down, which freed 8 GB; Docker Desktop restarted; citybrain's three containers and the buildx builder removed (their volumes and images kept: deleting data cannot be undone, and the owner can ask); every HoldFast container recreated, and all services ready | Conversation |
+| 2026-10-04 00:44 | **Task 4.5 (web app) built and verified:**
+- **`web/`:** Next.js 16.3.8 (React 19, TypeScript, Tailwind 4) as a static export, served by nginx in a `web` container behind the edge. The edge caches pages by path alone (a minute) and hashed assets for a year. Pages take their IDs from the query string, so one cached page serves every event.
+- **Pages:**
+  - events;
+  - sign-in (phone, then the code; a development-inbox button in local builds);
+  - event: details, a countdown, the live state, and the join (challenge, the proof of work in the Web Worker with a progress bar, join);
+  - waiting room: the rank once, at a random moment in T0's first 30 s, then the status document every 3 s plus jitter; the turn claimed automatically;
+  - buy: quantity, hold with a stable idempotency key, booking;
+  - booking status: payment in a new tab, since mockpsp has no return URL, while the page polls.
+- **Sign-in state:** the access token in `localStorage`, with refreshes serialized across tabs by the Web Locks API, so two tabs refreshing at once cannot trip refresh-reuse detection and sign the buyer out.
+- **Accessibility basics:**
+  - landmarks, a skip link, labels and hints, focus moved to each page's heading;
+  - live regions that announce a rounded number of people ahead;
+  - native controls, AA contrast in light and dark, reduced motion.
+- **CSP and security headers** on every page; sign-in only returns to same-site paths.
+- **booking-svc** gained the catalog's public API: `GET /v1/events` (sales still to open first, then the most recently opened) and `GET /v1/events/{id}`, cached 60 s at the edge.
+- **CI:** a new job `web` (types, lint, unit tests, static export, image).
+- **Tests:**
+  - web unit tests (the solver against the Go vectors; turns, jitter, rounding, keys);
+  - a catalog integration test;
+  - **a Playwright test of a whole purchase in Chromium through the edge, with axe (WCAG 2.1 A/AA) on six page views: passed, with no violations.**
+- **Proof of work in a real browser:** the join took 1,062 ms from click to waiting room in headless Chromium on this laptop (desktop, not a phone).
+- **Noted:** Turbopack also copies `pow.worker.ts` to `out/` as an unused asset; the bundled worker is what runs.
+- **Gates:** typecheck, lint, web tests, export, gofmt, test, lint, itest, E1 PASS, the browser test. | Branch `feat/p4-web`, issue #37 |
 
 ## 3. What is complete, and what each piece contributes
 
@@ -367,9 +392,9 @@ Every problem met while bringing Drop 1 up and running the soak on 2026-10-01, i
 | Group | Recorded | Resolved | Open |
 |---|---|---|---|
 | P: defects in the repository | 41 | 38 | 3 |
-| E: machine and network | 22 | 21 | 1 |
-| D: diagnosis and process | 45 | 45 | 0 |
-| **Total** | **108** | **104** | **4** |
+| E: machine and network | 24 | 23 | 1 |
+| D: diagnosis and process | 48 | 48 | 0 |
+| **Total** | **113** | **109** | **4** |
 
 CI took **three runs** to go green:
 
@@ -451,6 +476,8 @@ CI took **three runs** to go green:
 | E20 | Merging PR #85: all 10 checks passed, but the merge script's call timed out reaching api.github.com, and a status check timed out twice more within minutes | The PR waited a few minutes | Network | Checked the PR (open, all green) and merged it with a direct retry | ✅ |
 | E21 | Pushing task 3.12's branch: `git push` hung for several minutes and `git ls-remote` timed out; GitHub was unreachable from the machine | About 10 minutes | Network | Stopped the hung push and retried with a 90-second timeout and a check that the branch arrived; the first retry worked | ✅ |
 | E22 | Creating task 4.3's branch from Git Bash: `git checkout -b` created the branch but failed to switch to it ("unable to write symref for HEAD: Permission denied"), and the stash was not popped | No work lost: the stash held the uncommitted 4.3 work, and `git stash list` confirmed it | A transient lock on `.git/HEAD` on the Windows side (no `.lock` file was left) | Switched to the existing branch from WSL, then popped the stash; every file came back | ✅ |
+| E23 | Building the web image: Docker Hub's TLS handshake timed out twice pulling `node:24.21.0-alpine`, and one `npm ci` inside the build failed on the network | About 15 minutes of retries | Network | Pulled the image with retries; the next build's `npm ci` succeeded | ✅ |
+| E24 | WSL stopped and would not start (`Wsl/Service/CreateInstance/E_UNEXPECTED`) while Chromium downloaded for the browser test. Windows had 183 MB free and 37.7 of 39.7 GB committed; the WSL VM held 8 GB, and Docker Desktop's backend hung | About 40 minutes; nothing lost (PostgreSQL and Valkey volumes intact) | Memory exhaustion on a 16 GB laptop running the full stack, two Docker builds, Node and other desktop apps; there is no `.wslconfig` limit | With the owner's approval: `wsl --shutdown`, Docker Desktop restarted; at the owner's request every non-HoldFast container removed. Containers that bind-mount single files (the edge, Prometheus, the collector) then failed on stale mount paths and were recreated (`docker compose up -d --force-recreate`). Suggestion for the owner: a `.wslconfig` memory limit | ✅ |
 
 ### 6.4 Diagnosis and process
 
@@ -501,6 +528,9 @@ CI took **three runs** to go green:
 | D43 | A doc-edit script for task 4.3 still held a placeholder edit (`iss` replaced with `iss` in the auth doc). Its uniqueness check failed, which stopped the chained scripts after the first two had run | Caught at once; one rerun | A leftover from drafting the script | Ran the remaining script alone, and checked the diff | ✅ |
 | D44 | Starting task 4.4, the branch sync went wrong. `git stash push -u -- . ':!explanation'` saved the work but left it in the working tree (with an exclusion pathspec it did not clean the files as assumed). `git checkout main` then refused, and the `&&` chain hid which step had failed. `git checkout -b feat/p4-pow` created the branch on the pre-squash 4.3 commit, and `stash pop` could not restore its untracked files over the identical ones still present | No work lost; about 10 minutes | A wrong assumption about `git stash` with pathspecs, and a chained command whose failures were not checked one by one | Checked that the two commits' trees were identical (`1c552cd` and squash `43441df`), then `git reset --soft origin/main`. Compared all 9 stashed files byte for byte with the working tree before dropping the stash. From now on: no pathspec on stash, and check each step's exit status | ✅ |
 | D45 | Task 4.4's first version answered a join with no body `POW_REQUIRED` but counted it as `invalid`, so `holdfast_queue_joins_total{result="pow_required"}` stayed at 0 in the live check | Caught in the live check, before any commit | The body decoder's `EMPTY_BODY` path was remapped for the response, but not for the metric | The metric now follows the response, and the handler test checks all three labels | ✅ |
+| D46 | To type-check the web app, the assistant copied `node_modules` (18,270 files) into the repository on the Windows drive. Over the WSL file bridge the copy ran past its 10-minute timeout | About 15 minutes, and load on the machine | Ignoring a known cost: small-file I/O across the WSL/Windows boundary is slow | Removed the partial copy; Node work now runs in a Linux-side mirror of `web/` (rsync, with `node_modules` only there) | ✅ |
+| D47 | After adding Playwright and axe to `web/package.json`, the assistant did not regenerate `package-lock.json`, so the web image's `npm ci` refused to install and `make up` failed | One failed `make up` | Changed the manifest without updating the lock | Ran `npm install` in the mirror and copied the lock back; the build passed | ✅ |
+| D48 | Twice in tasks 4.4 and 4.5 the assistant again wrote code through shell heredocs: a holdfastctl test's imports and the catalog integration test. This goes against its own recorded practice (D36); both happened to work | No harm | Haste | Back to the file tool for every script and code edit | ✅ |
 
 ### 6.5 Owner setup actions
 
@@ -594,8 +624,8 @@ Goal: a real person can buy a ticket through a web app, with real identity and t
 | 4.1 auth-svc | [#33](https://github.com/Sanjay-Mx21/holdfast/issues/33) | ✅ 2026-10-03 (PR #95): sign-in with a phone code (mock SMS), EdDSA access tokens and JWKS, rotating refresh tokens with reuse detection |
 | 4.2 Wire identity in | [#34](https://github.com/Sanjay-Mx21/holdfast/issues/34) | ✅ 2026-10-03 (PR #96): access tokens identify buyers in queue-svc and booking-svc (JWKS, readiness); the dev header only with `DEV_IDENTITY`, off by default |
 | 4.3 Policy engine (with P17) | [#35](https://github.com/Sanjay-Mx21/holdfast/issues/35) | ✅ 2026-10-03 (PR #97): verified-only and agent-lockout windows at join (`vrf` claim), the freeze switch across queue and inventory (`holdfastctl freeze`, RB-1), admission capped by units left and `SOLD_OUT` (P17) |
-| 4.4 Proof of work | [#36](https://github.com/Sanjay-Mx21/holdfast/issues/36) | ✅ 2026-10-03: stateless HMAC challenges with adaptive difficulty, verified before any Valkey work; TypeScript solver with a Web Worker (page in 4.5); `holdfastctl pow solve` |
-| 4.5 Web app | [#37](https://github.com/Sanjay-Mx21/holdfast/issues/37) | ⏳ |
+| 4.4 Proof of work | [#36](https://github.com/Sanjay-Mx21/holdfast/issues/36) | ✅ 2026-10-03 (PR #98): stateless HMAC challenges with adaptive difficulty, verified before any Valkey work; TypeScript solver with a Web Worker (page in 4.5); `holdfastctl pow solve` |
+| 4.5 Web app | [#37](https://github.com/Sanjay-Mx21/holdfast/issues/37) | ✅ 2026-10-04: Next.js static export behind the edge (events, sign-in, event and join with proof of work, waiting room, buy, booking); catalog API in booking-svc; CI job `web`; a whole purchase passes in Chromium with axe clean |
 | 4.6 Mission-control dashboard | [#38](https://github.com/Sanjay-Mx21/holdfast/issues/38) | ⏳ |
 | 4.7 README v1 and demo video v1 | [#39](https://github.com/Sanjay-Mx21/holdfast/issues/39) | ⏳ |
 | 4.8 Docs | [#40](https://github.com/Sanjay-Mx21/holdfast/issues/40) | ⏳ |

@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+/* Colours chosen for contrast: body text and the accent on white both pass
+   WCAG AA (at least 4.5:1). */
+:root {
+  --background: #ffffff;
+  --foreground: #0f172a;
+  --muted: #475569;
+  --accent: #0f766e;
+  --accent-strong: #115e59;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0b1120;
+    --foreground: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #2dd4bf;
+    --accent-strong: #5eead4;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+}
+
+/* A visible focus ring for keyboard users everywhere. */
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

@@ -32,7 +32,8 @@ IDs match section 2.3 of the design doc.
 |---|---|---|---|
 | inventory-svc (`cmd/inventory`) | Built; internal gRPC API from task 3.4; the freeze flag from task 4.3 | Valkey keys `inv:*` | Valkey; called by booking-svc and queue-svc over gRPC |
 | queue-svc (`cmd/queue`) | Built (Phase 2): provisioning, joining, the T0 transition, positions, admission, the status document, admission tokens and their JWKS; task 4.3: policy windows, the freeze switch, admission by units left and `SOLD_OUT` | Valkey keys `q:*`, `adm:*`, `rl:*` | Valkey; PostgreSQL for leader election only; inventory-svc over gRPC (units left) |
-| NGINX edge (`deploy/nginx`) | Built (Phase 2) | Nothing | queue-svc, inventory-svc |
+| NGINX edge (`deploy/nginx`) | Built (Phase 2) | Nothing | queue-svc, inventory-svc, booking-svc, auth-svc, the web app |
+| web app (`web/`) | Built (Phase 4, task 4.5): Next.js static export served by nginx; `docs/web.md` | Nothing (static files) | The public API, through the edge |
 | booking-svc (`cmd/booking`) | Built (Phase 3): the idempotent booking API, the deadline job, the saga (ADR 0010) | `booking` schema (with the final guard, `internal/booking/guard`) | PostgreSQL; inventory-svc and payment-svc over gRPC |
 | payment-svc (`cmd/payment`) | Built (Phase 3): intents, provider orders, webhooks, the ledger, status polling, refunds | `payment` schema | PostgreSQL; the payment provider over HTTPS; called by booking-svc over gRPC; receives the provider's webhooks |
 | mockpsp (`cmd/mockpsp`) | Built (task 3.10): test tool, never deployed | In-memory orders and refunds | Sends signed webhooks to payment-svc; called by payment-svc; fault injection on its admin port |
@@ -61,8 +62,14 @@ OpenTelemetry Collector and Jaeger.
 **The edge** (`deploy/nginx/nginx.conf`, host port 8088) is the buyers' front
 door, the role a CDN plays in production:
 
-- routes `/v1/queue/*` and `/.well-known/jwks.json` to queue-svc and the hold
-  paths to inventory-svc; everything else, admin paths included, is a 404;
+- routes `/v1/queue/*` and `/.well-known/jwks.json` to queue-svc, the hold
+  paths to inventory-svc, `/v1/bookings` and the event catalog
+  (`/v1/events`, `/v1/events/{id}`) to booking-svc, and `/v1/auth/*` to
+  auth-svc; any other `/v1/` path, admin paths included, is a 404;
+- serves the web app (`/`, everything outside `/v1/`) from the `web`
+  container, caching pages for a minute and hashed assets for a year, keyed
+  by path alone, so one cached page serves every event; the catalog is
+  cached for its minute too;
 - micro-caches `/v1/events/{id}/status` and `/v1/events/{id}/availability`
   for one second with `proxy_cache_lock` (concurrent misses wait for one
   origin fetch), keyed by path only, serving stale copies while updating or
