@@ -5,11 +5,12 @@ booking to its end: confirmed, cancelled or refunded. Binary: `cmd/booking`.
 Code: `internal/booking`. Schema: `booking` (migrations in
 `db/migrations/booking`, queries in `internal/booking/queries`).
 
-**Status:** Phase 3 in progress. Built: the schema and its state machine
-(task 3.5), the booking API and the deadline job (task 3.6), the outbox
-relay (task 3.7), and payment intents from payment-svc (task 3.9; on in
-Compose since mockpsp, task 3.10), and the saga that confirms, cancels or
-refunds bookings from payment events (task 3.11).
+**Status:** built in Phase 3: the schema and its state machine (task 3.5),
+the booking API and the deadline job (task 3.6), the outbox relay (task
+3.7), payment intents from payment-svc (task 3.9), the saga that confirms,
+cancels or refunds bookings from payment events (task 3.11), and the
+operator commands of runbooks RB-3 and RB-4 (task 3.14). Real identity
+replaces `X-Dev-User-Id` in Phase 4.
 
 ## Responsibilities
 

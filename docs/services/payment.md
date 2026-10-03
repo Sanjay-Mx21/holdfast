@@ -7,10 +7,10 @@ Binary: `cmd/payment`. Code: `internal/payment` (the provider client in
 `internal/payment/psp`). Schema: `payment` (migrations in
 `db/migrations/payment`, queries in `internal/payment/queries`).
 
-**Status:** Phase 3 in progress. Built: the schema (task 3.8), the service
-(task 3.9), and mockpsp, the local provider (task 3.10,
-`docs/services/mockpsp.md`); booking-svc calls payment-svc in Compose.
-Refunds of bookings the final guard refused: task 3.11.
+**Status:** built in Phase 3: the schema (task 3.8), the service (task 3.9),
+mockpsp, the local provider (task 3.10, `docs/services/mockpsp.md`), and
+refunds of bookings the final guard refused (task 3.11). The reconciler
+that reads the provider's settlement report arrives in Phase 5.
 
 ## Responsibilities
 

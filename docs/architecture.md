@@ -33,8 +33,8 @@ IDs match section 2.3 of the design doc.
 | inventory-svc (`cmd/inventory`) | Built; internal gRPC API from task 3.4 | Valkey keys `inv:*` | Valkey; called by booking-svc over gRPC |
 | queue-svc (`cmd/queue`) | Built (Phase 2): provisioning, joining, the T0 transition, positions, admission, the status document, admission tokens and their JWKS | Valkey keys `q:*`, `adm:*`, `rl:*` | Valkey; PostgreSQL for leader election only |
 | NGINX edge (`deploy/nginx`) | Built (Phase 2) | Nothing | queue-svc, inventory-svc |
-| booking-svc (`cmd/booking`) | Phase 3 in progress: the booking API and deadline job built | `booking` schema (with the final guard, `internal/booking/guard`) | PostgreSQL; inventory-svc and payment-svc over gRPC |
-| payment-svc (`cmd/payment`) | Phase 3 in progress (task 3.9): intents, provider orders, webhooks, the ledger, status polling | `payment` schema | PostgreSQL; the payment provider over HTTPS; called by booking-svc over gRPC; receives the provider's webhooks |
+| booking-svc (`cmd/booking`) | Built (Phase 3): the idempotent booking API, the deadline job, the saga (ADR 0010) | `booking` schema (with the final guard, `internal/booking/guard`) | PostgreSQL; inventory-svc and payment-svc over gRPC |
+| payment-svc (`cmd/payment`) | Built (Phase 3): intents, provider orders, webhooks, the ledger, status polling, refunds | `payment` schema | PostgreSQL; the payment provider over HTTPS; called by booking-svc over gRPC; receives the provider's webhooks |
 | mockpsp (`cmd/mockpsp`) | Built (task 3.10): test tool, never deployed | In-memory orders and refunds | Sends signed webhooks to payment-svc; called by payment-svc; fault injection on its admin port |
 | holdfastctl (`cmd/holdfastctl`) | Built | Nothing (operator tool) | PostgreSQL, Valkey, Kafka (topic creation) |
 | auth | Planned | See design doc | |
