@@ -2,11 +2,14 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/Sanjay-Mx21/holdfast/internal/pow"
 	"github.com/Sanjay-Mx21/holdfast/internal/queue"
 )
 
@@ -84,5 +87,25 @@ func TestQueueStatusJSON(t *testing.T) {
 	data, _ = json.Marshal(queueStatusJSON(o))
 	if !strings.Contains(string(data), `"updatedAt":null`) {
 		t.Errorf("no leader yet must give updatedAt null: %s", data)
+	}
+}
+
+func TestPoWSolve(t *testing.T) {
+	iss, err := pow.NewIssuer([]byte("test-only-pow-secret-0123456789abcdef"), time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, _ := iss.Issue("0196f0c1-7a3e-7c51-9b0e-5d2f8a1c4e77", "0196f0c1-7a3e-7c51-9b0e-5d2f8a1c4e78", 10)
+	var out bytes.Buffer
+	stdout = &out
+	t.Cleanup(func() { stdout = os.Stdout })
+	if err := dispatch(context.Background(), []string{"pow", "solve", "--challenge", c.Token}); err != nil {
+		t.Fatal(err)
+	}
+	if err := iss.Verify("0196f0c1-7a3e-7c51-9b0e-5d2f8a1c4e77", "0196f0c1-7a3e-7c51-9b0e-5d2f8a1c4e78", c.Token, strings.TrimSpace(out.String())); err != nil {
+		t.Fatalf("the printed nonce %q does not verify: %v", out.String(), err)
+	}
+	if err := dispatch(context.Background(), []string{"pow", "solve", "--challenge", "nope"}); err == nil {
+		t.Fatal("a bad challenge was accepted")
 	}
 }

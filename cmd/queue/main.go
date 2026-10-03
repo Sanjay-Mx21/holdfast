@@ -37,6 +37,7 @@ import (
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/postgres"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/ratelimit"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/valkey"
+	"github.com/Sanjay-Mx21/holdfast/internal/pow"
 	"github.com/Sanjay-Mx21/holdfast/internal/queue"
 )
 
@@ -98,6 +99,17 @@ type config struct {
 	InventoryGRPCAddr     string  `env:"INVENTORY_GRPC_ADDR"`
 	ServicePrivateKeyFile string  `env:"SERVICE_PRIVATE_KEY_FILE"`
 	OversubscriptionRatio float64 `env:"OVERSUBSCRIPTION_FACTOR" envDefault:"1.3"`
+
+	// Proof of work at join (internal/pow): challenges of POW_DIFFICULTY
+	// bits, one bit more per doubling of the challenge rate above
+	// POW_SURGE_RATE per second (per replica), up to POW_MAX_DIFFICULTY. 0
+	// turns it off, for development and load tests; never in production.
+	// POW_SECRET signs challenges and must be the same on every replica.
+	PoWDifficulty    int           `env:"POW_DIFFICULTY" envDefault:"18"`
+	PoWMaxDifficulty int           `env:"POW_MAX_DIFFICULTY" envDefault:"22"`
+	PoWSurgeRate     float64       `env:"POW_SURGE_RATE" envDefault:"200"`
+	PoWChallengeTTL  time.Duration `env:"POW_CHALLENGE_TTL" envDefault:"2m"`
+	PoWSecret        string        `env:"POW_SECRET,unset"`
 }
 
 func (c *config) trustedProxies() ([]netip.Prefix, error) {
@@ -173,6 +185,18 @@ func (c *config) Validate() error {
 	}
 	if c.OversubscriptionRatio < 1 || c.OversubscriptionRatio > 10 {
 		errs = append(errs, errors.New("OVERSUBSCRIPTION_FACTOR must be between 1 and 10"))
+	}
+	switch {
+	case c.PoWDifficulty == 0 && c.Service.Environment == "production":
+		errs = append(errs, errors.New("POW_DIFFICULTY must not be 0 in production: joins would need no proof of work"))
+	case c.PoWDifficulty < 0 || c.PoWDifficulty > c.PoWMaxDifficulty || c.PoWMaxDifficulty > pow.MaxDifficulty:
+		errs = append(errs, fmt.Errorf("POW_DIFFICULTY and POW_MAX_DIFFICULTY must satisfy 0 <= difficulty <= max <= %d", pow.MaxDifficulty))
+	case c.PoWDifficulty > 0 && len(c.PoWSecret) < 32:
+		errs = append(errs, errors.New("POW_SECRET must be at least 32 characters (the same on every replica)"))
+	case c.PoWDifficulty > 0 && c.PoWSurgeRate <= 0:
+		errs = append(errs, errors.New("POW_SURGE_RATE must be above 0"))
+	case c.PoWDifficulty > 0 && (c.PoWChallengeTTL < 10*time.Second || c.PoWChallengeTTL > 10*time.Minute):
+		errs = append(errs, errors.New("POW_CHALLENGE_TTL must be between 10s and 10m"))
 	}
 	return errors.Join(errs...)
 }
@@ -285,9 +309,24 @@ func run(ctx context.Context) error {
 	if len(trusted) > 0 {
 		log.Info("trusting X-Forwarded-For from the edge", "proxies", cfg.TrustedProxies)
 	}
-	queue.NewHandler(svc, lim, cfg.limits(), qm, authn.NewIssuer(signingKey, cfg.AdmissionTokenTTL), authn.NewJWKSet(published...)).
-		TrustProxies(trusted...).
-		Register(public, admin, identity, authn.RequireStaticToken(cfg.AdminToken))
+	handler := queue.NewHandler(svc, lim, cfg.limits(), qm, authn.NewIssuer(signingKey, cfg.AdmissionTokenTTL), authn.NewJWKSet(published...)).
+		TrustProxies(trusted...)
+	if cfg.PoWDifficulty > 0 {
+		issuer, err := pow.NewIssuer([]byte(cfg.PoWSecret), cfg.PoWChallengeTTL)
+		if err != nil {
+			return err
+		}
+		difficulty, err := pow.NewDifficulty(cfg.PoWDifficulty, cfg.PoWMaxDifficulty, cfg.PoWSurgeRate)
+		if err != nil {
+			return err
+		}
+		handler.RequireProofOfWork(&queue.ProofOfWork{Issuer: issuer, Difficulty: difficulty})
+		log.Info("joins need proof of work", "difficulty", cfg.PoWDifficulty, "max_difficulty", cfg.PoWMaxDifficulty,
+			"surge_rate_per_second", cfg.PoWSurgeRate)
+	} else {
+		log.Warn("POW_DIFFICULTY is 0: joins need no proof of work")
+	}
+	handler.Register(public, admin, identity, authn.RequireStaticToken(cfg.AdminToken))
 
 	admission := queue.AdmissionConfig{
 		Tick: cfg.AdmissionTick, RetryLeadership: cfg.LeaderRetryInterval, Rescan: cfg.AdmissionRescanInterval,

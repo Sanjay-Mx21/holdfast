@@ -78,7 +78,10 @@ door, the role a CDN plays in production:
 
 1. Before or after T0: `POST /v1/queue/{id}/join`. The event's policy windows
    come first (`internal/policy`): until they end, only verified buyers may
-   join and agents may not (403 with `Retry-After`). Then `join.lua` gives a
+   join and agents may not (403 with `Retry-After`). Before that the join
+   must carry a solved proof-of-work challenge (`GET /v1/queue/{id}/challenge`,
+   solved in a Web Worker; `internal/pow`), checked with one hash before
+   anything touches Valkey. Then `join.lua` gives a
    lottery score before T0 (by Valkey's clock), an arrival number after, and
    never a second place (ADR 0005).
 2. After T0: `GET /v1/queue/{id}/me` once, for the buyer's rank.
@@ -275,6 +278,9 @@ provider about quiet intents, least recently polled first.
   window ends. A development-header caller is never verified.
 - Joining passes per-IP (IPv6 per /64) and per-user token buckets in Valkey
   (`internal/platform/ratelimit`), shared by every replica.
+- Joining also costs a proof of work (`internal/pow`): a stateless HMAC
+  challenge bound to the user, the event and an expiry, whose difficulty
+  rises with the challenge rate. It raises the cost of bots, not a wall.
 - Services call each other over gRPC with service tokens: short-lived
   Ed25519 JWTs signed by the caller's own key and checked against that
   caller's public key, with a per-method allowlist (decision record in

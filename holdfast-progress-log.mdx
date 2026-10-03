@@ -32,13 +32,13 @@ All times are IST (UTC+05:30).
 | **Project** | A flash-sale booking engine that sells exactly the available units under extreme demand, never more |
 | **Plan version** | 2.0 (1 October 2026) |
 | **Milestones complete** | M0 Foundation, M1 Correctness core, M1.5 Bring-up and baseline, M2 Fair waiting room, and M3 MVP backend |
-| **Current milestone** | M4 Resume-ready product (Phase 4): 3 of 8 tasks done (section 10); next task 4.4, [issue #36](https://github.com/Sanjay-Mx21/holdfast/issues/36) |
+| **Current milestone** | M4 Resume-ready product (Phase 4): 4 of 8 tasks done (section 10); next task 4.5, [issue #37](https://github.com/Sanjay-Mx21/holdfast/issues/37) |
 | **Progress to v1.0** | About 35% (18 of about 51 focused-work days, excluding Phase 7 stretch goals), counting Phase 2's planned 7 days |
 | **Repository** | [github.com/Sanjay-Mx21/holdfast](https://github.com/Sanjay-Mx21/holdfast), branch `main` |
 | **First commit** | `2173e50` "first commit", 2026-10-01 20:20, 82 files, 12,973 lines |
 | **Latest release** | [v0.3.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.3.0), 2026-10-03 15:48, on `5ffa271` (before it: [v0.2.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.2.0), 2026-10-02 21:51, on `cd0592a`; [v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0), 2026-10-01 23:47, on `9dcd2f8`) |
 | **CI** | Green since 2026-10-01 22:00; `main` is protected and every change needs a pull request with all 11 required checks passing (`images (booking)`, `images (payment)`, `images (mockpsp)` and `images (auth)` added on 2026-10-03) |
-| **Issues so far** | 106 recorded: 102 resolved, 4 open (section 6) |
+| **Issues so far** | 108 recorded: 104 resolved, 4 open (section 6) |
 
 <Callout type="tip" title="M3 complete: the MVP backend (2026-10-03)">
 
@@ -266,7 +266,30 @@ The rest of the list was already covered by tests written with tasks 3.4 to 3.12
   - frozen: a new hold got 503 `SALE_PAUSED` while the retry of the earlier hold got 201;
   - after the purchase the queue went `SOLD_OUT` within 4 s, and a late joiner got 409 `QUEUE_CLOSED`.
 - **Docs:** queue, inventory and auth service docs, runbooks RB-1, RB-Q-5 and RB-Q-9, the architecture doc, README, and the design doc (task 4.3, the API table, 9.2's as-built note, the layout).
-- **Gates:** gofmt, test, lint, `make gen`, up, itest, E1 PASS. | Branch `feat/p4-policy`, issue #35 |
+- **Gates:** gofmt, test, lint, `make gen`, up, itest, E1 PASS. | PR #97 (merged by the assistant at 19:48 after all 11 checks passed), `43441df`; issue #35 closed |
+| 2026-10-03 20:03 | **Task 4.4 (proof of work) built and verified:**
+- `internal/pow`: stateless challenges, an HMAC (`POW_SECRET`) over the event, the user, an expiry, the difficulty and a random value. The work: a decimal nonce such that SHA-256(challenge:nonce) starts with `d` zero bits.
+- **Adaptive difficulty:** 18 bits normally, one more per doubling of a replica's challenge rate above 200 a second, up to 22.
+- **queue-svc:**
+  - `GET /v1/queue/{id}/challenge` (`no-store`);
+  - joins carry `{"pow":{"challenge","nonce"}}`, checked with one hash before any Valkey work: 400 `POW_REQUIRED`, 403 `POW_INVALID` or `POW_EXPIRED`;
+  - metrics: three join results, challenges issued, and the current difficulty.
+- **Browser side** (`web/src/lib/pow/`): a dependency-free synchronous SHA-256, with a midstate for the challenge's constant first block (which doubled the speed), a Web Worker and a client helper; the page using it is task 4.5.
+- **Speed:** measured about 0.9 M hashes/s in Node 24 on this laptop, so 18 bits takes about 0.3 s. The phone estimate (1 to 2 s, the design's target) is **not yet measured** in real browsers: to do with the web app.
+- `holdfastctl pow solve` lets the README quickstart join with curl.
+- **The load-test bypass** is `POW_DIFFICULTY=0`, refused in production: E2's override sets it, since E2 measures the waiting room, not clients' CPU. It replaces the design's `{pow: 'loadtest'}` magic value.
+- **Tests:**
+  - Go: issue, solve and verify; refusals (another user or event, a forged difficulty, a foreign MAC, bad nonces, expiry); the difficulty rising and falling;
+  - a hash vector computed independently with Python's hashlib, which the TypeScript solver must match too (`node --test`; it joins CI with the web toolchain in 4.5);
+  - handler tests: the challenge route, and every refusal reaching neither the limiter nor the service;
+  - `holdfastctl pow solve`.
+- **Live through the edge:**
+  - no proof: 400;
+  - a challenge of 18 bits, `no-store`;
+  - a wrong nonce, and a solution for another event: 403;
+  - the README's join: 202;
+  - metrics as expected after one fix (D45).
+- **Gates:** gofmt, test, lint, itest, E1 PASS, solver tests pass. | Branch `feat/p4-pow`, issue #36 |
 
 ## 3. What is complete, and what each piece contributes
 
@@ -345,8 +368,8 @@ Every problem met while bringing Drop 1 up and running the soak on 2026-10-01, i
 |---|---|---|---|
 | P: defects in the repository | 41 | 38 | 3 |
 | E: machine and network | 22 | 21 | 1 |
-| D: diagnosis and process | 43 | 43 | 0 |
-| **Total** | **106** | **102** | **4** |
+| D: diagnosis and process | 45 | 45 | 0 |
+| **Total** | **108** | **104** | **4** |
 
 CI took **three runs** to go green:
 
@@ -476,6 +499,8 @@ CI took **three runs** to go green:
 | D41 | The leaders' inventory reads counted "event not provisioned in inventory" as `error`. Leftover load-test events with a waiting room but no sale pushed the error counter up by about 25 a second, burying real failures | Caught in the live check, before any commit | Two different outcomes shared one label | A new result `not_provisioned`: such an event is never capped, and is not an error. Live: errors went to 0 | ✅ |
 | D42 | Two scripting slips while fixing P41. A stray `python -` at the start of a command waited on stdin until the 2-minute timeout. Because of it, the heredoc in the same command, which was meant to write the fix script, never ran | About 3 minutes; the fix was then applied with the edit tool | Haste. It also broke the recorded practice (D36): write scripts with the file tool, not shell heredocs | Stopped the task and applied the edit directly | ✅ |
 | D43 | A doc-edit script for task 4.3 still held a placeholder edit (`iss` replaced with `iss` in the auth doc). Its uniqueness check failed, which stopped the chained scripts after the first two had run | Caught at once; one rerun | A leftover from drafting the script | Ran the remaining script alone, and checked the diff | ✅ |
+| D44 | Starting task 4.4, the branch sync went wrong. `git stash push -u -- . ':!explanation'` saved the work but left it in the working tree (with an exclusion pathspec it did not clean the files as assumed). `git checkout main` then refused, and the `&&` chain hid which step had failed. `git checkout -b feat/p4-pow` created the branch on the pre-squash 4.3 commit, and `stash pop` could not restore its untracked files over the identical ones still present | No work lost; about 10 minutes | A wrong assumption about `git stash` with pathspecs, and a chained command whose failures were not checked one by one | Checked that the two commits' trees were identical (`1c552cd` and squash `43441df`), then `git reset --soft origin/main`. Compared all 9 stashed files byte for byte with the working tree before dropping the stash. From now on: no pathspec on stash, and check each step's exit status | ✅ |
+| D45 | Task 4.4's first version answered a join with no body `POW_REQUIRED` but counted it as `invalid`, so `holdfast_queue_joins_total{result="pow_required"}` stayed at 0 in the live check | Caught in the live check, before any commit | The body decoder's `EMPTY_BODY` path was remapped for the response, but not for the metric | The metric now follows the response, and the handler test checks all three labels | ✅ |
 
 ### 6.5 Owner setup actions
 
@@ -568,8 +593,8 @@ Goal: a real person can buy a ticket through a web app, with real identity and t
 |---|---|---|
 | 4.1 auth-svc | [#33](https://github.com/Sanjay-Mx21/holdfast/issues/33) | ✅ 2026-10-03 (PR #95): sign-in with a phone code (mock SMS), EdDSA access tokens and JWKS, rotating refresh tokens with reuse detection |
 | 4.2 Wire identity in | [#34](https://github.com/Sanjay-Mx21/holdfast/issues/34) | ✅ 2026-10-03 (PR #96): access tokens identify buyers in queue-svc and booking-svc (JWKS, readiness); the dev header only with `DEV_IDENTITY`, off by default |
-| 4.3 Policy engine (with P17) | [#35](https://github.com/Sanjay-Mx21/holdfast/issues/35) | ✅ 2026-10-03: verified-only and agent-lockout windows at join (`vrf` claim), the freeze switch across queue and inventory (`holdfastctl freeze`, RB-1), admission capped by units left and `SOLD_OUT` (P17) |
-| 4.4 Proof of work | [#36](https://github.com/Sanjay-Mx21/holdfast/issues/36) | ⏳ |
+| 4.3 Policy engine (with P17) | [#35](https://github.com/Sanjay-Mx21/holdfast/issues/35) | ✅ 2026-10-03 (PR #97): verified-only and agent-lockout windows at join (`vrf` claim), the freeze switch across queue and inventory (`holdfastctl freeze`, RB-1), admission capped by units left and `SOLD_OUT` (P17) |
+| 4.4 Proof of work | [#36](https://github.com/Sanjay-Mx21/holdfast/issues/36) | ✅ 2026-10-03: stateless HMAC challenges with adaptive difficulty, verified before any Valkey work; TypeScript solver with a Web Worker (page in 4.5); `holdfastctl pow solve` |
 | 4.5 Web app | [#37](https://github.com/Sanjay-Mx21/holdfast/issues/37) | ⏳ |
 | 4.6 Mission-control dashboard | [#38](https://github.com/Sanjay-Mx21/holdfast/issues/38) | ⏳ |
 | 4.7 README v1 and demo video v1 | [#39](https://github.com/Sanjay-Mx21/holdfast/issues/39) | ⏳ |

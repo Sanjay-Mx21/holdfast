@@ -18,6 +18,7 @@ import (
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/logging"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/ratelimit"
 	"github.com/Sanjay-Mx21/holdfast/internal/policy"
+	"github.com/Sanjay-Mx21/holdfast/internal/pow"
 )
 
 // service is what the HTTP layer needs from *Service. Depending on this
@@ -71,6 +72,15 @@ type Handler struct {
 	jwks   authn.JWKSet
 	// trusted are the proxies (the edge) whose X-Forwarded-For is believed.
 	trusted []netip.Prefix
+	// pow issues and checks join challenges; nil means joins need none.
+	pow *ProofOfWork
+}
+
+// ProofOfWork is what joining requires when proof of work is on: challenges
+// signed by Issuer, as hard as Difficulty says at the time of issue.
+type ProofOfWork struct {
+	Issuer     *pow.Issuer
+	Difficulty *pow.Difficulty
 }
 
 // NewHandler returns a Handler. tokens signs admission tokens; jwks is the
@@ -88,10 +98,18 @@ func (h *Handler) TrustProxies(prefixes ...netip.Prefix) *Handler {
 	return h
 }
 
+// RequireProofOfWork makes every join carry a solved challenge from
+// GET /v1/queue/{eventID}/challenge.
+func (h *Handler) RequireProofOfWork(p *ProofOfWork) *Handler {
+	h.pow = p
+	return h
+}
+
 // Register mounts buyer-facing routes on public, behind identity (who the
 // caller is), and operator routes on internal (the admin port), behind
 // operator authentication.
 func (h *Handler) Register(public, internal *httpx.Router, identity, operator httpx.Middleware) {
+	public.Handle("GET /v1/queue/{eventID}/challenge", identity(http.HandlerFunc(h.challenge)))
 	public.Handle("POST /v1/queue/{eventID}/join", identity(http.HandlerFunc(h.join)))
 	public.Handle("GET /v1/queue/{eventID}/me", identity(http.HandlerFunc(h.position)))
 	public.Handle("GET /v1/events/{eventID}/status", http.HandlerFunc(h.status))
@@ -100,6 +118,94 @@ func (h *Handler) Register(public, internal *httpx.Router, identity, operator ht
 	internal.Handle("PUT /internal/v1/events/{eventID}/queue", operator(http.HandlerFunc(h.provision)))
 	internal.Handle("POST /internal/v1/events/{eventID}/freeze", operator(h.freezeSwitch(StateFrozen)))
 	internal.Handle("POST /internal/v1/events/{eventID}/unfreeze", operator(h.freezeSwitch(StateOpen)))
+}
+
+type challengeResponse struct {
+	// Required is false when joins need no proof of work; the other fields
+	// are then absent.
+	Required   bool       `json:"required"`
+	Challenge  string     `json:"challenge,omitempty"`
+	Difficulty int        `json:"difficulty,omitempty"`
+	ExpiresAt  *time.Time `json:"expiresAt,omitempty"`
+}
+
+// challenge issues a proof-of-work challenge for the caller and this event.
+// It is stateless (an HMAC) and stores nothing, so it needs no Valkey; the
+// edge limits it per client address.
+func (h *Handler) challenge(w http.ResponseWriter, r *http.Request) {
+	user, ok := authn.UserFrom(r.Context())
+	if !ok {
+		httpx.WriteProblem(w, r, httpx.Unauthorized("UNAUTHENTICATED", "authentication required"))
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	if h.pow == nil {
+		httpx.WriteJSON(w, http.StatusOK, challengeResponse{Required: false})
+		return
+	}
+	ev, err := canonicalUUID("eventId", r.PathValue("eventID"))
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	d := h.pow.Difficulty.Next()
+	c, err := h.pow.Issuer.Issue(ev, user, d)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	h.m.powChallenge(d)
+	exp := c.ExpiresAt
+	httpx.WriteJSON(w, http.StatusOK, challengeResponse{Required: true, Challenge: c.Token, Difficulty: c.Difficulty, ExpiresAt: &exp})
+}
+
+type joinRequest struct {
+	PoW *struct {
+		Challenge string `json:"challenge"`
+		Nonce     string `json:"nonce"`
+	} `json:"pow"`
+}
+
+// checkProofOfWork verifies the join's solved challenge when proof of work is
+// on. It runs before anything touches Valkey: verifying costs one HMAC and
+// one SHA-256, so unpaid joins are turned away cheaply.
+func (h *Handler) checkProofOfWork(w http.ResponseWriter, r *http.Request, user string) bool {
+	if h.pow == nil {
+		return true
+	}
+	var body joinRequest
+	if p := httpx.DecodeJSON(r, &body); p != nil {
+		result := joinInvalid
+		if p.Code == "EMPTY_BODY" {
+			result = joinPoWRequired
+			p = httpx.BadRequest("POW_REQUIRED", "joining needs a solved challenge: GET /v1/queue/{eventID}/challenge, then send {\"pow\":{\"challenge\":...,\"nonce\":...}}")
+		}
+		h.m.join(result)
+		httpx.WriteProblem(w, r, p)
+		return false
+	}
+	if body.PoW == nil || body.PoW.Challenge == "" {
+		h.m.join(joinPoWRequired)
+		httpx.WriteProblem(w, r, httpx.BadRequest("POW_REQUIRED", "joining needs a solved challenge: GET /v1/queue/{eventID}/challenge first"))
+		return false
+	}
+	ev, err := canonicalUUID("eventId", r.PathValue("eventID"))
+	if err != nil {
+		h.m.join(joinInvalid)
+		writeError(w, r, err)
+		return false
+	}
+	switch err := h.pow.Issuer.Verify(ev, user, body.PoW.Challenge, body.PoW.Nonce); {
+	case errors.Is(err, pow.ErrExpired):
+		h.m.join(joinPoWExpired)
+		httpx.WriteProblem(w, r, httpx.NewProblem(http.StatusForbidden, "POW_EXPIRED", "the challenge has expired; get a new one"))
+		return false
+	case err != nil:
+		h.m.join(joinPoWInvalid)
+		httpx.WriteProblem(w, r, httpx.NewProblem(http.StatusForbidden, "POW_INVALID", "the proof of work does not solve a challenge issued to you for this event"))
+		return false
+	}
+	return true
 }
 
 type joinResponse struct {
@@ -112,6 +218,9 @@ func (h *Handler) join(w http.ResponseWriter, r *http.Request) {
 	user, ok := authn.UserFrom(r.Context())
 	if !ok {
 		httpx.WriteProblem(w, r, httpx.Unauthorized("UNAUTHENTICATED", "authentication required"))
+		return
+	}
+	if !h.checkProofOfWork(w, r, user) {
 		return
 	}
 	// Per-IP first: it is the cheaper signal against one machine hammering

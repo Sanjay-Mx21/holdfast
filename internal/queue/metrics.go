@@ -20,6 +20,8 @@ type Metrics struct {
 	terms      prometheus.Counter
 	leader     *prometheus.GaugeVec
 	invReads   *prometheus.CounterVec
+	powIssued  prometheus.Counter
+	powLevel   prometheus.Gauge
 
 	// Per-event gauges, set by the event's admission leader every tick and
 	// removed when its term ends, so only the current leader reports them.
@@ -45,6 +47,9 @@ const (
 	joinInvalid       = "invalid"
 	joinAgentLockout  = "agent_lockout"
 	joinVerifiedOnly  = "verified_only"
+	joinPoWRequired   = "pow_required"
+	joinPoWInvalid    = "pow_invalid"
+	joinPoWExpired    = "pow_expired"
 	joinError         = "error"
 )
 
@@ -154,12 +159,20 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 		Name: "holdfast_queue_inventory_reads_total",
 		Help: "Availability reads by admission leaders from inventory-svc, by result; on error or not_provisioned the tick admits without the units cap.",
 	}, []string{"result"})
+	m.powIssued = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "holdfast_queue_pow_challenges_total",
+		Help: "Proof-of-work challenges issued.",
+	})
+	m.powLevel = promauto.With(reg).NewGauge(prometheus.GaugeOpts{
+		Name: "holdfast_queue_pow_difficulty",
+		Help: "Difficulty in bits of the last challenge issued by this process; it rises with the challenge rate.",
+	})
 	m.leader = promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 		Name: "holdfast_queue_admission_leader",
 		Help: "1 while this process leads the event's admission controller. Labelled by event ID: bounded by the number of provisioned events.",
 	}, []string{"event"})
 	// Export every series from the start, at zero.
-	for _, r := range []string{joinJoined, joinAlready, joinRateLimitedIP, joinRateLimitUser, joinClosed, joinNotFound, joinInvalid, joinAgentLockout, joinVerifiedOnly, joinError} {
+	for _, r := range []string{joinJoined, joinAlready, joinRateLimitedIP, joinRateLimitUser, joinClosed, joinNotFound, joinInvalid, joinAgentLockout, joinVerifiedOnly, joinPoWRequired, joinPoWInvalid, joinPoWExpired, joinError} {
 		m.joins.WithLabelValues(r)
 	}
 	for _, r := range []string{positionRanked, positionRandomizing, positionNotInQueue, positionNotFound, positionRateLimited, positionInvalid, positionError} {
@@ -184,6 +197,11 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 }
 
 func (m *Metrics) inventoryRead(result string) { m.invReads.WithLabelValues(result).Inc() }
+
+func (m *Metrics) powChallenge(difficulty int) {
+	m.powIssued.Inc()
+	m.powLevel.Set(float64(difficulty))
+}
 
 func (m *Metrics) join(result string)     { m.joins.WithLabelValues(result).Inc() }
 func (m *Metrics) position(result string) { m.positions.WithLabelValues(result).Inc() }

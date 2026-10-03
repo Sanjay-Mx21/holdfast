@@ -20,6 +20,7 @@ import (
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/httpx"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/ratelimit"
 	"github.com/Sanjay-Mx21/holdfast/internal/policy"
+	"github.com/Sanjay-Mx21/holdfast/internal/pow"
 )
 
 type fakeService struct {
@@ -106,7 +107,11 @@ type harness struct {
 
 // newHarness wires the real routes. The identity stub turns the X-Test-User
 // header into an authenticated user; operator auth is a pass-through.
-func newHarness(svc service) harness {
+func newHarness(svc service) harness { return newHarnessWith(svc, nil) }
+
+// newHarnessWith is newHarness with the handler adjusted by configure
+// before its routes are mounted.
+func newHarnessWith(svc service, configure func(*Handler)) harness {
 	public := httpx.NewRouter(httpx.RequestID())
 	internal := httpx.NewRouter(httpx.RequestID())
 	identity := func(next http.Handler) http.Handler {
@@ -127,8 +132,11 @@ func newHarness(svc service) harness {
 	lim := &fakeLimiter{}
 	m := NewMetrics(prometheus.NewRegistry())
 	iss := &fakeIssuer{}
-	NewHandler(svc, lim, testLimits, m, iss, authn.JWKSet{Keys: []authn.JWK{{Kty: "OKP", Crv: "Ed25519", X: "x", Kid: "kid-1", Alg: "EdDSA", Use: "sig"}}}).
-		Register(public, internal, identity, func(next http.Handler) http.Handler { return next })
+	h := NewHandler(svc, lim, testLimits, m, iss, authn.JWKSet{Keys: []authn.JWK{{Kty: "OKP", Crv: "Ed25519", X: "x", Kid: "kid-1", Alg: "EdDSA", Use: "sig"}}})
+	if configure != nil {
+		configure(h)
+	}
+	h.Register(public, internal, identity, func(next http.Handler) http.Handler { return next })
 	return harness{public: public, internal: internal, lim: lim, m: m, iss: iss}
 }
 
@@ -858,5 +866,87 @@ func TestFreezeRoutesAreAdminOnly(t *testing.T) {
 	rec := send(h.internal, http.MethodPost, "/internal/v1/events/"+ev+"/freeze", "", "", nil, "10.0.0.1:1")
 	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), `"code":"STATE_CONFLICT"`) || !strings.Contains(rec.Body.String(), "it is PRE") {
 		t.Fatalf("conflict: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestChallengeWithoutProofOfWork(t *testing.T) {
+	h := newHarness(&fakeService{})
+	ev := "0196f0c1-7a3e-7c51-9b0e-5d2f8a1c4e77"
+	rec := send(h.public, http.MethodGet, "/v1/queue/"+ev+"/challenge", "", "", map[string]string{"X-Test-User": "u"}, "192.0.2.1:1")
+	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != `{"required":false}` {
+		t.Fatalf("got %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := send(h.public, http.MethodGet, "/v1/queue/"+ev+"/challenge", "", "", nil, "192.0.2.1:1"); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("without identity: %d", rec.Code)
+	}
+}
+
+func TestJoinWithProofOfWork(t *testing.T) {
+	ev, user := "0196f0c1-7a3e-7c51-9b0e-5d2f8a1c4e77", "0196f0c1-7a3e-7c51-9b0e-5d2f8a1c4e78"
+	issuer, _ := pow.NewIssuer([]byte("test-only-pow-secret-0123456789abcdef"), time.Minute)
+	diff, _ := pow.NewDifficulty(8, 12, 1000)
+	joins := 0
+	svc := &fakeService{join: func(context.Context, string, string) (JoinResult, error) {
+		joins++
+		return JoinResult{EventID: ev, Joined: true, Ordering: OrderingFIFO}, nil
+	}}
+	h := newHarnessWith(svc, func(h *Handler) { h.RequireProofOfWork(&ProofOfWork{Issuer: issuer, Difficulty: diff}) })
+	headers := map[string]string{"X-Test-User": user}
+
+	rec := send(h.public, http.MethodGet, "/v1/queue/"+ev+"/challenge", "", "", headers, "192.0.2.1:1")
+	var c struct {
+		Required   bool   `json:"required"`
+		Challenge  string `json:"challenge"`
+		Difficulty int    `json:"difficulty"`
+		ExpiresAt  string `json:"expiresAt"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &c); err != nil || rec.Code != http.StatusOK || !c.Required || c.Difficulty != 8 || c.ExpiresAt == "" {
+		t.Fatalf("challenge: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal("a challenge must never be cached")
+	}
+	join := func(body string) *httptest.ResponseRecorder {
+		ct := ""
+		if body != "" {
+			ct = "application/json"
+		}
+		return send(h.public, http.MethodPost, "/v1/queue/"+ev+"/join", body, ct, headers, "192.0.2.1:1")
+	}
+	nonce := pow.Solve(c.Challenge, c.Difficulty)
+	wrong := "0"
+	for pow.LeadingZeroBits(pow.Hash(c.Challenge, wrong)) >= c.Difficulty {
+		wrong += "1"
+	}
+	cases := []struct {
+		name, body, code string
+		status           int
+	}{
+		{"no body", "", "POW_REQUIRED", 400},
+		{"no pow field", `{}`, "POW_REQUIRED", 400},
+		{"a wrong nonce", fmt.Sprintf(`{"pow":{"challenge":%q,"nonce":%q}}`, c.Challenge, wrong), "POW_INVALID", 403},
+		{"a made-up challenge", `{"pow":{"challenge":"1.8.x.y","nonce":"1"}}`, "POW_INVALID", 403},
+		{"an unknown field", `{"pow":{"challenge":"a","nonce":"1"},"x":1}`, "INVALID_BODY", 400},
+	}
+	for _, tc := range cases {
+		rec := join(tc.body)
+		if rec.Code != tc.status || !strings.Contains(rec.Body.String(), `"code":"`+tc.code+`"`) {
+			t.Fatalf("%s: %d %s", tc.name, rec.Code, rec.Body.String())
+		}
+	}
+	if joins != 0 || len(h.lim.calls) != 0 {
+		t.Fatalf("refused joins reached the service (%d) or the limiter (%v)", joins, h.lim.calls)
+	}
+	rec = join(fmt.Sprintf(`{"pow":{"challenge":%q,"nonce":%q}}`, c.Challenge, nonce))
+	if rec.Code != http.StatusAccepted || joins != 1 {
+		t.Fatalf("a solved join: %d %s", rec.Code, rec.Body.String())
+	}
+	// No body and no pow field are both pow_required; the unknown field is invalid.
+	for result, want := range map[string]float64{joinPoWRequired: 2, joinPoWInvalid: 2, joinInvalid: 1} {
+		var out dto.Metric
+		_ = h.m.joins.WithLabelValues(result).Write(&out)
+		if out.GetCounter().GetValue() != want {
+			t.Fatalf("%s joins = %v, want %v", result, out.GetCounter().GetValue(), want)
+		}
 	}
 }
