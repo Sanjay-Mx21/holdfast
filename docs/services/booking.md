@@ -9,8 +9,8 @@ Code: `internal/booking`. Schema: `booking` (migrations in
 the booking API and the deadline job (task 3.6), the outbox relay (task
 3.7), payment intents from payment-svc (task 3.9), the saga that confirms,
 cancels or refunds bookings from payment events (task 3.11), and the
-operator commands of runbooks RB-3 and RB-4 (task 3.14). Real identity
-replaces `X-Dev-User-Id` in Phase 4.
+operator commands of runbooks RB-3 and RB-4 (task 3.14). Buyers are
+identified by auth-svc's access tokens since task 4.2.
 
 ## Responsibilities
 
@@ -30,7 +30,7 @@ replaces `X-Dev-User-Id` in Phase 4.
 
 ```http
 POST /v1/bookings
-X-Dev-User-Id: <buyer id>          (development identity until Phase 4)
+Authorization: Bearer <access token>   (auth-svc; X-Dev-User-Id only with DEV_IDENTITY)
 Idempotency-Key: <8 to 255 printable characters>
 Content-Type: application/json
 
@@ -191,7 +191,8 @@ defined in `internal/platform/config` and `internal/platform/otel`.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `DEV_IDENTITY` | `false` | Trust `X-Dev-User-Id` as the buyer (refused in production) |
+| `ACCESS_JWKS_URL` | none | auth-svc's key set (`http://auth:8080/.well-known/jwks.json` in Compose): buyers are identified by its access tokens. Required unless `DEV_IDENTITY` is on; readiness waits until a key is known |
+| `DEV_IDENTITY` | `false` | Also accept `X-Dev-User-Id` from requests without a token (development, load tests; refused in production) |
 | `INVENTORY_GRPC_ADDR` | `inventory:7070` | inventory-svc's internal gRPC API |
 | `SERVICE_PRIVATE_KEY_FILE` | required | booking-svc's Ed25519 key for service tokens; inventory-svc and payment-svc trust the public half |
 | `INVENTORY_TIMEOUT` | `800ms` | Deadline of each inventory call, retries included |

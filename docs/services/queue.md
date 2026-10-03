@@ -25,13 +25,15 @@ with fencing).
 
 Puts the caller in the event's waiting room. No body.
 
-Until auth-svc exists (Phase 4) the caller's identity is the
-`X-Dev-User-Id` header, a UUID, accepted only when `DEV_IDENTITY=true`
-(never in production; see Configuration).
+The caller is the signed-in buyer: an auth-svc access token in
+`Authorization: Bearer` (`docs/services/auth.md`), verified against
+auth-svc's published keys. With `DEV_IDENTITY=true` (never in production),
+a request without a token may name its buyer in `X-Dev-User-Id` instead; the
+E2 load test does, to simulate 50,000 buyers.
 
 ```http
 POST /v1/queue/0196f0c1-.../join
-X-Dev-User-Id: 0196f0c2-0000-7000-8000-000000000001
+Authorization: Bearer <access token>
 ```
 
 ```http
@@ -66,8 +68,7 @@ never lets a client supply. A refused join never reaches the queue.
 
 ### `GET /v1/queue/{eventID}/me`
 
-Where the caller stands. Same identity as joining (`X-Dev-User-Id` until
-Phase 4).
+Where the caller stands. Same identity as joining (an access token).
 
 Before T0, by Valkey's clock, there is no rank yet: lottery positions keep
 arriving until T0. The response says when the draw closes:
@@ -315,7 +316,7 @@ for up to 30 seconds.
 
 | Code | HTTP | Meaning |
 |---|---|---|
-| `UNAUTHENTICATED` | 401 | Join: missing or malformed `X-Dev-User-Id`, or buyer identity not enabled. Admin: missing or wrong operator token |
+| `UNAUTHENTICATED` | 401 | Buyer endpoints: no access token, or one that is invalid or expired (refresh it at auth-svc). Admin: missing or wrong operator token |
 | `INVALID_REQUEST` | 400 | Malformed event ID, or a setting outside its bounds (`detail` says which) |
 | `INVALID_BODY`, `MALFORMED_JSON`, `EMPTY_BODY`, `TRAILING_DATA`, `INVALID_FIELD_TYPE` | 400 | Provisioning body problems, including unknown fields |
 | `UNSUPPORTED_MEDIA_TYPE` | 415 | Provisioning body is not JSON |
@@ -397,7 +398,8 @@ required (admission leader election). Service settings:
 | Variable | Default | Meaning |
 |---|---|---|
 | `ADMIN_TOKEN` | required | Operator token, at least 32 characters; removed from the environment after loading |
-| `DEV_IDENTITY` | `false` | Accept `X-Dev-User-Id` as the buyer's identity. Anyone can claim any user ID with it, so queue-svc refuses to start with it when `ENVIRONMENT=production`. When off, buyer requests get 401 until auth-svc exists |
+| `ACCESS_JWKS_URL` | none | auth-svc's key set (`http://auth:8080/.well-known/jwks.json` in Compose): buyers are identified by its access tokens. Required unless `DEV_IDENTITY` is on; readiness waits until a key is known |
+| `DEV_IDENTITY` | `false` | Also accept `X-Dev-User-Id` from requests without a token (development, load tests). Anyone can claim any user ID with it, so queue-svc refuses to start with it when `ENVIRONMENT=production` |
 | `JOIN_IP_BURST` | `30` | Per-IP bucket size |
 | `JOIN_IP_PER_SECOND` | `10` | Per-IP refill rate |
 | `JOIN_USER_BURST` | `5` | Per-user bucket size |
@@ -416,7 +418,8 @@ required (admission leader election). Service settings:
 | `ADMISSION_RESCAN_INTERVAL` | `2s` | How often new events get a controller (100ms to 1m) |
 
 Locally, Compose maps the public port to 8082 and the admin port to 9092,
-and sets `DEV_IDENTITY=true`.
+and points `ACCESS_JWKS_URL` at auth-svc; `DEV_IDENTITY=true make up` (or
+the E2 load test's override) turns the development header on.
 
 ## Metrics
 

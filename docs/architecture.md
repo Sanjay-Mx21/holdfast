@@ -251,10 +251,12 @@ provider about quiet intents, least recently polled first.
   refresh tokens in an httpOnly, SameSite=Strict cookie that rotate on every
   use; presenting a rotated one revokes the whole login. Phones, codes and
   refresh tokens are stored only as HMACs or hashes.
-- Until task 4.2 wires those tokens in, queue-svc and booking-svc identify
-  buyers by the `X-Dev-User-Id` header when `DEV_IDENTITY=true`. Anyone can
-  claim any ID with it, so the services refuse to start with it in
-  production.
+- queue-svc and booking-svc identify buyers by those access tokens
+  (`authn.RequireUser`), verified against auth-svc's JWKS
+  (`ACCESS_JWKS_URL`); a token that fails is refused, with no fallback. With
+  `DEV_IDENTITY=true` (development and load tests only; refused in
+  production) a request without a token may name its buyer in
+  `X-Dev-User-Id`.
 - Joining passes per-IP (IPv6 per /64) and per-user token buckets in Valkey
   (`internal/platform/ratelimit`), shared by every replica.
 - Services call each other over gRPC with service tokens: short-lived

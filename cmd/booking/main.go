@@ -12,9 +12,12 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/Sanjay-Mx21/holdfast/internal/booking"
 	"github.com/Sanjay-Mx21/holdfast/internal/inventory"
@@ -42,8 +45,12 @@ type config struct {
 	Postgres cfgpkg.Postgres
 	Kafka    cfgpkg.Kafka
 
-	// DevIdentity trusts the X-Dev-User-Id header as the buyer's identity
-	// until auth-svc exists (Phase 4). Never allowed in production.
+	// AccessJWKSURL is auth-svc's key set: buyers are identified by its access
+	// tokens (Authorization: Bearer). Required unless DEV_IDENTITY is on.
+	AccessJWKSURL string `env:"ACCESS_JWKS_URL"`
+	// DevIdentity also accepts the X-Dev-User-Id header on requests that carry
+	// no token, for development and load tests (E2 simulates 50,000 buyers
+	// with it). Never allowed in production.
 	DevIdentity bool `env:"DEV_IDENTITY" envDefault:"false"`
 
 	// inventory-svc's internal gRPC API, and the key booking-svc signs its
@@ -82,6 +89,14 @@ func (c *config) Validate() error {
 	}
 	if c.DevIdentity && c.Service.Environment == "production" {
 		errs = append(errs, errors.New("DEV_IDENTITY must not be enabled in production: anyone could claim any user ID"))
+	}
+	if c.AccessJWKSURL == "" && !c.DevIdentity {
+		errs = append(errs, errors.New("set ACCESS_JWKS_URL (auth-svc's key set) so buyers can sign in"))
+	}
+	if c.AccessJWKSURL != "" {
+		if u, err := url.Parse(c.AccessJWKSURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			errs = append(errs, errors.New("ACCESS_JWKS_URL must be an http(s) URL"))
+		}
 	}
 	if c.PaymentTimeout < 100*time.Millisecond || c.PaymentTimeout > time.Minute {
 		errs = append(errs, errors.New("PAYMENT_TIMEOUT must be between 100ms and 1m"))
@@ -198,7 +213,19 @@ func run(ctx context.Context) error {
 		return err
 	}
 
-	hc := health.New(2*time.Second, postgres.Check(pool))
+	// Buyers: auth-svc's access tokens, and the development header if allowed.
+	if cfg.DevIdentity {
+		log.Warn("DEV_IDENTITY is on: requests without a token may name their buyer in X-Dev-User-Id, which anyone can set")
+	}
+	identity, accessKeys := authn.NewAccessIdentity(ctx, cfg.AccessJWKSURL, cfg.DevIdentity, 5*time.Second,
+		&http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}, reg, log)
+	var background []app.Component
+	checks := []health.Check{postgres.Check(pool)}
+	if accessKeys != nil {
+		checks = append(checks, health.Check{Name: "access-keys", Fn: accessKeys.Check})
+		background = append(background, accessKeys)
+	}
+	hc := health.New(2*time.Second, checks...)
 	httpMetrics := httpx.NewHTTPMetrics(reg)
 	public := httpx.NewRouter(
 		httpx.Trace(),
@@ -212,26 +239,13 @@ func run(ctx context.Context) error {
 	)
 	admin := httpx.NewAdminRouter(metrics.Handler(reg), hc)
 
-	identity := noIdentity
-	if cfg.DevIdentity {
-		log.Warn("DEV_IDENTITY is on: buyers are identified by the X-Dev-User-Id header, which anyone can set")
-		identity = authn.RequireDevIdentity()
-	}
 	booking.NewHandler(svc).Register(public, identity)
 
-	return app.Run(ctx, log, hc, cfg.HTTP.DrainDelay,
+	return app.Run(ctx, log, hc, cfg.HTTP.DrainDelay, append([]app.Component{
 		httpx.NewServer("public", cfg.HTTP.Addr, public, cfg.HTTP, log),
 		httpx.NewServer("admin", cfg.HTTP.AdminAddr, admin, cfg.HTTP, log, httpx.WithWriteTimeout(90*time.Second)),
 		booking.NewDeadlineJob(pool, cfg.DeadlineScanInterval, cfg.DeadlineBatch, bm, log),
 		relay,
 		saga,
-	)
-}
-
-// noIdentity rejects every buyer request: without DEV_IDENTITY there is no
-// way to authenticate buyers until auth-svc exists (Phase 4).
-func noIdentity(http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		httpx.WriteProblem(w, r, httpx.Unauthorized("UNAUTHENTICATED", "buyer authentication is not available yet"))
-	})
+	}, background...)...)
 }
