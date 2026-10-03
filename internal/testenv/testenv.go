@@ -7,14 +7,17 @@ package testenv
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
@@ -58,16 +61,73 @@ func Valkey(t testing.TB) redis.UniversalClient {
 var (
 	migrateOnce sync.Once
 	migrateErr  error
+	createOnce  sync.Once
+	testDSN     string
+	createErr   error
 )
 
-// Postgres returns a pool for the test database with every schema migrated
-// (once per test process). The pool is closed when the test ends.
-func Postgres(t testing.TB) *pgxpool.Pool {
+// PostgresDSN returns the DSN of the test database: the database named in
+// HOLDFAST_TEST_POSTGRES_DSN with "_test" appended (holdfast becomes
+// holdfast_test), created if it does not exist. Services started by
+// `make up` use the database itself, so their outbox relays and pollers
+// never see the tests' rows, and the tests never see theirs (P30, P35).
+func PostgresDSN(t testing.TB) string {
 	t.Helper()
 	dsn := os.Getenv(EnvPostgresDSN)
 	if dsn == "" {
 		t.Skipf("set %s to run PostgreSQL integration tests", EnvPostgresDSN)
 	}
+	createOnce.Do(func() { testDSN, createErr = ensureTestDatabase(dsn) })
+	if createErr != nil {
+		t.Fatalf("test database: %v", createErr)
+	}
+	return testDSN
+}
+
+// ensureTestDatabase derives the test database's DSN from dsn and creates
+// the database if it is missing.
+func ensureTestDatabase(dsn string) (string, error) {
+	u, err := url.Parse(dsn)
+	if err != nil || u.Scheme == "" {
+		return "", fmt.Errorf("%s must be a postgres:// URL", EnvPostgresDSN)
+	}
+	name := strings.TrimPrefix(u.Path, "/")
+	if name == "" {
+		return "", fmt.Errorf("%s must name a database", EnvPostgresDSN)
+	}
+	if !strings.HasSuffix(name, "_test") {
+		name += "_test"
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	conn, err := pgx.Connect(ctx, dsn)
+	if err != nil {
+		return "", fmt.Errorf("connect to PostgreSQL: %w", err)
+	}
+	defer func() { _ = conn.Close(ctx) }()
+	// Test packages run as parallel processes: one creates, the rest wait.
+	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock(hashtext('holdfast.testenv.createdb'))"); err != nil {
+		return "", fmt.Errorf("lock: %w", err)
+	}
+	var exists bool
+	if err := conn.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = $1)`, name).Scan(&exists); err != nil {
+		return "", err
+	}
+	if !exists {
+		if _, err := conn.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{name}.Sanitize()); err != nil {
+			return "", fmt.Errorf("create database %s: %w", name, err)
+		}
+	}
+	u.Path = "/" + name
+	return u.String(), nil
+}
+
+// Postgres returns a pool for the test database (PostgresDSN) with every
+// schema migrated (once per test process). The pool is closed when the test
+// ends.
+func Postgres(t testing.TB) *pgxpool.Pool {
+	t.Helper()
+	dsn := PostgresDSN(t)
 	ctx := context.Background()
 	pool, err := postgres.NewPool(ctx, config.Postgres{
 		DSN: dsn, MaxConns: 32, MinConns: 0, MaxConnLifetime: time.Hour,

@@ -36,7 +36,7 @@ func TestQueueProvisionAndStatus(t *testing.T) {
 	pool := testenv.Postgres(t)
 	ctx := context.Background()
 	valkeyAddr := os.Getenv(testenv.EnvValkeyAddr)
-	dsn := os.Getenv(testenv.EnvPostgresDSN)
+	dsn := testenv.PostgresDSN(t)
 	store := queue.NewStore(rdb)
 
 	// An event in the catalog, its queue not provisioned (as with --no-provision).

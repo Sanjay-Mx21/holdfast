@@ -87,6 +87,10 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
 - The Kafka integration tests wait for a new topic's partition leaders
   before publishing, instead of failing now and then with
   `UNKNOWN_TOPIC_OR_PARTITION` (P33).
+- Integration tests use their own PostgreSQL database, `<database>_test`
+  (`holdfast_test` locally), created on first use (P35). The `make up`
+  stack's pollers and outbox relays no longer see the tests' rows, and its
+  topics no longer carry the tests' events (P30).
 
 ## [0.2.0] - 2026-10-02
 
