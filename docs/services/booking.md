@@ -137,6 +137,15 @@ payment-svc refunds a `REFUND_REQUIRED` booking (`booking.refund_required.v1`;
 see `docs/services/payment.md`). The provider's completion arrives as
 `refund.completed.v1`.
 
+Operators recover stuck bookings through the same path, never by editing
+rows (`docs/runbooks/saga.md`):
+
+- `holdfastctl dlq replay` (RB-3) puts dead-lettered events back;
+- `holdfastctl refund --booking ID` (RB-4) asks for a stuck refund again.
+  It publishes a new `booking.refund_required.v1` with reason `OPERATOR`,
+  for a `REFUND_REQUIRED` booking only. The decisions behind the saga are
+  ADRs 0008 to 0010.
+
 ## Background work
 
 The **deadline job** runs in every replica every `DEADLINE_SCAN_INTERVAL`

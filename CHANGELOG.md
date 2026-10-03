@@ -115,6 +115,16 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
   - an outbox relay that crashed after publishing republishes the same
     event IDs;
   - late and out-of-order webhooks, and delayed duplicates through mockpsp.
+- **Operating the saga** (task 3.14):
+  - `holdfastctl dlq replay --topic T` republishes a dead-letter topic's
+    messages to their original topic, with their `ce_id` (`--dry-run`,
+    `--max`; progress kept in a consumer group).
+  - `holdfastctl refund --booking ID` asks payment-svc again to refund a
+    booking stuck in `REFUND_REQUIRED` (new refund reason `OPERATOR`).
+  - Runbooks RB-3 (drain a dead-letter topic) and RB-4 (manual refund) in
+    `docs/runbooks/saga.md`.
+  - ADRs 0008 (gRPC for calls, Kafka for events), 0009 (transactional
+    outbox with a polling relay) and 0010 (an orchestrated saga).
 
 ### Fixed
 

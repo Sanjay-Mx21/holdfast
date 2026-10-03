@@ -211,10 +211,24 @@ connection; every 250 ms it runs `advance.lua`, which refuses a stale epoch
 (fencing) and caps concurrent sessions (Little's Law).
 
 The **outbox relay** runs in every replica of a service that writes events
-(booking-svc so far); exactly one per schema leads, holding a PostgreSQL
-advisory lock on a dedicated connection, and publishes the outbox to Kafka
-in commit order, marking each batch published in the same transaction
-(`internal/platform/outbox`).
+(booking-svc and payment-svc); exactly one per schema leads, holding a
+PostgreSQL advisory lock on a dedicated connection, and publishes the outbox
+to Kafka in commit order, marking each batch published in the same
+transaction (`internal/platform/outbox`; ADR 0009).
+
+**Consumers** run in every replica as Kafka consumer groups:
+
+- booking-svc's saga (`booking-saga` on `holdfast.payment.v1`; ADR 0010);
+- payment-svc's refunds (`payment-refunds` on `holdfast.booking.v1`).
+
+Each message is applied in one transaction with its dedup record. Offsets
+are committed after it. A message that keeps failing goes to its
+dead-letter topic, which `holdfastctl dlq replay` drains (runbook RB-3,
+`docs/runbooks/saga.md`).
+
+booking-svc's **deadline job** cancels overdue `PENDING_PAYMENT` bookings
+(`FOR UPDATE SKIP LOCKED`). payment-svc's **status poller** asks the
+provider about quiet intents, least recently polled first.
 
 ## 8. Security
 

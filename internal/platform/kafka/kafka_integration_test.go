@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -46,7 +47,8 @@ func testTopic(t *testing.T, cfg config.Kafka, partitions int32) string {
 
 // waitForLeaders waits until the broker's metadata gives every partition of
 // the topics a leader. CreateTopics can return before that, and a publish in
-// between fails with UNKNOWN_TOPIC_OR_PARTITION (P33).
+// between fails with UNKNOWN_TOPIC_OR_PARTITION (P33). Up to 30 s: a broker
+// busy with every test package's topics took more than 10.
 func waitForLeaders(t *testing.T, cfg config.Kafka, topics ...string) {
 	t.Helper()
 	kc, err := kgo.NewClient(kgo.SeedBrokers(cfg.Brokers...))
@@ -73,9 +75,9 @@ func waitForLeaders(t *testing.T, cfg config.Kafka, topics ...string) {
 		}
 		return true
 	}
-	for deadline := time.Now().Add(10 * time.Second); !ready(); {
+	for deadline := time.Now().Add(30 * time.Second); !ready(); {
 		if time.Now().After(deadline) {
-			t.Fatalf("topics %v have no partition leaders after 10s", topics)
+			t.Fatalf("topics %v have no partition leaders after 30s", topics)
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -439,5 +441,66 @@ func TestConsumerLagIsReported(t *testing.T) {
 	}
 	if v := out.GetGauge().GetValue(); v != 5 {
 		t.Fatalf("lag %v, want 5", v)
+	}
+}
+
+// TestReplayDLQ dead-letters messages through a real consumer, then replays
+// them (runbook RB-3): back on the original topic in order, with their
+// ce_id and without the dlq_* headers; a dry run changes nothing, and a
+// second run replays only what arrived since.
+func TestReplayDLQ(t *testing.T) {
+	cfg := testenv.Kafka(t)
+	topic := testTopic(t, cfg, 1)
+	p, err := NewProducer(context.Background(), cfg, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+	ids := publish(t, p, topic, 3, func(int) string { return "k" })
+	poison := Permanent(errors.New("cannot decode yet"))
+	stop := runConsumer(t, cfg, ConsumerConfig{Group: groupName(), Topics: []string{topic}},
+		func(context.Context, Message) error { return poison }, nil)
+	dlq := DLQ(topic)
+	waitFor(t, "three dead letters", func() bool {
+		msgs, err := ReplayDLQ(context.Background(), cfg, dlq, ReplayOptions{Group: groupName(), DryRun: true})
+		return err == nil && len(msgs) == 3
+	})
+	if err := stop(); err != nil {
+		t.Fatal(err)
+	}
+
+	group := groupName()
+	dry, err := ReplayDLQ(context.Background(), cfg, dlq, ReplayOptions{Group: group, DryRun: true})
+	if err != nil || len(dry) != 3 || dry[0].Topic != topic || dry[0].ID != ids[0] || !strings.Contains(dry[0].Reason, "cannot decode yet") {
+		t.Fatalf("dry run: %+v %v", dry, err)
+	}
+	// The cause is fixed: the topic's consumer now accepts everything.
+	col := &collector{}
+	stopFixed := runConsumer(t, cfg, ConsumerConfig{Group: groupName(), Topics: []string{topic}}, col.handle, nil)
+	defer func() { _ = stopFixed() }()
+	got, err := ReplayDLQ(context.Background(), cfg, dlq, ReplayOptions{Group: group, Max: 2})
+	if err != nil || len(got) != 2 {
+		t.Fatalf("replay of 2: %+v %v", got, err)
+	}
+	rest, err := ReplayDLQ(context.Background(), cfg, dlq, ReplayOptions{Group: group})
+	if err != nil || len(rest) != 1 || rest[0].ID != ids[2] {
+		t.Fatalf("the rest: %+v %v", rest, err)
+	}
+	if again, err := ReplayDLQ(context.Background(), cfg, dlq, ReplayOptions{Group: group}); err != nil || len(again) != 0 {
+		t.Fatalf("a third run: %+v %v; want nothing left", again, err)
+	}
+	waitFor(t, "the replayed messages", func() bool { return len(col.snapshot()) >= 6 })
+	var replayed []string
+	for _, m := range col.snapshot()[3:] {
+		replayed = append(replayed, m.ID())
+		if _, dirty := m.Headers["dlq_reason"]; dirty {
+			t.Fatalf("replayed message %s kept its dlq headers: %v", m.ID(), m.Headers)
+		}
+	}
+	if !slices.Equal(replayed, ids) {
+		t.Fatalf("replayed %v, want %v in order", replayed, ids)
+	}
+	if _, err := ReplayDLQ(context.Background(), cfg, topic, ReplayOptions{}); err == nil {
+		t.Fatal("replaying a topic that is not a dead-letter topic was accepted")
 	}
 }

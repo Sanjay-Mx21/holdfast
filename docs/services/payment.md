@@ -137,7 +137,9 @@ payment-svc consumes `holdfast.booking.v1` as the group `payment-refunds`
 Errors:
 
 - The provider unreachable: the message is retried.
-- The provider refusing the refund: dead-lettered for a human.
+- The provider refusing the refund: dead-lettered for a human (runbooks
+  RB-3 and RB-4 in `docs/runbooks/saga.md`; `holdfastctl refund --booking
+  ID` asks again once the cause is fixed).
 - A booking with no intent: logged and skipped (P30).
 - An intent that was never captured: left alone.
 
