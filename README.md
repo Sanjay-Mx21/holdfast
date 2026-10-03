@@ -39,6 +39,10 @@ sells exactly 1,000 (never 1,001) and stays up while doing it.
 - **mockpsp** (Phase 3) stands in for the payment provider: a checkout page,
   signed webhooks, and fault injection (duplicated, delayed and lost
   webhooks, failed payments, slow answers, outages) for tests.
+- **auth-svc** (Phase 4) signs people in with a code sent to their phone
+  (through a mock SMS gateway). It issues short-lived EdDSA access tokens
+  and rotating refresh tokens whose reuse revokes the whole login, and it
+  never stores a phone number, code or token in the clear.
 - **holdfastctl** runs migrations, generates dev keys and tokens, creates
   events, provisions their inventory and queue, rebuilds inventory, and shows
   an event's availability and waiting room (`queue status`).

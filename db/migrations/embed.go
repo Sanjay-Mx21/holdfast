@@ -7,7 +7,7 @@ import (
 	"io/fs"
 )
 
-//go:embed booking/*.sql payment/*.sql
+//go:embed auth/*.sql booking/*.sql payment/*.sql
 var files embed.FS
 
 // Schema is one service-owned PostgreSQL schema and its migrations.
@@ -22,6 +22,7 @@ func All() []Schema {
 	return []Schema{
 		{Name: "booking", Files: sub("booking")},
 		{Name: "payment", Files: sub("payment")},
+		{Name: "auth", Files: sub("auth")},
 	}
 }
 

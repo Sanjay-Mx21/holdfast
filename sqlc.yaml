@@ -57,3 +57,26 @@ sql:
           payment_ledger_entry: LedgerEntry
           payment_outbox: OutboxEvent
           payment_processed_message: ProcessedMessage
+  - engine: postgresql
+    schema: db/migrations/auth
+    queries: internal/auth/queries
+    gen:
+      go:
+        package: authdb
+        out: internal/auth/authdb
+        sql_package: pgx/v5
+        emit_empty_slices: true
+        overrides:
+          - db_type: uuid
+            go_type: github.com/google/uuid.UUID
+          - db_type: uuid
+            nullable: true
+            go_type:
+              import: github.com/google/uuid
+              type: NullUUID
+          - db_type: timestamptz
+            go_type: time.Time
+        rename:
+          auth_user: User
+          auth_otp_challenge: OTPChallenge
+          auth_refresh_token: RefreshToken

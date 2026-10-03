@@ -136,6 +136,31 @@ services:
       payment: { condition: service_started }
     restart: unless-stopped
 
+  # auth-svc: sign-in with a code sent to a phone (a mock SMS gateway whose
+  # inbox is readable in development), access tokens and their JWKS.
+  auth:
+    build:
+      context: .
+      args: { SERVICE: auth }
+    environment:
+      ENVIRONMENT: development
+      LOG_FORMAT: text
+      POSTGRES_DSN: postgres://holdfast:holdfast@postgres:5432/holdfast?sslmode=disable
+      SIGNING_KEY_FILE: /keys/auth.key
+      PHONE_PEPPER: ${PHONE_PEPPER:-dev-only-phone-pepper-change-me-in-any-real-deployment}
+      DEV_SMS_INBOX: "true" # GET /v1/auth/dev/inbox shows the code; never in production
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    networks: [default, edge]
+    ports:
+      - "8086:8080" # public API (the edge routes /v1/auth/ here)
+      - "9096:9090" # admin: metrics, health, pprof (never expose in production)
+    volumes:
+      - ./.local/keys:/keys:ro
+    depends_on:
+      postgres: { condition: service_healthy }
+      holdfastctl: { condition: service_completed_successfully }
+    restart: unless-stopped
+
   # payment-svc: intents over gRPC for booking-svc, the provider's webhooks,
   # the ledger. The provider is mockpsp.
   payment:
@@ -264,7 +289,7 @@ services:
       edge: { ipv4_address: 10.250.0.10 }
     ports:
       - "${EDGE_PORT:-8088}:80"
-    depends_on: [queue, inventory, booking]
+    depends_on: [queue, inventory, booking, auth]
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
       interval: 5s
