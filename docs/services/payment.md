@@ -7,9 +7,10 @@ Binary: `cmd/payment`. Code: `internal/payment` (the provider client in
 `internal/payment/psp`). Schema: `payment` (migrations in
 `db/migrations/payment`, queries in `internal/payment/queries`).
 
-**Status:** Phase 3 in progress. Built: the schema (task 3.8) and the service
-(task 3.9). mockpsp, the local provider, arrives with task 3.10, and with it
-booking-svc's calls in Compose. Refund requests arrive with task 3.11.
+**Status:** Phase 3 in progress. Built: the schema (task 3.8), the service
+(task 3.9), and mockpsp, the local provider (task 3.10,
+`docs/services/mockpsp.md`); booking-svc calls payment-svc in Compose.
+Refund requests arrive with task 3.11.
 
 ## Responsibilities
 
@@ -50,7 +51,9 @@ booking-svc's typed client is `payment.Client`.
 ## The provider client (`internal/payment/psp`)
 
 The provider's API: `POST /v1/orders` and `POST /v1/refunds` (with
-`Idempotency-Key`: the intent ID), `GET /v1/orders/{id}`, bearer API key.
+`Idempotency-Key`: the intent ID), `GET /v1/orders/{id}`, and
+`GET /v1/settlements` (the report the Phase 5 reconciler reads), with a
+bearer API key. mockpsp implements it locally.
 
 - Each attempt is bounded by `PSP_TIMEOUT`; the caller's context bounds the
   whole call.
@@ -107,7 +110,10 @@ a human (reconciliation, Phase 5).
 Every `POLL_INTERVAL` (30 s), each replica claims up to `POLL_BATCH` intents
 that are still `CREATED` with an order `POLL_AFTER` (2 minutes) after
 creation (`FOR UPDATE SKIP LOCKED`, so replicas take disjoint batches). It
-asks the provider for each order's status, with a 3-second deadline per call.
+takes the least recently polled first, never polled before all, and stamps
+`polled_at` on every poll, failed or not: intents whose polls keep failing
+cannot starve the rest (P34). It asks the provider for each order's status,
+with a 3-second deadline per call.
 A captured, failed or expired order gets the same move, ledger entries and
 event as its webhook would have. The webhook arriving later then changes
 nothing.
@@ -148,8 +154,9 @@ Shared settings (`ENVIRONMENT`, `LOG_*`, `HTTP_*`, `POSTGRES_*`, `KAFKA_*`,
 | `OUTBOX_BATCH` | `500` | Events published per relay transaction |
 | `OUTBOX_INTERVAL` | `200ms` | Relay pause after a pass that found less than a full batch |
 
-Compose's `PSP_API_KEY` and `PSP_WEBHOOK_SECRET` are development placeholders;
-real ones come from a secret store. Locally, Compose maps the public port to
+Compose's `PSP_API_KEY` and `PSP_WEBHOOK_SECRET` are development placeholders
+shared with mockpsp (`.env` can override them); real ones come from a secret
+store. Locally, Compose maps the public port to
 8084, the admin port to 9094 and gRPC to 7072.
 
 ## Metrics

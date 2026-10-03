@@ -25,6 +25,7 @@ type Intent struct {
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	EventID      uuid.NullUUID
+	PolledAt     pgtype.Timestamptz
 }
 
 type LedgerEntry struct {

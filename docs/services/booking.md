@@ -7,8 +7,8 @@ Code: `internal/booking`. Schema: `booking` (migrations in
 
 **Status:** Phase 3 in progress. Built: the schema and its state machine
 (task 3.5), the booking API and the deadline job (task 3.6), the outbox
-relay (task 3.7), and payment intents from payment-svc (task 3.9; switched on
-in Compose with mockpsp, task 3.10). Confirmation and compensation arrive
+relay (task 3.7), and payment intents from payment-svc (task 3.9; on in
+Compose since mockpsp, task 3.10). Confirmation and compensation arrive
 with task 3.11.
 
 ## Responsibilities
@@ -137,7 +137,7 @@ defined in `internal/platform/config` and `internal/platform/otel`.
 | `INVENTORY_GRPC_ADDR` | `inventory:7070` | inventory-svc's internal gRPC API |
 | `SERVICE_PRIVATE_KEY_FILE` | required | booking-svc's Ed25519 key for service tokens; inventory-svc and payment-svc trust the public half |
 | `INVENTORY_TIMEOUT` | `800ms` | Deadline of each inventory call, retries included |
-| `PAYMENT_GRPC_ADDR` | empty | payment-svc's internal gRPC API; empty: no payment intents (Compose sets it from task 3.10) |
+| `PAYMENT_GRPC_ADDR` | empty | payment-svc's internal gRPC API; empty: no payment intents (Compose: `payment:7070`) |
 | `PAYMENT_TIMEOUT` | `8s` | Deadline of each payment-svc call, which includes the provider's |
 | `PAYMENT_GRACE` | `3m` | How long the hold's protection outlives the payment deadline; keep it below inventory-svc's `PAYMENT_WINDOW` |
 | `KAFKA_BROKERS` | `localhost:29092` | Kafka, for the outbox relay (Compose: `kafka:9092`) |

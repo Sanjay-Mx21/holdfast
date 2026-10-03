@@ -6,6 +6,7 @@
 //	POST /v1/orders          create an order; Idempotency-Key = the intent ID
 //	GET  /v1/orders/{id}     an order's status
 //	POST /v1/refunds         refund a payment; Idempotency-Key = the intent ID
+//	GET  /v1/settlements     captures and refunds in a window (from, to)
 //
 // Every call is idempotent on the provider's side, so the client retries
 // network errors, timeouts, 429 and 5xx with exponential backoff and jitter,
@@ -72,6 +73,31 @@ type Refund struct {
 	PaymentID   string `json:"paymentId"`
 	AmountPaise int64  `json:"amountPaise"`
 	Status      string `json:"status"` // PENDING or COMPLETED; completion also arrives as a webhook
+}
+
+// Settlement item types.
+const (
+	SettledCapture = "capture"
+	SettledRefund  = "refund"
+)
+
+// Settlement is the provider's report of money moved in a time window: what
+// the reconciler (design doc 9.9) compares with HoldFast's records.
+type Settlement struct {
+	From  time.Time        `json:"from"`
+	To    time.Time        `json:"to"`
+	Items []SettlementItem `json:"items"`
+}
+
+// SettlementItem is one capture or completed refund.
+type SettlementItem struct {
+	Type        string    `json:"type"` // SettledCapture or SettledRefund
+	OrderID     string    `json:"orderId"`
+	PaymentID   string    `json:"paymentId"`
+	RefundID    string    `json:"refundId,omitempty"`
+	Reference   string    `json:"reference"` // the order's reference: the intent ID
+	AmountPaise int64     `json:"amountPaise"`
+	At          time.Time `json:"at"`
 }
 
 // Config configures the client.
@@ -157,6 +183,14 @@ func (c *Client) CreateRefund(ctx context.Context, intentID, paymentID string, a
 	err := c.do(ctx, "create_refund", http.MethodPost, "/v1/refunds", intentID,
 		map[string]any{"paymentId": paymentID, "amountPaise": amountPaise}, &r)
 	return r, err
+}
+
+// Settlements returns the captures and completed refunds in [from, to).
+func (c *Client) Settlements(ctx context.Context, from, to time.Time) (Settlement, error) {
+	var s Settlement
+	q := url.Values{"from": {from.UTC().Format(time.RFC3339Nano)}, "to": {to.UTC().Format(time.RFC3339Nano)}}
+	err := c.do(ctx, "settlements", http.MethodGet, "/v1/settlements?"+q.Encode(), "", nil, &s)
+	return s, err
 }
 
 // do runs one call through the breaker, retrying what may succeed later.

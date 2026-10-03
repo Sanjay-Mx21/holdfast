@@ -174,6 +174,7 @@ func TestLedgerTransactionsMustBalance(t *testing.T) {
 
 func TestStatusPollingTakesDisjointBatches(t *testing.T) {
 	pool := testenv.Postgres(t)
+	testenv.Exclusive(t, pool, "payment-poll")
 	q := New(pool)
 	var ours []uuid.UUID
 	for range 3 {

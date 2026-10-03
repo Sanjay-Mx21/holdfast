@@ -40,12 +40,17 @@ RETURNING *;
 
 -- name: ClaimOpenIntents :many
 -- Status polling: intents still CREATED after a while, possibly because a
--- webhook was lost. Locked so concurrent pollers take disjoint batches.
+-- webhook was lost; the least recently polled first, never polled before
+-- all (P34). Locked so concurrent pollers take disjoint batches.
 SELECT * FROM payment.payment_intents
 WHERE status = 'CREATED' AND created_at < sqlc.arg(created_before) AND psp_order_id IS NOT NULL
-ORDER BY created_at
+ORDER BY polled_at NULLS FIRST, created_at
 LIMIT sqlc.arg(batch)
 FOR UPDATE SKIP LOCKED;
+
+-- name: MarkPolled :exec
+-- Stamps a poll, whatever its outcome, so the next pass takes others first.
+UPDATE payment.payment_intents SET polled_at = now() WHERE id = $1;
 
 -- name: InsertPSPOrder :exec
 INSERT INTO payment.psp_orders (psp_order_id, intent_id, amount_paise, checkout_url, expires_at)

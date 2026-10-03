@@ -73,6 +73,18 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
   - booking-svc returns `intentId` and `checkoutUrl` when
     `PAYMENT_GRPC_ADDR` is set. Compose runs payment-svc (ports 8084, 9094,
     7072); service doc `docs/services/payment.md`.
+- **mockpsp** (task 3.10, `cmd/mockpsp`): the stand-in payment provider.
+  - The provider API on the `internal/payment/psp` contract: idempotent
+    orders, full refunds, and `GET /v1/settlements` (with a client method
+    for the Phase 5 reconciler).
+  - A hosted checkout page (http://localhost:8085/checkout/...), which also
+    answers JSON for load tests.
+  - HMAC-signed webhooks, retried with backoff under the same event ID.
+  - On the admin port, behind `ADMIN_TOKEN`, a fault-injection API:
+    duplicated, delayed and lost webhooks, failed payments, held-back
+    answers and outages, drawn from a seeded source.
+  - Compose runs it, and booking-svc now calls payment-svc, so a booking
+    returns a working `checkoutUrl`. Service doc `docs/services/mockpsp.md`.
 
 ### Fixed
 
@@ -91,6 +103,12 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
   (`holdfast_test` locally), created on first use (P35). The `make up`
   stack's pollers and outbox relays no longer see the tests' rows, and its
   topics no longer carry the tests' events (P30).
+- payment-svc's status poller takes the least recently polled intents first
+  (migration `payment/00003` adds `polled_at`), so intents whose polls keep
+  failing no longer starve the rest (P34).
+- Integration tests that claim from a shared queue (overdue bookings, open
+  intents) take a cross-process lock (`testenv.Exclusive`), so parallel test
+  packages no longer claim each other's rows (P36).
 
 ## [0.2.0] - 2026-10-02
 

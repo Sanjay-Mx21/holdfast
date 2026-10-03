@@ -320,6 +320,7 @@ func TestConcurrentIdenticalRequestsBookOnce(t *testing.T) {
 
 func TestOverdueBookingsAreCancelled(t *testing.T) {
 	f := newFixture(t)
+	testenv.Exclusive(t, f.pool, "booking-deadline")
 	user := uuid.NewString()
 	var due []string
 	for range 3 {

@@ -14,7 +14,9 @@ import (
 
 // Poller asks the provider about intents still CREATED a while after their
 // order was opened, in case a webhook was lost, and applies what it learns
-// through the same moves as the webhooks. It runs in every replica; FOR
+// through the same moves as the webhooks. It takes the least recently
+// polled intents first, so ones whose polls keep failing cannot starve the
+// rest. It runs in every replica; FOR
 // UPDATE SKIP LOCKED gives concurrent pollers disjoint batches.
 type Poller struct {
 	svc      *Service
@@ -64,6 +66,9 @@ func (p *Poller) Pass(ctx context.Context) error {
 			cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 			order, err := p.svc.psp.GetOrder(cctx, in.PspOrderID.String)
 			cancel()
+			if err := q.MarkPolled(ctx, in.ID); err != nil {
+				return fmt.Errorf("payment: mark polled: %w", err)
+			}
 			if err != nil {
 				p.svc.m.polls.WithLabelValues("provider_error").Inc()
 				continue // try again next pass

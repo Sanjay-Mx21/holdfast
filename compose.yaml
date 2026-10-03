@@ -119,6 +119,7 @@ services:
       POSTGRES_DSN: postgres://holdfast:holdfast@postgres:5432/holdfast?sslmode=disable
       INVENTORY_GRPC_ADDR: inventory:7070
       SERVICE_PRIVATE_KEY_FILE: /keys/booking.key
+      PAYMENT_GRPC_ADDR: payment:7070
       KAFKA_BROKERS: kafka:9092 # the outbox relay publishes booking events
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     networks: [default, edge]
@@ -132,10 +133,11 @@ services:
       holdfastctl: { condition: service_completed_successfully }
       kafka-topics: { condition: service_completed_successfully }
       inventory: { condition: service_started }
+      payment: { condition: service_started }
     restart: unless-stopped
 
   # payment-svc: intents over gRPC for booking-svc, the provider's webhooks,
-  # the ledger. booking-svc calls it once mockpsp exists (task 3.10).
+  # the ledger. The provider is mockpsp.
   payment:
     build:
       context: .
@@ -146,8 +148,8 @@ services:
       POSTGRES_DSN: postgres://holdfast:holdfast@postgres:5432/holdfast?sslmode=disable
       GRPC_TRUSTED_CALLERS: booking=/keys/booking.pub
       PSP_BASE_URL: http://mockpsp:8080
-      PSP_API_KEY: dev-only-psp-api-key
-      PSP_WEBHOOK_SECRET: dev-only-webhook-secret-change-me-in-any-real-deployment
+      PSP_API_KEY: ${PSP_API_KEY:-dev-only-psp-api-key}
+      PSP_WEBHOOK_SECRET: ${PSP_WEBHOOK_SECRET:-dev-only-webhook-secret-change-me-in-any-real-deployment}
       KAFKA_BROKERS: kafka:9092 # the outbox relay publishes payment events
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
@@ -160,6 +162,27 @@ services:
       postgres: { condition: service_healthy }
       holdfastctl: { condition: service_completed_successfully }
       kafka-topics: { condition: service_completed_successfully }
+      mockpsp: { condition: service_started }
+    restart: unless-stopped
+
+  # mockpsp: the stand-in payment provider, with a checkout page for
+  # browsers (http://localhost:8085/checkout/...) and fault injection on its
+  # admin port. A test tool: never expose it.
+  mockpsp:
+    build:
+      context: .
+      args: { SERVICE: mockpsp }
+    environment:
+      ENVIRONMENT: development
+      LOG_FORMAT: text
+      PUBLIC_URL: http://localhost:8085
+      API_KEY: ${PSP_API_KEY:-dev-only-psp-api-key}
+      WEBHOOK_URL: http://payment:8080/v1/webhooks/psp
+      WEBHOOK_SECRET: ${PSP_WEBHOOK_SECRET:-dev-only-webhook-secret-change-me-in-any-real-deployment}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-only-admin-token-change-me-0123456789}
+    ports:
+      - "8085:8080" # provider API and checkout page
+      - "9095:9090" # admin: faults, reset, stats, metrics (never expose)
     restart: unless-stopped
 
   # Traces: services send OTLP to the collector, which forwards to Jaeger.

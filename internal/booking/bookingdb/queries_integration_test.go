@@ -166,6 +166,7 @@ func claimIn[T any](t *testing.T, pool *pgxpool.Pool, claim func(q *Queries) ([]
 
 func TestConcurrentDeadlineJobsTakeDisjointBatches(t *testing.T) {
 	f := newFixture(t)
+	testenv.Exclusive(t, f.pool, "booking-deadline")
 	past := time.Now().Add(-time.Minute)
 	expired := map[uuid.UUID]bool{}
 	for range 3 {

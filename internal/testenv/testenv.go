@@ -152,6 +152,28 @@ func Postgres(t testing.TB) *pgxpool.Pool {
 	return pool
 }
 
+// Exclusive holds a lock named name, across test processes, until the test
+// ends. Tests that claim from a shared queue (overdue bookings, open
+// intents) take it: the claims take every eligible row, so two packages
+// claiming at once would lock or move each other's rows (P36).
+func Exclusive(t testing.TB, pool *pgxpool.Pool, name string) {
+	t.Helper()
+	ctx := context.Background()
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		t.Fatalf("exclusive %s: %v", name, err)
+	}
+	key := "holdfast.testenv." + name
+	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock(hashtext($1))", key); err != nil {
+		conn.Release()
+		t.Fatalf("exclusive %s: %v", name, err)
+	}
+	t.Cleanup(func() {
+		_, _ = conn.Exec(context.Background(), "SELECT pg_advisory_unlock(hashtext($1))", key)
+		conn.Release()
+	})
+}
+
 // Kafka returns the client settings for the test Kafka cluster.
 func Kafka(t testing.TB) config.Kafka {
 	t.Helper()

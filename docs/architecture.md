@@ -35,6 +35,7 @@ IDs match section 2.3 of the design doc.
 | NGINX edge (`deploy/nginx`) | Built (Phase 2) | Nothing | queue-svc, inventory-svc |
 | booking-svc (`cmd/booking`) | Phase 3 in progress: the booking API and deadline job built | `booking` schema (with the final guard, `internal/booking/guard`) | PostgreSQL; inventory-svc and payment-svc over gRPC |
 | payment-svc (`cmd/payment`) | Phase 3 in progress (task 3.9): intents, provider orders, webhooks, the ledger, status polling | `payment` schema | PostgreSQL; the payment provider over HTTPS; called by booking-svc over gRPC; receives the provider's webhooks |
+| mockpsp (`cmd/mockpsp`) | Built (task 3.10): test tool, never deployed | In-memory orders and refunds | Sends signed webhooks to payment-svc; called by payment-svc; fault injection on its admin port |
 | holdfastctl (`cmd/holdfastctl`) | Built | Nothing (operator tool) | PostgreSQL, Valkey, Kafka (topic creation) |
 | auth | Planned | See design doc | |
 
@@ -54,7 +55,7 @@ allowlist, required deadlines, tracing and metrics on the server; tokens, an
 
 Locally, `compose.yaml` runs PostgreSQL 18, Valkey 9.1, a one-shot migration
 job, Kafka 4.3 (KRaft, with a one-shot topic job and Redpanda Console),
-inventory-svc, queue-svc, booking-svc, payment-svc, the NGINX edge, Prometheus, Grafana, the
+inventory-svc, queue-svc, booking-svc, payment-svc, mockpsp, the NGINX edge, Prometheus, Grafana, the
 OpenTelemetry Collector and Jaeger.
 
 **The edge** (`deploy/nginx/nginx.conf`, host port 8088) is the buyers' front
@@ -98,7 +99,7 @@ door, the role a CDN plays in production:
    which opens an order at the provider keyed by the intent ID, and answers
    with the `checkoutUrl`. The deadline is the hold's protection minus a
    3-minute grace (design doc 6.1).
-8. The buyer pays at the provider. Its webhook (`POST /v1/webhooks/psp` at
+8. The buyer pays at the provider (locally mockpsp's checkout page). Its webhook (`POST /v1/webhooks/psp` at
    payment-svc, HMAC-verified, deduplicated by event ID) captures the intent,
    books it in the ledger and writes `payment.captured.v1`, all in one
    transaction. Intents with no news after 2 minutes are polled. Confirmation
