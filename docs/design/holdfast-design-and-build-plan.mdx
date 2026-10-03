@@ -2102,10 +2102,10 @@ The dates are illustrative. The gates are not.
 
 **Exit criteria:**
 
-- [ ] The happy-path purchase works end to end, with one trace spanning every service.
-- [ ] A 1,000-purchase run with injected faults keeps I1, I2 and I4 at 0. (I3 goes fully green once the Phase 5 reconciler lands.)
-- [ ] E1 parts A and B pass.
-- [ ] ADRs 0008 to 0011 written. **Milestone: MVP backend complete.**
+- [x] The happy-path purchase works end to end, with one trace spanning every service. *2026-10-03: one purchase through the edge is one Jaeger trace of 20 spans across booking, inventory and payment, from `POST /v1/bookings` to inventory's Confirm. The provider's webhook starts its own trace, so payment-svc stores the booking request's trace with the intent and continues it (`payment/00004`).*
+- [x] A 1,000-purchase run with injected faults keeps I1, I2 and I4 at 0. (I3 goes fully green once the Phase 5 reconciler lands.) *2026-10-03: `cmd/contention -mode purchase` with the E3 mix: 1,000 purchases, 0 violations of every check; `loadtest/results/` (E1 part B with injected faults).*
+- [x] E1 parts A and B pass. *`make e1` and CI.*
+- [x] ADRs 0008 to 0011 written. **Milestone: MVP backend complete.** *Awaiting the owner's review.*
 
 **Demo checkpoint:** a Jaeger screenshot of one purchase crossing every service.
 

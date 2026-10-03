@@ -73,7 +73,10 @@ func (p *Poller) Pass(ctx context.Context) error {
 				p.svc.m.polls.WithLabelValues("provider_error").Inc()
 				continue // try again next pass
 			}
-			if err := p.svc.applyOrder(ctx, q, in, order); err != nil {
+			actx, span := continueTrace(ctx, in, "payment.apply_poll")
+			err = p.svc.applyOrder(actx, q, in, order)
+			span.End()
+			if err != nil {
 				return err
 			}
 			p.svc.m.polls.WithLabelValues(order.Status).Inc()

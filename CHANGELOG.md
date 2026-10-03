@@ -125,6 +125,15 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
     `docs/runbooks/saga.md`.
   - ADRs 0008 (gRPC for calls, Kafka for events), 0009 (transactional
     outbox with a polling relay) and 0010 (an orchestrated saga).
+- **Phase 3 exit:**
+  - A purchase is one trace. payment-svc stores the booking request's
+    trace context with the intent (migration `payment/00004`) and continues
+    it when a webhook or a poll settles the intent, linked to the
+    webhook's own trace.
+  - E1's purchase mode takes `-psp-faults` (mockpsp's fault mix) and
+    `-buyers-per-user`, polls for lost webhooks while it waits, and checks
+    the per-user cap (I4). 1,000 purchases under the E3 mix:
+    `loadtest/results/`.
 
 ### Fixed
 

@@ -150,6 +150,16 @@ Errors:
 completed refund reverses both. A deferred constraint trigger refuses, at
 commit, any transaction whose debits and credits differ.
 
+## Tracing
+
+Intents store the trace context of the request that created them
+(booking-svc's `POST /v1/bookings`; migration `payment/00004`). A webhook
+arrives in a trace of its own, since providers do not propagate ours, so
+the work it causes runs in a span (`payment.apply_webhook`, or
+`payment.apply_poll` for the poller) that continues the stored trace and
+links to the webhook's. The capture's event, booking-svc's saga and
+inventory's confirmation follow it: one trace per purchase.
+
 ## Events (outbox)
 
 Written to `payment.outbox` in the same transaction as the change, with the

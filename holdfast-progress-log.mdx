@@ -32,13 +32,13 @@ All times are IST (UTC+05:30).
 | **Project** | A flash-sale booking engine that sells exactly the available units under extreme demand, never more |
 | **Plan version** | 2.0 (1 October 2026) |
 | **Milestones complete** | M0 Foundation, M1 Correctness core, M1.5 Bring-up and baseline, and M2 Fair waiting room |
-| **Current milestone** | M3 MVP backend (Phase 3): 14 of 14 tasks done (section 9); the milestone exit check is next, then the owner's review |
+| **Current milestone** | M3 MVP backend (Phase 3): 14 of 14 tasks done and all 4 exit criteria met (section 9); awaiting the owner's review of M3 |
 | **Progress to v1.0** | About 35% (18 of about 51 focused-work days, excluding Phase 7 stretch goals), counting Phase 2's planned 7 days |
 | **Repository** | [github.com/Sanjay-Mx21/holdfast](https://github.com/Sanjay-Mx21/holdfast), branch `main` |
 | **First commit** | `2173e50` "first commit", 2026-10-01 20:20, 82 files, 12,973 lines |
 | **Latest release** | [v0.2.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.2.0), 2026-10-02 21:51, on `cd0592a` (before it: [v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0), 2026-10-01 23:47, on `9dcd2f8`) |
 | **CI** | Green since 2026-10-01 22:00; `main` is protected and every change needs a pull request with all 10 required checks passing (`images (booking)`, `images (payment)` and `images (mockpsp)` added on 2026-10-03) |
-| **Issues so far** | 96 recorded: 91 resolved, 5 open (section 6) |
+| **Issues so far** | 98 recorded: 92 resolved, 6 open (section 6) |
 
 <Callout type="tip" title="M2 complete: the fair waiting room (2026-10-02)">
 
@@ -193,7 +193,13 @@ The rest of the list was already covered by tests written with tasks 3.4 to 3.12
 - Runbooks RB-3 and RB-4 (`docs/runbooks/saga.md`); ADRs 0008, 0009 and 0010; the architecture, booking and payment docs updated.
 - Tests: a replay test through real Kafka (a dry run changes nothing, replays in order, a second run only new messages) and a refund-command test; 2 runs each under `-race`.
 - **Live**, with PostgreSQL's capacity at its sold count, booking-svc stopped while A and B paid, and mockpsp's outage fault on before it restarted: both refunds were refused by the provider until the breaker opened (10 retries) and the requests were dead-lettered. With the provider back, `holdfastctl refund` refunded B, and `holdfastctl dlq replay` replayed 2 messages, refunding A while B's old request changed nothing. Then a second replay found 0, `refund` refused the refunded booking, the receivable was back to 0, and mockpsp refunded each payment once.
-- Gates: gofmt, test, lint, `make gen` stable, `buf breaking` clean, up, itest with the stack running (25 ok after P33 recurred), E1 PASS. | Branch `feat/p3-docs`, issue #32 |
+- Gates: gofmt, test, lint, `make gen` stable, `buf breaking` clean, up, itest with the stack running (25 ok after P33 recurred), E1 PASS. | PR #89 (merged by the assistant at 12:54 after all 10 checks passed), `2a59c88`; issue #32 closed |
+| 2026-10-03 14:55 | **Phase 3 exit check.** Two criteria needed work.
+- **One trace per purchase.** A purchase was two traces: the provider's webhook starts its own, so the capture, the saga and inventory's Confirm were not in the booking request's trace (P38). payment-svc now stores the booking request's trace context with the intent (`payment/00004`) and continues it when a webhook or a poll settles the intent, linked to the webhook's trace. Live: one purchase through the edge is one Jaeger trace of 20 spans across booking, inventory and payment, ending with Confirm and `booking.confirmed`.
+- **1,000 purchases with injected faults.** E1's purchase mode gained `-psp-faults` (mockpsp's fault mix), `-buyers-per-user` (so the per-user cap refuses some) and polling while it waits. With the E3 mix (failure 0.1, duplicate 0.2, delay 0.1 at 1 to 3 s, loss 0.05, held-back answers 0.05): 1,000 purchases (898 confirmed, 102 cancelled); 207 duplicates dropped; 46 lost webhooks, 45 captures learned by polling; most units for one user 4 of 4; every check passed (`loadtest/results/e1-purchase-faults-2026-10-03.json` and README).
+- **The other two criteria:** E1 A and B pass; ADRs 0008 to 0011 exist.
+- **Gates:** gofmt, test, lint, `make gen` stable, up, itest with the stack running.
+- **E1 with the stack running failed one check:** "no infrastructure errors" in the guard mode ("too many clients"), with every invariant passing. Cause: P39 (queue-svc holds one PostgreSQL connection per provisioned queue: 31 for this session's 35 queues). With queue-svc stopped for the run, `make e1` passed all modes with 0 failed checks; queue-svc was restarted. | Branch `feat/p3-exit` |
 
 ## 3. What is complete, and what each piece contributes
 
@@ -270,10 +276,10 @@ Every problem met while bringing Drop 1 up and running the soak on 2026-10-01, i
 
 | Group | Recorded | Resolved | Open |
 |---|---|---|---|
-| P: defects in the repository | 37 | 33 | 4 |
+| P: defects in the repository | 39 | 34 | 5 |
 | E: machine and network | 21 | 20 | 1 |
 | D: diagnosis and process | 38 | 38 | 0 |
-| **Total** | **96** | **91** | **5** |
+| **Total** | **98** | **92** | **6** |
 
 CI took **three runs** to go green:
 
@@ -324,6 +330,8 @@ CI took **three runs** to go green:
 | P35 | Integration tests and the `make up` stack shared one PostgreSQL database. The running payment-svc's poller polled the tests' intents (found in task 3.10's live check), the running outbox relays published the tests' events (P30), and a test of the poller could race the running one | Noise in development metrics and topics; a possible flaky poller test | One database for tests and the stack (the PostgreSQL side of P7) | `testenv` uses `<database>_test`, created on first use under an advisory lock; holdfastctl's test uses the same DSN | ✅ PR after task 3.9 |
 | P36 | `TestConcurrentDeadlineJobsTakeDisjointBatches` (bookingdb) failed in CI on PR #85, with no change to it: one of its expired bookings was claimed by neither of its two jobs | One failed CI run; latent since tasks 3.5 and 3.9, in four tests | Test packages run as parallel processes on one test database, and the claims take every eligible row: booking's deadline-job test locked or cancelled bookingdb's rows (`FOR UPDATE SKIP LOCKED` skips them). The paymentdb claim test and the payment poller tests share the same race | `testenv.Exclusive(t, pool, name)` holds a cross-process advisory lock for the test's duration; the six queue-claiming tests take `booking-deadline` or `payment-poll`. The four packages, 10 times in parallel: 310 of 310 | ✅ Task 3.10 (PR #85) |
 | P37 | `TestRefillsOverTime` (rate limiter) failed once in task 3.12's full `make itest`, run right after E1 with the stack up: "second immediate request allowed" | One failed run; first failure on record | The test allowed one token every 50 ms and expected two back-to-back calls to land inside one interval; on a loaded machine more than 50 ms can pass between them | 500 ms per token and a 600 ms wait: the same behaviour with ten times the margin; 20 of 20 targeted runs and the next full `make itest` pass | ✅ Task 3.12 |
+| P38 | A purchase was two traces, not one: the provider's webhook starts its own trace, so the capture, booking-svc's saga and inventory's Confirm were in a different trace from the booking request. `docs/architecture.md` had claimed since task 3.2 that "a purchase is one trace across asynchronous hops" | Phase 3's first exit criterion (one trace spanning every service) was not met; the doc overstated what was built | The trace context crossed Kafka but not the provider: a webhook carries no `traceparent`, and nothing linked it back to the booking | Found during the exit check. payment-svc stores the trace with the intent and continues it when settling (migration `payment/00004`; `TestPaymentContinuesTheBookingsTrace`); live, one purchase is one trace of 20 spans. The architecture doc now describes how | ✅ Phase 3 exit |
+| P39 | queue-svc holds one PostgreSQL connection per provisioned queue: each event's admission leader keeps its advisory lock on a dedicated connection (ADR 0007), and every replica runs a controller for every queue. On 2026-10-03 queue-svc held 31 connections for 35 queues, so `make e1`'s guard mode (64 connections) no longer fitted under PostgreSQL's 100 beside the stack | Connections grow with the number of events, unbounded: many events on sale at once would exhaust PostgreSQL (`max_connections`) and starve every service sharing it. Locally, E1 fails "no infrastructure errors" while the stack runs | The per-event dedicated connection in `internal/queue/admission.go` | Not fixed: it changes ADR 0007's design (reviewed in Phase 2), so it is for the owner. Recommendation: one session per replica holds all of its events' advisory locks (they are per session, and a session can hold many), with the fencing epoch unchanged; or stop running controllers for events that have ended. Meanwhile, E1 passes with queue-svc stopped | ⏳ Open (owner's decision) |
 
 ### 6.3 Machine and network
 
@@ -407,6 +415,7 @@ These needed the owner to type a password or approve a browser login. Both are d
 
 - E1 latency varies a lot on this laptop. Across the 100-run soak, per-run hold p99 ranged from 74 ms to 1,088 ms (median 114 ms) and guard p99 from 845 ms to 2,002 ms (median 918 ms). These are stress figures at about 85 times the design hold rate, not SLO measurements; `loadtest/results/README.md` explains why and must be read before quoting any of them.
 - GitHub notice on every CI run: `ubuntu-latest` moves to Ubuntu 26 from 19 October 2026. CI may need attention after that date.
+- After `make up` recreates booking-svc, its saga consumer group took about 13 s to rejoin before processing a capture (seen in the Phase 3 exit trace). Normal for a group rebalance on restart; worth watching in rolling deploys (Phase 6), where it delays confirmations, not correctness.
 
 ## 7. M1.5 tasks (complete)
 

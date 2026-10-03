@@ -289,8 +289,13 @@ provider about quiet intents, least recently polled first.
 - **Traces** (from Phase 3, `internal/platform/otel`): every public request
   gets a server span named after its route pattern, continuing the caller's
   W3C `traceparent`; Kafka events carry `traceparent`, and consumers continue
-  the producer's trace, so a purchase is one trace across asynchronous hops;
-  Valkey commands get spans only inside a trace. Spans go over OTLP to the
+  the producer's trace; Valkey commands get spans only inside a trace.
+  The provider's webhook cannot carry our trace, so payment-svc stores the
+  booking request's trace context with the intent and continues it when a
+  webhook or a poll settles the intent (linked to the webhook's own trace).
+  A purchase is therefore one trace: the booking request (booking,
+  inventory, payment, the provider call), then the capture, the saga and the
+  inventory confirmation. Spans go over OTLP to the
   OpenTelemetry Collector, which forwards them to Jaeger
   (http://localhost:16686). Log lines carry `trace_id` and `span_id`.
 

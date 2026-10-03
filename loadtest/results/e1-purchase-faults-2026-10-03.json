@@ -1,0 +1,94 @@
+[
+  {
+    "mode": "purchase",
+    "attempts": 2000,
+    "capacity": 1000,
+    "qty": 1,
+    "concurrency": 32,
+    "outcomes": {
+      "answers_held_back": 67,
+      "cancelled": 102,
+      "confirmed": 898,
+      "duplicates_dropped": 207,
+      "paid": 898,
+      "payment_failed": 102,
+      "refund_required": 0,
+      "settled_by_poll": 45,
+      "sold_out": 500,
+      "user_limit": 500,
+      "webhooks_delayed": 105,
+      "webhooks_duplicated": 207,
+      "webhooks_lost": 46
+    },
+    "elapsedMs": 11175.461,
+    "attemptsPerSecond": 178.96352123614122,
+    "latencyMs": {
+      "max": 4352.575,
+      "p50": 73.206,
+      "p95": 435.389,
+      "p99": 2259.911
+    },
+    "checks": [
+      {
+        "name": "I1 holds granted == units on sale",
+        "ok": true,
+        "detail": "held and booked 1000, expected 1000"
+      },
+      {
+        "name": "I1 sold == confirmed units \u003c= capacity",
+        "ok": true,
+        "detail": "PostgreSQL sold 898, confirmed 898 bookings of 1 units, capacity 1000"
+      },
+      {
+        "name": "every booking ended: confirmed or cancelled",
+        "ok": true,
+        "detail": "898 confirmed + 102 cancelled of 1000 booked, 0 refund-required"
+      },
+      {
+        "name": "I2 one capture per booking, each confirmed (I3)",
+        "ok": true,
+        "detail": "898 captured intents, 898 paid, 898 confirmed"
+      },
+      {
+        "name": "every failed payment cancelled its booking",
+        "ok": true,
+        "detail": "102 failed intents, 102 declined, 102 cancelled"
+      },
+      {
+        "name": "I5 every hold SOLD or RELEASED",
+        "ok": true,
+        "detail": "SOLD 898, RELEASED 102, other 0"
+      },
+      {
+        "name": "Valkey agrees with PostgreSQL on what is left",
+        "ok": true,
+        "detail": "Valkey available 102, capacity 1000 - PostgreSQL sold 898"
+      },
+      {
+        "name": "ledger: receivable == captured payments",
+        "ok": true,
+        "detail": "psp_receivable 89800 paise for 898 captures of 100 paise"
+      },
+      {
+        "name": "redelivering every event changed nothing",
+        "ok": true,
+        "detail": "1000 events delivered twice; states map[CANCELLED:102 CONFIRMED:898] then map[CANCELLED:102 CONFIRMED:898]"
+      },
+      {
+        "name": "payment failures were injected",
+        "ok": true,
+        "detail": "102 of 1000 payments failed (rate 0.10)"
+      },
+      {
+        "name": "I4 no user bought more than the per-user limit",
+        "ok": true,
+        "detail": "most units by one user 4, limit 4; 500 attempts refused by the cap"
+      },
+      {
+        "name": "no infrastructure errors",
+        "ok": true,
+        "detail": "none"
+      }
+    ]
+  }
+]

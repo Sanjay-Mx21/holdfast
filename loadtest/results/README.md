@@ -3,6 +3,63 @@
 Raw evidence for every number HoldFast publishes. A number that is not backed
 by a file in this folder must not appear in the README, a resume or a post.
 
+## E1 part B with injected faults, 2026-10-03 (Phase 3 exit)
+
+**Result: all 12 checks passed. 1,000 purchases completed with I1, I2 and I4
+at 0 violations under the design's E3 fault mix.**
+
+| File | Content |
+|---|---|
+| `e1-purchase-faults-2026-10-03.json` | The report: outcomes, latencies, checks |
+
+### Method
+
+```bash
+go run ./cmd/contention -mode purchase -purchases 2000 -capacity 1000 -buyers-per-user 6 \
+  -psp-faults '{"duplicateRate":0.2,"delayRate":0.1,"delayMin":"1s","delayMax":"3s","lossRate":0.05,"timeoutRate":0.05,"timeoutDelay":"3s"}' \
+  -json loadtest/results/e1-purchase-faults-2026-10-03.json
+```
+
+- **Load:** 2,000 buyers race for 1,000 units, sharing user IDs six at a
+  time, so the per-user cap of 4 refuses some.
+- **Path:** each winner books, and pays at an in-process mockpsp. The
+  real inventory, booking and payment services run in one process
+  against local Valkey and PostgreSQL (its own `<name>_e1` database), and
+  the payment events are fed to the booking saga twice each.
+- **Faults (seeded):** 10% of payments fail; 20% of webhooks are
+  duplicated, 10% delayed 1 to 3 s and 5% lost; 5% of provider answers are
+  held back 3 s, past payment-svc's 2 s attempt timeout. The delays are
+  shorter than E3's 30 to 90 s to keep the run short. The poller runs
+  while the run waits, so lost webhooks are recovered as in production.
+- **Machine:** the development laptop, with the whole `make up` stack
+  running.
+
+### Numbers
+
+| Measure | Value |
+|---|---|
+| Holds granted (1,000 units) | 1,000 (500 refused sold out, 500 by the per-user cap) |
+| Paid and confirmed | 898 |
+| Payment failed and cancelled | 102 (rate 0.10) |
+| Webhooks duplicated / delayed / lost | 207 / 105 / 46 |
+| Duplicates dropped by payment-svc | 207 |
+| Captures learned by polling | 45 |
+| Provider answers held back | 67 |
+| PostgreSQL sold, Valkey left | 898, 102 (capacity 1,000) |
+| Receivable in the ledger | 89,800 paise = 898 captures |
+| Most units bought by one user | 4 (limit 4) |
+
+### Limits
+
+- One process, one machine, one run. This is a correctness experiment, not
+  a load test, and its latencies are not SLO measurements.
+- I3 (every capture confirmed or refunded within 15 minutes) holds here for
+  every capture, but its guarantee for webhooks lost beyond the poller's
+  reach needs the Phase 5 reconciler.
+- The guard never refused a sale in this run, because Valkey and PostgreSQL
+  agreed. Refusals and refunds are exercised by the saga tests and by the
+  task 3.11 and 3.14 live checks.
+
 ## E1 soak, 2026-10-01 (task 1.5.7)
 
 **Result: 100 of 100 runs passed. 900 of 900 invariant checks passed, 0 failed.**

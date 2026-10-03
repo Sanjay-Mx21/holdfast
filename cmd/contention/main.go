@@ -56,6 +56,8 @@ type options struct {
 	jsonPath      string
 	purchases     int
 	payFailure    float64
+	pspFaults     string
+	buyersPerUser int
 }
 
 // Check is one invariant and whether it held.
@@ -101,12 +103,14 @@ func main() {
 	flag.StringVar(&o.dsn, "dsn", os.Getenv("POSTGRES_DSN"), "PostgreSQL DSN for -mode guard and purchase")
 	flag.IntVar(&o.purchases, "purchases", 2_000, "buyers attempting a whole purchase in -mode purchase")
 	flag.Float64Var(&o.payFailure, "pay-failure", 0.1, "share of payments the provider fails in -mode purchase")
+	flag.StringVar(&o.pspFaults, "psp-faults", "", `more mockpsp faults for -mode purchase, as its admin API's JSON, e.g. {"duplicateRate":0.2,"lossRate":0.05}`)
+	flag.IntVar(&o.buyersPerUser, "buyers-per-user", 1, "buyers sharing one user ID in -mode purchase (above the per-user limit, the cap refuses some)")
 	flag.BoolVar(&o.keep, "keep", false, "keep the test event's data afterwards")
 	flag.StringVar(&o.jsonPath, "json", "", "also write the reports as JSON to this file")
 	flag.Parse()
 
-	if o.qty < 1 || o.qty > o.perUser || o.capacity < 1 || o.concurrency < 1 || o.purchases < 1 || o.payFailure < 0 || o.payFailure > 1 {
-		fatal(errors.New("need 1 <= qty <= per-user-limit, capacity >= 1, concurrency >= 1, purchases >= 1, 0 <= pay-failure <= 1"))
+	if o.qty < 1 || o.qty > o.perUser || o.capacity < 1 || o.concurrency < 1 || o.purchases < 1 || o.payFailure < 0 || o.payFailure > 1 || o.buyersPerUser < 1 {
+		fatal(errors.New("need 1 <= qty <= per-user-limit, capacity >= 1, concurrency >= 1, purchases >= 1, 0 <= pay-failure <= 1, buyers-per-user >= 1"))
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
