@@ -480,6 +480,84 @@ func (x *BookingRefundRequired) GetRequiredAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// BookingRefunded: the refund of a booking that could not be confirmed
+// completed; the saga is over (invariant I3). ce_type booking.refunded.v1.
+type BookingRefunded struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BookingId     string                 `protobuf:"bytes,1,opt,name=booking_id,json=bookingId,proto3" json:"booking_id,omitempty"`
+	IntentId      string                 `protobuf:"bytes,2,opt,name=intent_id,json=intentId,proto3" json:"intent_id,omitempty"`
+	AmountPaise   int64                  `protobuf:"varint,3,opt,name=amount_paise,json=amountPaise,proto3" json:"amount_paise,omitempty"`
+	PspRefundId   string                 `protobuf:"bytes,4,opt,name=psp_refund_id,json=pspRefundId,proto3" json:"psp_refund_id,omitempty"`
+	RefundedAt    *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=refunded_at,json=refundedAt,proto3" json:"refunded_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BookingRefunded) Reset() {
+	*x = BookingRefunded{}
+	mi := &file_holdfast_events_v1_booking_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BookingRefunded) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BookingRefunded) ProtoMessage() {}
+
+func (x *BookingRefunded) ProtoReflect() protoreflect.Message {
+	mi := &file_holdfast_events_v1_booking_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BookingRefunded.ProtoReflect.Descriptor instead.
+func (*BookingRefunded) Descriptor() ([]byte, []int) {
+	return file_holdfast_events_v1_booking_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *BookingRefunded) GetBookingId() string {
+	if x != nil {
+		return x.BookingId
+	}
+	return ""
+}
+
+func (x *BookingRefunded) GetIntentId() string {
+	if x != nil {
+		return x.IntentId
+	}
+	return ""
+}
+
+func (x *BookingRefunded) GetAmountPaise() int64 {
+	if x != nil {
+		return x.AmountPaise
+	}
+	return 0
+}
+
+func (x *BookingRefunded) GetPspRefundId() string {
+	if x != nil {
+		return x.PspRefundId
+	}
+	return ""
+}
+
+func (x *BookingRefunded) GetRefundedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RefundedAt
+	}
+	return nil
+}
+
 var File_holdfast_events_v1_booking_proto protoreflect.FileDescriptor
 
 const file_holdfast_events_v1_booking_proto_rawDesc = "" +
@@ -519,7 +597,15 @@ const file_holdfast_events_v1_booking_proto_rawDesc = "" +
 	"\famount_paise\x18\x03 \x01(\x03R\vamountPaise\x128\n" +
 	"\x06reason\x18\x04 \x01(\x0e2 .holdfast.events.v1.RefundReasonR\x06reason\x12;\n" +
 	"\vrequired_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"requiredAt*\x8a\x01\n" +
+	"requiredAt\"\xd1\x01\n" +
+	"\x0fBookingRefunded\x12\x1d\n" +
+	"\n" +
+	"booking_id\x18\x01 \x01(\tR\tbookingId\x12\x1b\n" +
+	"\tintent_id\x18\x02 \x01(\tR\bintentId\x12!\n" +
+	"\famount_paise\x18\x03 \x01(\x03R\vamountPaise\x12\"\n" +
+	"\rpsp_refund_id\x18\x04 \x01(\tR\vpspRefundId\x12;\n" +
+	"\vrefunded_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"refundedAt*\x8a\x01\n" +
 	"\x12CancellationReason\x12#\n" +
 	"\x1fCANCELLATION_REASON_UNSPECIFIED\x10\x00\x12&\n" +
 	"\"CANCELLATION_REASON_PAYMENT_FAILED\x10\x01\x12'\n" +
@@ -543,7 +629,7 @@ func file_holdfast_events_v1_booking_proto_rawDescGZIP() []byte {
 }
 
 var file_holdfast_events_v1_booking_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_holdfast_events_v1_booking_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_holdfast_events_v1_booking_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_holdfast_events_v1_booking_proto_goTypes = []any{
 	(CancellationReason)(0),       // 0: holdfast.events.v1.CancellationReason
 	(RefundReason)(0),             // 1: holdfast.events.v1.RefundReason
@@ -551,21 +637,23 @@ var file_holdfast_events_v1_booking_proto_goTypes = []any{
 	(*BookingConfirmed)(nil),      // 3: holdfast.events.v1.BookingConfirmed
 	(*BookingCancelled)(nil),      // 4: holdfast.events.v1.BookingCancelled
 	(*BookingRefundRequired)(nil), // 5: holdfast.events.v1.BookingRefundRequired
-	(*timestamppb.Timestamp)(nil), // 6: google.protobuf.Timestamp
+	(*BookingRefunded)(nil),       // 6: holdfast.events.v1.BookingRefunded
+	(*timestamppb.Timestamp)(nil), // 7: google.protobuf.Timestamp
 }
 var file_holdfast_events_v1_booking_proto_depIdxs = []int32{
-	6, // 0: holdfast.events.v1.BookingCreated.payment_deadline:type_name -> google.protobuf.Timestamp
-	6, // 1: holdfast.events.v1.BookingCreated.created_at:type_name -> google.protobuf.Timestamp
-	6, // 2: holdfast.events.v1.BookingConfirmed.confirmed_at:type_name -> google.protobuf.Timestamp
+	7, // 0: holdfast.events.v1.BookingCreated.payment_deadline:type_name -> google.protobuf.Timestamp
+	7, // 1: holdfast.events.v1.BookingCreated.created_at:type_name -> google.protobuf.Timestamp
+	7, // 2: holdfast.events.v1.BookingConfirmed.confirmed_at:type_name -> google.protobuf.Timestamp
 	0, // 3: holdfast.events.v1.BookingCancelled.reason:type_name -> holdfast.events.v1.CancellationReason
-	6, // 4: holdfast.events.v1.BookingCancelled.cancelled_at:type_name -> google.protobuf.Timestamp
+	7, // 4: holdfast.events.v1.BookingCancelled.cancelled_at:type_name -> google.protobuf.Timestamp
 	1, // 5: holdfast.events.v1.BookingRefundRequired.reason:type_name -> holdfast.events.v1.RefundReason
-	6, // 6: holdfast.events.v1.BookingRefundRequired.required_at:type_name -> google.protobuf.Timestamp
-	7, // [7:7] is the sub-list for method output_type
-	7, // [7:7] is the sub-list for method input_type
-	7, // [7:7] is the sub-list for extension type_name
-	7, // [7:7] is the sub-list for extension extendee
-	0, // [0:7] is the sub-list for field type_name
+	7, // 6: holdfast.events.v1.BookingRefundRequired.required_at:type_name -> google.protobuf.Timestamp
+	7, // 7: holdfast.events.v1.BookingRefunded.refunded_at:type_name -> google.protobuf.Timestamp
+	8, // [8:8] is the sub-list for method output_type
+	8, // [8:8] is the sub-list for method input_type
+	8, // [8:8] is the sub-list for extension type_name
+	8, // [8:8] is the sub-list for extension extendee
+	0, // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_holdfast_events_v1_booking_proto_init() }
@@ -579,7 +667,7 @@ func file_holdfast_events_v1_booking_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_holdfast_events_v1_booking_proto_rawDesc), len(file_holdfast_events_v1_booking_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

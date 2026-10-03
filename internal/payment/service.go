@@ -36,6 +36,7 @@ var (
 type Provider interface {
 	CreateOrder(ctx context.Context, intentID string, req psp.CreateOrder) (psp.Order, error)
 	GetOrder(ctx context.Context, orderID string) (psp.Order, error)
+	CreateRefund(ctx context.Context, intentID, paymentID string, amountPaise int64) (psp.Refund, error)
 }
 
 // Service manages payment intents.

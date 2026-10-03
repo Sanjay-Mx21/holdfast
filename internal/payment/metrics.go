@@ -14,6 +14,7 @@ type Metrics struct {
 	captures *prometheus.CounterVec
 	mismatch prometheus.Counter
 	polls    *prometheus.CounterVec
+	refunds  *prometheus.CounterVec
 }
 
 // NewMetrics registers payment-svc's metrics. Labels are bounded: webhook
@@ -35,6 +36,10 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 			Help: "Captures refused because the amount differed from the intent's: page a human.",
 		}),
 		polls: f.NewCounterVec(prometheus.CounterOpts{Name: "holdfast_payment_polls_total", Help: "Status polls of open intents, by result."}, []string{"result"}),
+		refunds: f.NewCounterVec(prometheus.CounterOpts{
+			Name: "holdfast_payment_refund_requests_total",
+			Help: "Refund requests to the provider: requested, retry (provider unreachable), rejected (dead-lettered for a human).",
+		}, []string{"result"}),
 	}
 }
 

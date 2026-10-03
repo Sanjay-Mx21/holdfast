@@ -187,7 +187,16 @@ func run(ctx context.Context) error {
 	} else {
 		log.Warn("PAYMENT_GRPC_ADDR is not set: bookings are created without a payment intent")
 	}
-	svc := booking.NewService(pool, inventory.NewClient(conn), intents, booking.Config{Grace: cfg.PaymentGrace}, bm, log)
+	inv := inventory.NewClient(conn)
+	svc := booking.NewService(pool, inv, intents, booking.Config{Grace: cfg.PaymentGrace}, bm, log)
+
+	// The saga: payment-svc's events confirm, cancel or refund bookings.
+	saga, err := kafka.NewConsumer(cfg.Kafka, serviceName, kafka.ConsumerConfig{
+		Group: booking.SagaConsumer, Topics: []string{kafka.TopicPayment},
+	}, booking.NewSaga(pool, inv, bm, log).Handle, kafka.NewMetrics(reg), log)
+	if err != nil {
+		return err
+	}
 
 	hc := health.New(2*time.Second, postgres.Check(pool))
 	httpMetrics := httpx.NewHTTPMetrics(reg)
@@ -215,6 +224,7 @@ func run(ctx context.Context) error {
 		httpx.NewServer("admin", cfg.HTTP.AdminAddr, admin, cfg.HTTP, log, httpx.WithWriteTimeout(90*time.Second)),
 		booking.NewDeadlineJob(pool, cfg.DeadlineScanInterval, cfg.DeadlineBatch, bm, log),
 		relay,
+		saga,
 	)
 }
 

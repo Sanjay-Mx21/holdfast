@@ -102,8 +102,13 @@ door, the role a CDN plays in production:
 8. The buyer pays at the provider (locally mockpsp's checkout page). Its webhook (`POST /v1/webhooks/psp` at
    payment-svc, HMAC-verified, deduplicated by event ID) captures the intent,
    books it in the ledger and writes `payment.captured.v1`, all in one
-   transaction. Intents with no news after 2 minutes are polled. Confirmation
-   (task 3.11) follows.
+   transaction. Intents with no news after 2 minutes are polled.
+9. booking-svc's saga consumes `payment.captured.v1`. In one transaction it
+   runs the final guard and confirms the booking (`booking.confirmed.v1`),
+   or marks it `REFUND_REQUIRED` if the guard refuses. After the commit it
+   makes the hold SOLD over gRPC (or releases it). A refused sale is refunded
+   by payment-svc through the provider, and the booking ends `REFUNDED`. A
+   failed or expired payment cancels the booking and releases its hold.
 
 ### `POST /v1/events/{eventID}/holds`
 
@@ -174,8 +179,8 @@ dead-letter topic:
 
 | Topic | Key | Producer |
 |---|---|---|
-| `holdfast.booking.v1` | booking ID | booking-svc, via its outbox |
-| `holdfast.payment.v1` | booking ID | payment-svc, via its outbox |
+| `holdfast.booking.v1` | booking ID | booking-svc, via its outbox; consumed by payment-svc (`payment-refunds`) |
+| `holdfast.payment.v1` | booking ID | payment-svc, via its outbox; consumed by booking-svc (`booking-saga`) |
 | `holdfast.inventory.v1` | event ID | inventory-svc, informational snapshots |
 | `<topic>.dlq.v1` (for example `holdfast.booking.dlq.v1`) | original key | any consumer, after repeated failures |
 

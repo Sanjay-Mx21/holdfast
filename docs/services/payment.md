@@ -10,7 +10,7 @@ Binary: `cmd/payment`. Code: `internal/payment` (the provider client in
 **Status:** Phase 3 in progress. Built: the schema (task 3.8), the service
 (task 3.9), and mockpsp, the local provider (task 3.10,
 `docs/services/mockpsp.md`); booking-svc calls payment-svc in Compose.
-Refund requests arrive with task 3.11.
+Refunds of bookings the final guard refused: task 3.11.
 
 ## Responsibilities
 
@@ -20,6 +20,7 @@ Refund requests arrive with task 3.11.
 - Apply the provider's webhooks exactly once, forward only, and book every
   capture and refund in the ledger.
 - Find out what happened to intents with no news (status polling).
+- Refund the bookings booking-svc cannot confirm.
 - Announce every outcome on `holdfast.payment.v1` (the outbox).
 
 ## Internal gRPC API
@@ -118,6 +119,28 @@ A captured, failed or expired order gets the same move, ledger entries and
 event as its webhook would have. The webhook arriving later then changes
 nothing.
 
+## Refunds
+
+payment-svc consumes `holdfast.booking.v1` as the group `payment-refunds`
+(`internal/payment/refunds.go`).
+
+1. For `booking.refund_required.v1`, one transaction records the message's
+   `ce_id` (a redelivery changes nothing) and moves the booking's intent
+   `CAPTURED` to `REFUND_PENDING`.
+2. After the commit, on every delivery while the intent is
+   `REFUND_PENDING`, it asks the provider for a full refund
+   (`POST /v1/refunds`, keyed by the intent ID, so repeats are harmless).
+3. The provider's `refund.completed` webhook finishes it (`REFUNDED`, the
+   capture's ledger entries reversed, `refund.completed.v1`), and booking-svc
+   closes the booking.
+
+Errors:
+
+- The provider unreachable: the message is retried.
+- The provider refusing the refund: dead-lettered for a human.
+- A booking with no intent: logged and skipped (P30).
+- An intent that was never captured: left alone.
+
 ## The ledger
 
 `payment.ledger_entries` holds double-entry transactions: each capture debits
@@ -167,6 +190,7 @@ store. Locally, Compose maps the public port to
 | `holdfast_webhooks_total` | `type`, `duplicate` | Webhooks by type (the provider's four, plus `malformed`, `bad_signature`, `other`) |
 | `holdfast_payment_captures_total` | `via` | Captures learned by `webhook` or `poll` |
 | `holdfast_payment_amount_mismatch_total` | | Captures refused for a different amount: page a human |
+| `holdfast_payment_refund_requests_total` | `result` | Refund requests: requested, retry, rejected |
 | `holdfast_payment_polls_total` | `result` | Polled orders by provider status, `provider_error`, or `error` for a failed pass |
 | `holdfast_psp_requests_total` | `op`, `result` | Provider calls: ok, retried, rejected, unavailable, breaker_open |
 | `holdfast_psp_breaker_state` | | 0 closed, 0.5 half-open, 1 open |

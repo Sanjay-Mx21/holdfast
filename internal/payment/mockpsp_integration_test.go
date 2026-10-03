@@ -55,7 +55,7 @@ func newMockPSPFixture(t *testing.T) *withMockPSP {
 	public, admin := httpx.NewRouter(), httpx.NewRouter()
 	pspSrv := httptest.NewServer(public)
 	t.Cleanup(pspSrv.Close)
-	provider := mockpsp.New(mockpsp.Config{APIKey: "psp-key"}, mockpsp.NewStore(pspSrv.URL), faults, dispatcher, mm, quiet)
+	provider := mockpsp.New(mockpsp.Config{APIKey: "psp-key", RefundDelay: 50 * time.Millisecond}, mockpsp.NewStore(pspSrv.URL), faults, dispatcher, mm, quiet)
 	provider.Register(public, admin, authn.RequireStaticToken("unused-unused-unused-unused-unused"))
 
 	client, err := psp.New(psp.Config{BaseURL: pspSrv.URL, APIKey: "psp-key"}, psp.NewMetrics(prometheus.NewRegistry()))
@@ -148,5 +148,28 @@ func TestLostWebhookIsRecoveredByPolling(t *testing.T) {
 	}
 	if s := w.status(t, in.ID); s != "CAPTURED" || w.balance(t, in.ID, "psp_receivable") != 4200 {
 		t.Fatalf("after polling: %s", s)
+	}
+}
+
+// TestRefundWithMockPSP runs a refund through the provider: requested by
+// booking-svc's event, completed by mockpsp's webhook.
+func TestRefundWithMockPSP(t *testing.T) {
+	w := newMockPSPFixture(t)
+	b := booking{uuid.New(), uuid.New()}
+	in, err := w.svc.CreateIntent(ctx, b.id, b.event, 3300, time.Now().Add(7*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.pay(t, in.CheckoutURL)
+	w.waitStatus(t, in.ID, "CAPTURED")
+	if err := w.svc.HandleBookingEvent(ctx, refundRequired(b)); err != nil {
+		t.Fatal(err)
+	}
+	w.waitStatus(t, in.ID, "REFUNDED")
+	if got := w.events(t, b); len(got) != 2 || got[1] != "refund.completed.v1" {
+		t.Fatalf("events %v", got)
+	}
+	if w.balance(t, in.ID, "psp_receivable") != 0 {
+		t.Fatal("the refund did not reverse the receivable")
 	}
 }

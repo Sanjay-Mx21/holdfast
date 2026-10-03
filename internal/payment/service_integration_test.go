@@ -32,6 +32,7 @@ import (
 	"github.com/Sanjay-Mx21/holdfast/internal/payment/psp"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/authn"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/grpcx"
+	"github.com/Sanjay-Mx21/holdfast/internal/platform/kafka"
 	"github.com/Sanjay-Mx21/holdfast/internal/testenv"
 )
 
@@ -44,6 +45,7 @@ type fakePSP struct {
 	orders   map[string]psp.Order // by order ID
 	byIntent map[string]string
 	creates  int
+	refunds  []string // intent IDs, one per refund call
 	down     bool
 }
 
@@ -75,6 +77,16 @@ func (f *fakePSP) GetOrder(_ context.Context, orderID string) (psp.Order, error)
 		return psp.Order{}, psp.ErrUnavailable
 	}
 	return o, nil
+}
+
+func (f *fakePSP) CreateRefund(_ context.Context, intentID, paymentID string, amount int64) (psp.Refund, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.down {
+		return psp.Refund{}, psp.ErrUnavailable
+	}
+	f.refunds = append(f.refunds, intentID)
+	return psp.Refund{RefundID: "rfnd_" + intentID, PaymentID: paymentID, AmountPaise: amount, Status: "PENDING"}, nil
 }
 
 func (f *fakePSP) set(orderID string, change func(*psp.Order)) {
@@ -520,5 +532,66 @@ func TestPollerRotates(t *testing.T) {
 	}
 	if s := f.status(t, a.ID); s != "CREATED" {
 		t.Fatalf("a failed poll moved the intent to %s", s)
+	}
+}
+
+func refundRequired(b booking) kafka.Message {
+	v, _ := proto.Marshal(&eventsv1.BookingRefundRequired{BookingId: b.id.String(), Reason: eventsv1.RefundReason_REFUND_REASON_GUARD_REJECTED})
+	return kafka.Message{Value: v, Headers: map[string]string{kafka.HeaderID: uuid.NewString(), kafka.HeaderType: "booking.refund_required.v1"}}
+}
+
+func TestRefundRequestedByBooking(t *testing.T) {
+	f := newFixture(t)
+	b, in, order := f.intent(t, 6000)
+	pay := payID()
+	f.apply(t, hook(psp.EventPaymentCaptured, order, pay, 6000))
+
+	// The provider is down: the move commits, the call is retried.
+	f.psp.setDown(true)
+	m := refundRequired(b)
+	if err := f.svc.HandleBookingEvent(ctx, m); err == nil || kafka.IsPermanent(err) {
+		t.Fatalf("provider down: %v, want a retryable error", err)
+	}
+	if s := f.status(t, in.ID); s != "REFUND_PENDING" {
+		t.Fatalf("status %s", s)
+	}
+	f.psp.setDown(false)
+	if err := f.svc.HandleBookingEvent(ctx, m); err != nil {
+		t.Fatalf("the retry: %v", err)
+	}
+	if len(f.psp.refunds) != 1 || f.psp.refunds[0] != in.ID.String() {
+		t.Fatalf("refund calls %v, want one keyed by the intent", f.psp.refunds)
+	}
+	// The provider's webhook completes it: the capture's entries reversed.
+	refund, _ := json.Marshal(psp.Webhook{ID: "evt_" + uuid.NewString(), Type: psp.EventRefundCompleted, OrderID: order, PaymentID: pay, RefundID: "rfnd_x", AmountPaise: 6000})
+	f.apply(t, refund)
+	if s := f.status(t, in.ID); s != "REFUNDED" || f.balance(t, in.ID, "psp_receivable") != 0 {
+		t.Fatalf("after the refund: %s", s)
+	}
+	// Once refunded, a redelivered request asks for nothing.
+	if err := f.svc.HandleBookingEvent(ctx, m); err != nil || len(f.psp.refunds) != 1 {
+		t.Fatalf("redelivered after the refund: %v, %d calls", err, len(f.psp.refunds))
+	}
+}
+
+func TestRefundConsumerSkipsWhatItCannotUse(t *testing.T) {
+	f := newFixture(t)
+	// A booking with no intent (a test's, or another environment's).
+	if err := f.svc.HandleBookingEvent(ctx, refundRequired(booking{uuid.New(), uuid.New()})); err != nil {
+		t.Fatalf("unknown booking: %v", err)
+	}
+	// Other booking events are not for this consumer.
+	other := kafka.Message{Value: []byte("x"), Headers: map[string]string{kafka.HeaderID: "1", kafka.HeaderType: "booking.created.v1"}}
+	if err := f.svc.HandleBookingEvent(ctx, other); err != nil {
+		t.Fatalf("booking.created: %v", err)
+	}
+	bad := kafka.Message{Value: []byte("not protobuf"), Headers: map[string]string{kafka.HeaderID: "2", kafka.HeaderType: "booking.refund_required.v1"}}
+	if err := f.svc.HandleBookingEvent(ctx, bad); !kafka.IsPermanent(err) {
+		t.Fatalf("garbage: %v, want permanent", err)
+	}
+	// An intent that was never captured is not refunded.
+	b, in, _ := f.intent(t, 100)
+	if err := f.svc.HandleBookingEvent(ctx, refundRequired(b)); err != nil || f.status(t, in.ID) != "CREATED" || len(f.psp.refunds) != 0 {
+		t.Fatalf("an uncaptured intent: %v, status %s, %d refunds", err, f.status(t, in.ID), len(f.psp.refunds))
 	}
 }

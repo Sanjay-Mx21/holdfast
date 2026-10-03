@@ -42,3 +42,11 @@ WHERE status = 'PENDING_PAYMENT' AND payment_deadline < now()
 ORDER BY payment_deadline
 LIMIT sqlc.arg(batch)
 FOR UPDATE SKIP LOCKED;
+
+-- name: GetBookingForUpdate :one
+-- The saga locks the booking while it decides, so two deliveries of events
+-- for one booking cannot decide at once.
+SELECT * FROM booking.bookings WHERE id = $1 FOR UPDATE;
+
+-- name: GetPerUserLimit :one
+SELECT per_user_limit FROM booking.events WHERE id = $1;
