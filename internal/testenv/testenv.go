@@ -31,7 +31,13 @@ const (
 	EnvKafkaBrokers = "HOLDFAST_TEST_KAFKA_BROKERS"
 )
 
-// Valkey returns a client for the test Valkey, closed when the test ends.
+// ValkeyDB is the logical database integration tests use. Services started
+// by `make up` use database 0, so they never see the tests' keys: inventory-
+// svc's sweeper, for one, would otherwise release the tests' holds (P7).
+const ValkeyDB = 1
+
+// Valkey returns a client for the test Valkey's database ValkeyDB, closed
+// when the test ends.
 func Valkey(t testing.TB) redis.UniversalClient {
 	t.Helper()
 	addr := os.Getenv(EnvValkeyAddr)
@@ -39,7 +45,7 @@ func Valkey(t testing.TB) redis.UniversalClient {
 		t.Skipf("set %s to run Valkey integration tests", EnvValkeyAddr)
 	}
 	c, err := valkey.New(context.Background(), config.Valkey{
-		Addrs: []string{addr}, PoolSize: 256,
+		Addrs: []string{addr}, DB: ValkeyDB, PoolSize: 256,
 		DialTimeout: 5 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 5 * time.Second,
 	}, "holdfast-test")
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -22,6 +23,7 @@ import (
 // run runs one holdfastctl command and returns what it printed.
 func run(t *testing.T, args ...string) (string, error) {
 	t.Helper()
+	t.Setenv("VALKEY_DB", strconv.Itoa(testenv.ValkeyDB)) // where testenv.Valkey looks
 	var out bytes.Buffer
 	stdout = &out
 	t.Cleanup(func() { stdout = os.Stdout })
