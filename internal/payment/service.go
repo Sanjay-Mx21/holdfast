@@ -69,7 +69,7 @@ func (s *Service) CreateIntent(ctx context.Context, bookingID, eventID uuid.UUID
 	}
 	in, err := s.q.CreateIntent(ctx, paymentdb.CreateIntentParams{
 		ID: uuid.Must(uuid.NewV7()), BookingID: bookingID, EventID: uuid.NullUUID{UUID: eventID, Valid: true},
-		AmountPaise: amountPaise, ExpiresAt: expiresAt,
+		AmountPaise: amountPaise, ExpiresAt: expiresAt, TraceContext: traceContext(ctx),
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):

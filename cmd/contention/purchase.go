@@ -111,8 +111,17 @@ func runPurchase(ctx context.Context, o options) (*Report, error) {
 	// webhooks, both in this process over loopback HTTP.
 	secret := randomSecret()
 	faults := mockpsp.NewInjector(1)
-	if err := faults.Set(mockpsp.Faults{FailureRate: o.payFailure}); err != nil {
-		return nil, err
+	var mix mockpsp.Faults
+	if o.pspFaults != "" {
+		dec := json.NewDecoder(strings.NewReader(o.pspFaults))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&mix); err != nil {
+			return nil, fmt.Errorf("-psp-faults: %w", err)
+		}
+	}
+	mix.FailureRate = o.payFailure
+	if err := faults.Set(mix); err != nil {
+		return nil, fmt.Errorf("-psp-faults: %w", err)
 	}
 	pm := mockpsp.NewMetrics(reg)
 	hooksRouter := httpx.NewRouter()
@@ -130,7 +139,9 @@ func runPurchase(ctx context.Context, o options) (*Report, error) {
 	defer pspSrv.Close()
 	provider := mockpsp.New(mockpsp.Config{APIKey: "e1"}, mockpsp.NewStore(pspSrv.URL), faults, dispatcher, pm, quiet)
 	provider.Register(pspRouter, httpx.NewRouter(), authn.RequireStaticToken(string(secret)))
-	client, err := psp.New(psp.Config{BaseURL: pspSrv.URL, APIKey: "e1", Timeout: 10 * time.Second, BreakerThreshold: 1_000_000}, psp.NewMetrics(reg))
+	// payment-svc's own attempt timeout: a held-back answer (timeout fault)
+	// fails the attempt, and the retry gets the stored result.
+	client, err := psp.New(psp.Config{BaseURL: pspSrv.URL, APIKey: "e1", Timeout: 2 * time.Second, BreakerThreshold: 1_000_000}, psp.NewMetrics(reg))
 	if err != nil {
 		return nil, err
 	}
@@ -140,6 +151,19 @@ func runPurchase(ctx context.Context, o options) (*Report, error) {
 	bm := booking.NewMetrics(reg)
 	bookings := booking.NewService(pool, inv, intents{payments}, booking.Config{Grace: 3 * time.Minute}, bm, quiet)
 	saga := booking.NewSaga(pool, inv, bm, quiet)
+	poller := payment.NewPoller(payments, time.Second, time.Second, 200, quiet)
+
+	// Buyers share user IDs in groups of buyers-per-user, so the per-user
+	// cap (I4) is exercised when that exceeds the limit.
+	users := make([]string, (o.purchases+o.buyersPerUser-1)/o.buyersPerUser)
+	for u := range users {
+		users[u] = uuid.NewString()
+	}
+	allowed := 0
+	for u := range users {
+		attempts := min(o.buyersPerUser, o.purchases-u*o.buyersPerUser)
+		allowed += min(attempts, o.perUser/o.qty)
+	}
 
 	// 1. The purchases.
 	type result struct {
@@ -155,12 +179,16 @@ func runPurchase(ctx context.Context, o options) (*Report, error) {
 	parallel(o.purchases, workers, func(i int) {
 		t0 := time.Now()
 		defer func() { latencies[i] = time.Since(t0) }()
-		user := uuid.NewString()
+		user := users[i/o.buyersPerUser]
 		h, err := inv.CreateHold(ctx, inventory.CreateHoldRequest{
 			EventID: eventID, UserID: user, IdempotencyKey: fmt.Sprintf("e1-purchase-hold-%08d", i), Quantity: o.qty,
 		})
 		if errors.Is(err, inventory.ErrSoldOut) {
 			results[i] = result{outcome: "sold_out"}
+			return
+		}
+		if errors.Is(err, inventory.ErrUserLimit) {
+			results[i] = result{outcome: "user_limit"}
 			return
 		}
 		if err != nil {
@@ -206,8 +234,12 @@ func runPurchase(ctx context.Context, o options) (*Report, error) {
 		}
 	}
 
-	// 2. Wait for the webhooks to settle every intent.
+	// 2. Wait for the webhooks to settle every intent, polling the provider
+	// for those whose webhook is late or lost, as payment-svc does.
 	if err := waitFor(ctx, 2*time.Minute, func() (bool, error) {
+		if err := poller.Pass(ctx); err != nil {
+			return false, err
+		}
 		var open int
 		err := pool.QueryRow(ctx, `SELECT count(*) FROM payment.payment_intents WHERE booking_id = ANY($1) AND status = 'CREATED'`, ids).Scan(&open)
 		return open == 0, err
@@ -291,7 +323,7 @@ func runPurchase(ctx context.Context, o options) (*Report, error) {
 	confirmed, cancelled := second[booking.StatusConfirmed], second[booking.StatusCancelled]
 	refunding := second[booking.StatusRefundRequired] + second[booking.StatusRefunded]
 	booked := len(ids)
-	expectedHolds := min(o.purchases, o.capacity/o.qty)
+	expectedHolds := min(allowed, o.capacity/o.qty)
 	r.Outcomes["confirmed"], r.Outcomes["cancelled"], r.Outcomes["refund_required"] = confirmed, cancelled, refunding
 	r.check("I1 holds granted == units on sale", r.Outcomes["paid"]+r.Outcomes["payment_failed"] == expectedHolds,
 		fmt.Sprintf("held and booked %d, expected %d", booked, expectedHolds))
@@ -314,8 +346,45 @@ func runPurchase(ctx context.Context, o options) (*Report, error) {
 		fmt.Sprintf("%d events delivered twice; states %v then %v", len(msgs), first, second))
 	r.check("payment failures were injected", o.payFailure == 0 || r.Outcomes["payment_failed"] > 0,
 		fmt.Sprintf("%d of %d payments failed (rate %.2f)", r.Outcomes["payment_failed"], booked, o.payFailure))
+	var maxPerUser int
+	if err := pool.QueryRow(ctx, `SELECT coalesce(max(qty), 0) FROM booking.user_event_purchases WHERE event_id = $1`, eventUUID).Scan(&maxPerUser); err != nil {
+		return nil, err
+	}
+	r.check("I4 no user bought more than the per-user limit", maxPerUser <= o.perUser && (o.buyersPerUser*o.qty <= o.perUser || r.Outcomes["user_limit"] > 0),
+		fmt.Sprintf("most units by one user %d, limit %d; %d attempts refused by the cap", maxPerUser, o.perUser, r.Outcomes["user_limit"]))
+	for key, name := range map[string][2]string{
+		"webhooks_duplicated": {"holdfast_mockpsp_webhooks_total", `result="duplicated"`},
+		"webhooks_delayed":    {"holdfast_mockpsp_webhooks_total", `result="delayed"`},
+		"webhooks_lost":       {"holdfast_mockpsp_webhooks_total", `result="dropped"`},
+		"answers_held_back":   {"holdfast_mockpsp_faults_total", `fault="timeout"`},
+		"duplicates_dropped":  {"holdfast_webhooks_total", `duplicate="true"`},
+		"settled_by_poll":     {"holdfast_payment_captures_total", `via="poll"`},
+	} {
+		if n := counter(reg, name[0], name[1]); n > 0 {
+			r.Outcomes[key] = n
+		}
+	}
 	r.check("no infrastructure errors", r.Outcomes["error"] == 0 && r.Outcomes["saga_error"] == 0, errDetail(firstErr))
 	return r, nil
+}
+
+// counter sums a counter's series whose labels include label (name="value").
+func counter(reg *prometheus.Registry, name, label string) int {
+	mfs, _ := reg.Gather()
+	total := 0.0
+	for _, mf := range mfs {
+		if mf.GetName() != name {
+			continue
+		}
+		for _, m := range mf.GetMetric() {
+			for _, lp := range m.GetLabel() {
+				if lp.GetName()+`="`+lp.GetValue()+`"` == label {
+					total += m.GetCounter().GetValue()
+				}
+			}
+		}
+	}
+	return int(total)
 }
 
 // paymentEvents reads the payment events written for the bookings, as the

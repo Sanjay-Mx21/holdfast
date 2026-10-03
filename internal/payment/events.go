@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/Sanjay-Mx21/holdfast/internal/payment/paymentdb"
@@ -40,4 +41,37 @@ func writeEvent(ctx context.Context, q *paymentdb.Queries, bookingID uuid.UUID, 
 		EventID: uuid.Must(uuid.NewV7()), Topic: kafka.TopicPayment, AggregateID: bookingID,
 		EventType: eventType, Payload: payload, Headers: headers,
 	})
+}
+
+// traceContext captures ctx's trace, to be stored with an intent.
+func traceContext(ctx context.Context) []byte {
+	carrier := propagation.MapCarrier{}
+	otel.GetTextMapPropagator().Inject(ctx, carrier)
+	if len(carrier) == 0 {
+		return nil
+	}
+	b, err := json.Marshal(carrier)
+	if err != nil {
+		return nil
+	}
+	return b
+}
+
+// continueTrace starts a span in the trace stored with the intent (the
+// booking request that created it), linked to the caller's own trace (the
+// provider's webhook, or a poll). What follows (the ledger, the event, and
+// through the outbox booking-svc's saga and inventory) then belongs to the
+// purchase's trace: one trace from the booking to the sale. Without a
+// stored trace, the span is a child of ctx.
+func continueTrace(ctx context.Context, in paymentdb.Intent, name string) (context.Context, trace.Span) {
+	tracer := otel.Tracer("github.com/Sanjay-Mx21/holdfast/internal/payment")
+	var carrier propagation.MapCarrier
+	if len(in.TraceContext) == 0 || json.Unmarshal(in.TraceContext, &carrier) != nil {
+		return tracer.Start(ctx, name)
+	}
+	stored := otel.GetTextMapPropagator().Extract(ctx, carrier)
+	if !trace.SpanContextFromContext(stored).IsValid() {
+		return tracer.Start(ctx, name)
+	}
+	return tracer.Start(stored, name, trace.WithLinks(trace.LinkFromContext(ctx)))
 }

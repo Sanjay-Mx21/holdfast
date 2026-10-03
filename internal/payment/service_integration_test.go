@@ -23,6 +23,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/proto"
 
@@ -619,5 +622,37 @@ func TestLateAndOutOfOrderWebhooks(t *testing.T) {
 	f.apply(t, hook(psp.EventPaymentFailed, order2, "", 4500))
 	if s := f.status(t, in2.ID); s != "CAPTURED" || len(f.events(t, b2)) != 1 {
 		t.Fatalf("after an expiry and a failure that came late: %s, events %v", s, f.events(t, b2))
+	}
+}
+
+// TestPaymentContinuesTheBookingsTrace: a webhook arrives in a trace of its
+// own, but settles the intent in the trace of the booking request that
+// created it, so the capture's event (and the saga after it) joins one
+// purchase trace.
+func TestPaymentContinuesTheBookingsTrace(t *testing.T) {
+	f := newFixture(t)
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+	tracer := sdktrace.NewTracerProvider().Tracer("test")
+	rctx, request := tracer.Start(ctx, "POST /v1/bookings")
+	b := booking{uuid.New(), uuid.New()}
+	in, err := f.svc.CreateIntent(rctx, b.id, b.event, 800, time.Now().Add(7*time.Minute))
+	request.End()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wctx, webhook := tracer.Start(ctx, "POST /v1/webhooks/psp")
+	if err := f.svc.ApplyWebhook(wctx, hook(psp.EventPaymentCaptured, f.psp.byIntent[in.ID.String()], payID(), 800)); err != nil {
+		t.Fatal(err)
+	}
+	webhook.End()
+	var headers []byte
+	if err := f.pool.QueryRow(ctx, `SELECT headers FROM payment.outbox WHERE aggregate_id = $1`, b.id).Scan(&headers); err != nil {
+		t.Fatal(err)
+	}
+	var h map[string]string
+	_ = json.Unmarshal(headers, &h)
+	if want := request.SpanContext().TraceID().String(); !strings.Contains(h["traceparent"], want) {
+		t.Fatalf("the capture's event carries %q; want the booking request's trace %s, not the webhook's %s",
+			h["traceparent"], want, webhook.SpanContext().TraceID())
 	}
 }

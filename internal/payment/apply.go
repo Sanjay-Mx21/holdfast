@@ -48,6 +48,8 @@ func (s *Service) ApplyWebhook(ctx context.Context, raw []byte) error {
 		if err != nil {
 			return err
 		}
+		ctx, span := continueTrace(ctx, in, "payment.apply_webhook")
+		defer span.End()
 		switch wh.Type {
 		case psp.EventPaymentCaptured:
 			return s.capture(ctx, q, in, wh.PaymentID, wh.AmountPaise, "webhook")
