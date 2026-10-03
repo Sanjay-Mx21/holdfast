@@ -31,3 +31,29 @@ sql:
           booking_idempotency_key: IdempotencyKey
           booking_outbox: OutboxEvent
           booking_processed_message: ProcessedMessage
+  - engine: postgresql
+    schema: db/migrations/payment
+    queries: internal/payment/queries
+    gen:
+      go:
+        package: paymentdb
+        out: internal/payment/paymentdb
+        sql_package: pgx/v5
+        emit_empty_slices: true
+        overrides:
+          - db_type: uuid
+            go_type: github.com/google/uuid.UUID
+          - db_type: uuid
+            nullable: true
+            go_type:
+              import: github.com/google/uuid
+              type: NullUUID
+          - db_type: timestamptz
+            go_type: time.Time
+        rename:
+          payment_payment_intent: Intent
+          payment_psp_order: PSPOrder
+          payment_webhook_event: WebhookEvent
+          payment_ledger_entry: LedgerEntry
+          payment_outbox: OutboxEvent
+          payment_processed_message: ProcessedMessage

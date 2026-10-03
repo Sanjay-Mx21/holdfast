@@ -51,7 +51,7 @@ jobs:
         run: |
           buf generate
           sqlc generate
-          git status --porcelain -- internal/gen internal/booking/bookingdb | tee /dev/stderr | (! grep -q .) || { echo "run make gen and commit the result"; exit 1; }
+          git status --porcelain -- internal/gen internal/booking/bookingdb internal/payment/paymentdb | tee /dev/stderr | (! grep -q .) || { echo "run make gen and commit the result"; exit 1; }
 
   unit:
     runs-on: ubuntu-latest

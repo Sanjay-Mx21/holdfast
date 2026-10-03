@@ -47,6 +47,12 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
   `GET /v1/bookings/{id}` is owner-only; a deadline job cancels overdue
   bookings. Each change and its event are written in one transaction. The edge
   routes `/v1/bookings`; service doc `docs/services/booking.md`.
+- **Payment schema** (task 3.8): migration `payment/00001` with
+  `payment_intents` (one per booking; its state machine enforced by a
+  trigger), `psp_orders`, `webhook_events` (deduplicated by the PSP's event
+  ID), a double-entry `ledger_entries` table whose transactions must balance
+  at commit, and the outbox and processed messages; sqlc queries in
+  `internal/payment/paymentdb`.
 - **Outbox relay** (task 3.7, `internal/platform/outbox`): publishes a
   service's outbox to Kafka in commit order, one leader per schema, at least
   once, continuing each event's stored trace; booking-svc runs it. Metrics
@@ -144,6 +150,9 @@ and E6, and the decision records behind them (ADRs 0005 to 0007).
 
 ### Fixed
 
+- `scripts/check-migrations.sh` treated any changed file under
+  `db/migrations` as an edited migration, so registering a new schema in
+  `embed.go` failed the check; it now compares the `.sql` files only.
 - `make up` restarts the NGINX edge too: like Prometheus and Grafana it reads
   its mounted config only at start-up, so a new route stayed invisible.
 - `holdfast_queue_status_age_seconds` is measured by Valkey's clock, so clock
