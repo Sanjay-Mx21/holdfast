@@ -2,6 +2,10 @@ global:
   scrape_interval: 5s
   evaluation_interval: 5s
 
+# Alert rules (deploy/alerting, mounted by Compose): design doc 12.2.
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
 scrape_configs:
   - job_name: inventory
     static_configs:
@@ -35,3 +39,8 @@ scrape_configs:
   - job_name: postgres
     static_configs:
       - targets: ["postgres-exporter:9187"]
+
+  # The invariant auditor (task 5.1): holdfast_invariant_violations.
+  - job_name: auditor
+    static_configs:
+      - targets: ["auditor:9090"]

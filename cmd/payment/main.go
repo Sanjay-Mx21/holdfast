@@ -58,6 +58,16 @@ type config struct {
 	PollAfter    time.Duration `env:"POLL_AFTER" envDefault:"2m"`
 	PollBatch    int           `env:"POLL_BATCH" envDefault:"20"`
 
+	// Reconciliation (design doc 9.9): every RECON_INTERVAL, the provider's
+	// settlement report for the last RECON_WINDOW is compared with the
+	// records; RECON_MARGIN keeps our own captures away from the window's
+	// edges; refunds REFUND_PENDING for RECON_REFUND_STUCK are asked for
+	// again.
+	ReconInterval    time.Duration `env:"RECON_INTERVAL" envDefault:"5m"`
+	ReconWindow      time.Duration `env:"RECON_WINDOW" envDefault:"2h"`
+	ReconMargin      time.Duration `env:"RECON_MARGIN" envDefault:"5m"`
+	ReconRefundStuck time.Duration `env:"RECON_REFUND_STUCK" envDefault:"15m"`
+
 	OutboxBatch    int           `env:"OUTBOX_BATCH" envDefault:"500"`
 	OutboxInterval time.Duration `env:"OUTBOX_INTERVAL" envDefault:"200ms"`
 }
@@ -75,6 +85,9 @@ func (c *config) Validate() error {
 	}
 	if c.PollInterval < time.Second || c.PollAfter < 10*time.Second || c.PollBatch < 1 || c.PollBatch > 1000 {
 		errs = append(errs, errors.New("POLL_INTERVAL must be at least 1s, POLL_AFTER at least 10s, POLL_BATCH 1 to 1000"))
+	}
+	if c.ReconInterval < 10*time.Second || c.ReconWindow < 3*c.ReconMargin || c.ReconMargin < 0 || c.ReconRefundStuck < time.Minute {
+		errs = append(errs, errors.New("RECON_INTERVAL must be at least 10s, RECON_WINDOW at least 3 × RECON_MARGIN, RECON_REFUND_STUCK at least 1m"))
 	}
 	if c.OutboxBatch < 1 || c.OutboxBatch > 10_000 || c.OutboxInterval < 10*time.Millisecond {
 		errs = append(errs, errors.New("OUTBOX_BATCH must be 1 to 10000 and OUTBOX_INTERVAL at least 10ms"))
@@ -180,6 +193,9 @@ func run(ctx context.Context) error {
 		httpx.NewServer("public", cfg.HTTP.Addr, public, cfg.HTTP, log),
 		httpx.NewServer("admin", cfg.HTTP.AdminAddr, admin, cfg.HTTP, log, httpx.WithWriteTimeout(90*time.Second)),
 		payment.NewPoller(svc, cfg.PollInterval, cfg.PollAfter, cfg.PollBatch, log),
+		payment.NewReconciler(svc, provider, payment.ReconcilerConfig{
+			Interval: cfg.ReconInterval, Window: cfg.ReconWindow, Margin: cfg.ReconMargin, RefundStuckAfter: cfg.ReconRefundStuck,
+		}, log),
 		relay,
 		refunds,
 	)

@@ -1643,14 +1643,14 @@ holdfast/
 │   ├── queue/                        ✅ queue-svc: provisioning, joining, T0, positions, admission, status, tokens (2.1 to 2.7)    ⏳ rest of 2
 │   ├── booking/  payment/  mockpsp/  ⏳ 3
 │   ├── auth/                         ⏳ 4
-│   └── auditor/                      ⏳ 5
+│   └── auditor/                      ✅ invariant auditor (5.1)
 ├── internal/
 │   ├── platform/                     ✅ app, authn, buildinfo, config, health, httpx, logging, metrics, postgres, valkey
 │   │                                 ✅ ratelimit (2.2)    ⏳ kafka, otel, outbox, idempotency, grpcx (3)
 │   ├── inventory/                    ✅ Lua scripts (go:embed), store, service, sweeper, HTTP handler, metrics
 │   ├── booking/                      ✅ catalog, guard         ⏳ saga, deadline job (3)
 │   ├── queue/                        ✅ provisioning, lottery, joining, admission controller, status document, admission tokens (2.1 to 2.7)
-│   ├── payment/                      ⏳ intents, webhooks, ledger, PSP client (3); reconciler (5)
+│   ├── payment/                      ✅ intents, webhooks, ledger, PSP client (3); reconciler (5.1)
 │   ├── auth/                         ⏳ OTP, tokens, JWKS (4)
 │   ├── policy/                       ✅ verified window, agent lockout (4.3); the cap and freeze are enforced where units are held and admitted
 │   └── testenv/                      ✅ wiring for integration tests
@@ -2145,7 +2145,7 @@ The dates are illustrative. The gates are not.
 
 **Tasks, in order:**
 
-- [ ] 5.1 **Reconciler and auditor.** Settlement-report diffing in payment-svc; `cmd/auditor` publishing invariant gauges for I1 to I5 (`holdfast_invariant_violations`), plus alert rules (12.2).
+- [x] 5.1 **Reconciler and auditor.** Settlement-report diffing in payment-svc; `cmd/auditor` publishing invariant gauges for I1 to I5 (`holdfast_invariant_violations`), plus alert rules (12.2). *Built as payment-svc's reconciler (one replica at a time under an advisory lock, every 5 minutes over the last 2 hours): it applies lost captures and refunds through the webhook's own paths, asks again for refunds stuck 15 minutes, and counts seven kinds of finding in `holdfast_recon_mismatch_total{type}`, four of which need a human. The auditor reads every schema over read-only connections and inventory's expiry indexes; I3 allows 15 minutes and I5 5 minutes of grace. Five alert rules in `deploy/alerting/` with runbook `docs/runbooks/auditor.md`; routing them is task 5.6.*
 - [ ] 5.2 **Valkey high availability.** A primary, a replica and three Sentinels in Compose (the client already supports Sentinel through `VALKEY_SENTINEL_MASTER`); a failover drill.
 - [ ] 5.3 **Full RB-2 rebuild.** `holdfastctl inventory rebuild` computes `avail = capacity − sold − units in PENDING_PAYMENT bookings` and rebuilds the per-user counters, extending today's `inventory provision`.
 - [ ] 5.4 **Adaptive admission.** AIMD on the admission rate, and backpressure when the PSP circuit breaker opens.

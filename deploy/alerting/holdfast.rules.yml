@@ -1,0 +1,63 @@
+# HoldFast's alert rules (design doc 12.2), loaded by Prometheus. Task 5.1
+# adds the correctness alerts: the invariant auditor and the reconciler.
+# Task 5.6 adds the rest (latency, outbox and consumer lag, the payment
+# provider's breaker, stalled admission) and optionally Alertmanager.
+#
+# severity: page means wake someone up; ticket means look during the day.
+
+groups:
+  - name: holdfast-correctness
+    rules:
+      - alert: InvariantViolation
+        expr: max by (invariant) (holdfast_invariant_violations) > 0
+        labels:
+          severity: page
+        annotations:
+          summary: "Invariant {{ $labels.invariant }} is violated ({{ $value }} found by the auditor)"
+          description: >-
+            The auditor found {{ $value }} violation(s) of {{ $labels.invariant }}. Freeze the sale
+            (runbook RB-1), then find the records with the queries in internal/auditor/auditor.go.
+          runbook: docs/runbooks/auditor.md
+
+      - alert: MoneySafetyBreach
+        expr: holdfast_invariant_violations{invariant="I3"} > 0
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $value }} captured payment(s) unresolved for more than 15 minutes"
+          description: >-
+            Money was taken and the booking is neither confirmed nor refunded (invariant I3).
+            Check the reconciler's findings and the saga's dead-letter topic (RB-3, RB-4).
+          runbook: docs/runbooks/auditor.md
+
+      - alert: AuditorStale
+        expr: time() - holdfast_auditor_last_success_timestamp_seconds > 120
+        for: 1m
+        labels:
+          severity: page
+        annotations:
+          summary: "The invariant auditor has not completed a check for over 2 minutes"
+          description: "Nothing is watching I1 to I5: the auditor is down or cannot read PostgreSQL or Valkey."
+          runbook: docs/runbooks/auditor.md
+
+      - alert: ReconciliationNeedsAHuman
+        expr: >-
+          sum by (type) (increase(holdfast_recon_mismatch_total{type=~"amount_mismatch|capture_unknown_to_psp|refund_unknown_to_holdfast|unknown_order"}[15m])) > 0
+        labels:
+          severity: page
+        annotations:
+          summary: "The reconciler found {{ $labels.type }} differences with the payment provider"
+          description: >-
+            The provider's settlement report and HoldFast's records disagree in a way the reconciler
+            does not repair. Its error logs name each intent.
+          runbook: docs/runbooks/auditor.md
+
+      - alert: ReconcilerStale
+        expr: time() - holdfast_recon_last_success_timestamp_seconds > 900
+        for: 1m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "No reconciliation pass has completed for over 15 minutes"
+          description: "payment-svc's reconciler is failing (the provider's settlement report or PostgreSQL)."
+          runbook: docs/runbooks/auditor.md

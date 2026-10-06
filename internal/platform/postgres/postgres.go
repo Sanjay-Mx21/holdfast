@@ -18,6 +18,17 @@ import (
 // statement timeout (runaway queries can't pin connections during a surge) and
 // an idle-in-transaction timeout (a crashed client can't hold row locks).
 func NewPool(ctx context.Context, cfg config.Postgres, appName string) (*pgxpool.Pool, error) {
+	return newPool(ctx, cfg, appName, false)
+}
+
+// NewReadOnlyPool is NewPool for a reader that must never write (the
+// invariant auditor): every transaction is read-only, so a write fails even
+// when the role itself could write.
+func NewReadOnlyPool(ctx context.Context, cfg config.Postgres, appName string) (*pgxpool.Pool, error) {
+	return newPool(ctx, cfg, appName, true)
+}
+
+func newPool(ctx context.Context, cfg config.Postgres, appName string, readOnly bool) (*pgxpool.Pool, error) {
 	pc, err := pgxpool.ParseConfig(cfg.DSN)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: parse DSN: %w", err)
@@ -30,6 +41,9 @@ func NewPool(ctx context.Context, cfg config.Postgres, appName string) (*pgxpool
 	rp["application_name"] = appName
 	rp["statement_timeout"] = strconv.FormatInt(cfg.StatementTimeout.Milliseconds(), 10)
 	rp["idle_in_transaction_session_timeout"] = "30000"
+	if readOnly {
+		rp["default_transaction_read_only"] = "on"
+	}
 
 	pool, err := pgxpool.NewWithConfig(ctx, pc)
 	if err != nil {
