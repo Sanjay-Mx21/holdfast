@@ -141,10 +141,10 @@ names = {"I1": "I1 no oversell", "I2": "I2 no double charge", "I3": "I3 money sa
          "I4": "I4 per-user cap", "I5": "I5 no lost units"}
 for i, inv in enumerate(["I1", "I2", "I3", "I4", "I5"]):
     tiles.append(stat(names[inv], [(f'max(holdfast_invariant_violations{{invariant="{inv}"}})', "")], i * 4, 4,
-                      desc="Published by the invariant auditor (Phase 5, task 5.1). Green at 0; until the auditor exists the tile shows no data.",
-                      thresholds=green_red, no_value="auditor: Phase 5"))
-tiles.append(stat("Reconciliation mismatches", [('sum(increase(holdfast_recon_mismatch_total[$__range]))', "")], 20, 4,
-                  desc="Found by the reconciler (Phase 5, task 5.1).", thresholds=green_red, no_value="reconciler: Phase 5"))
+                      desc="Published by the invariant auditor (cmd/auditor). Green at 0, red above; grey with no data means the auditor is not reporting.",
+                      thresholds=green_red, no_value="no data: auditor down?"))
+tiles.append(stat("Reconciliation mismatches", [('sum(increase(holdfast_recon_mismatch_total{type=~"amount_mismatch|capture_unknown_to_psp|refund_unknown_to_holdfast|unknown_order"}[$__range]))', "")], 20, 4,
+                  desc="Differences with the provider that need a human (payment-svc's reconciler), in the dashboard's time range.", thresholds=green_red, no_value="no data: reconciler down?"))
 add(*tiles, height=4)
 add(series("Outbox lag", [('max by (schema) (holdfast_outbox_lag_seconds)', "{{schema}}")], 0, 8, unit="s",
            desc="Age of the oldest unpublished outbox row per service. Alert above 30 s.",

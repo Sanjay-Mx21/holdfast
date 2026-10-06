@@ -1016,7 +1016,7 @@
       "id": 19,
       "type": "stat",
       "title": "I1 no oversell",
-      "description": "Published by the invariant auditor (Phase 5, task 5.1). Green at 0; until the auditor exists the tile shows no data.",
+      "description": "Published by the invariant auditor (cmd/auditor). Green at 0, red above; grey with no data means the auditor is not reporting.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -1063,7 +1063,7 @@
               }
             ]
           },
-          "noValue": "auditor: Phase 5"
+          "noValue": "no data: auditor down?"
         },
         "overrides": []
       },
@@ -1083,7 +1083,7 @@
       "id": 20,
       "type": "stat",
       "title": "I2 no double charge",
-      "description": "Published by the invariant auditor (Phase 5, task 5.1). Green at 0; until the auditor exists the tile shows no data.",
+      "description": "Published by the invariant auditor (cmd/auditor). Green at 0, red above; grey with no data means the auditor is not reporting.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -1130,7 +1130,7 @@
               }
             ]
           },
-          "noValue": "auditor: Phase 5"
+          "noValue": "no data: auditor down?"
         },
         "overrides": []
       },
@@ -1150,7 +1150,7 @@
       "id": 21,
       "type": "stat",
       "title": "I3 money safety",
-      "description": "Published by the invariant auditor (Phase 5, task 5.1). Green at 0; until the auditor exists the tile shows no data.",
+      "description": "Published by the invariant auditor (cmd/auditor). Green at 0, red above; grey with no data means the auditor is not reporting.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -1197,7 +1197,7 @@
               }
             ]
           },
-          "noValue": "auditor: Phase 5"
+          "noValue": "no data: auditor down?"
         },
         "overrides": []
       },
@@ -1217,7 +1217,7 @@
       "id": 22,
       "type": "stat",
       "title": "I4 per-user cap",
-      "description": "Published by the invariant auditor (Phase 5, task 5.1). Green at 0; until the auditor exists the tile shows no data.",
+      "description": "Published by the invariant auditor (cmd/auditor). Green at 0, red above; grey with no data means the auditor is not reporting.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -1264,7 +1264,7 @@
               }
             ]
           },
-          "noValue": "auditor: Phase 5"
+          "noValue": "no data: auditor down?"
         },
         "overrides": []
       },
@@ -1284,7 +1284,7 @@
       "id": 23,
       "type": "stat",
       "title": "I5 no lost units",
-      "description": "Published by the invariant auditor (Phase 5, task 5.1). Green at 0; until the auditor exists the tile shows no data.",
+      "description": "Published by the invariant auditor (cmd/auditor). Green at 0, red above; grey with no data means the auditor is not reporting.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -1331,7 +1331,7 @@
               }
             ]
           },
-          "noValue": "auditor: Phase 5"
+          "noValue": "no data: auditor down?"
         },
         "overrides": []
       },
@@ -1351,7 +1351,7 @@
       "id": 24,
       "type": "stat",
       "title": "Reconciliation mismatches",
-      "description": "Found by the reconciler (Phase 5, task 5.1).",
+      "description": "Differences with the provider that need a human (payment-svc's reconciler), in the dashboard's time range.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -1398,7 +1398,7 @@
               }
             ]
           },
-          "noValue": "reconciler: Phase 5"
+          "noValue": "no data: reconciler down?"
         },
         "overrides": []
       },
@@ -1409,7 +1409,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(holdfast_recon_mismatch_total[$__range]))",
+          "expr": "sum(increase(holdfast_recon_mismatch_total{type=~\"amount_mismatch|capture_unknown_to_psp|refund_unknown_to_holdfast|unknown_order\"}[$__range]))",
           "legendFormat": ""
         }
       ]

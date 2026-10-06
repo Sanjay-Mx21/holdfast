@@ -91,7 +91,7 @@ More: [`docs/architecture.md`](docs/architecture.md) and the service docs in
 |---|---|---|
 | I1 | **No oversell:** confirmed units never exceed capacity | `hold.lua` (one atomic check-and-decrement in Valkey), then the PostgreSQL final guard's conditional `UPDATE` for every sale |
 | I2 | **No double charge:** at most one captured payment per booking | One payment intent per booking, keyed idempotently at the provider; webhooks deduplicated by event ID |
-| I3 | **Money safety:** every captured payment ends CONFIRMED or REFUNDED | The booking saga (confirm, or ask for a refund when the guard refuses), status polling for lost webhooks; the reconciler arrives in Phase 5 |
+| I3 | **Money safety:** every captured payment ends CONFIRMED or REFUNDED | The booking saga (confirm, or ask for a refund when the guard refuses), status polling for lost webhooks, and the reconciler against the provider's settlement report |
 | I4 | **Per-user cap:** held plus bought units per user never exceed the limit | The per-user counter in `hold.lua`, and the guard's conditional upsert |
 | I5 | **No lost units:** every hold ends SOLD or RELEASED | The expiry index and sweeper; `release.lua` and `confirm.lua` re-check state atomically |
 | F1 | **Fairness:** random order before T0, arrival order after, one place per identity | `join.lua` (`ZADD NX`, a `crypto/rand` score before T0, a counter after), checked step by step against a reference model |
@@ -215,9 +215,9 @@ and `/readyz`.
 
 ## What's next
 
-- **Phase 5, reliability:** the reconciler and the invariant auditor (which
-  fill the dashboard's correctness tiles), Valkey high availability with
-  Sentinel, the full inventory rebuild, adaptive admission (AIMD) with
+- **Phase 5, reliability (in progress):** the reconciler and the invariant
+  auditor are built (they fill the dashboard's correctness tiles, with
+  alerts); next, Valkey high availability with Sentinel, the full inventory rebuild, adaptive admission (AIMD) with
   backpressure from the payment provider, chaos experiments E3 and E4, and
   alerts.
 - **Phase 6, scale and polish:** the design-scale E2 and E5 scale-out (1, 2

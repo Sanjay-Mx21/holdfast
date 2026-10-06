@@ -319,6 +319,26 @@ services:
       retries: 20
     restart: unless-stopped
 
+  # The invariant auditor (task 5.1): checks I1 to I5 from PostgreSQL (with
+  # read-only connections) and inventory's Valkey keys, and publishes
+  # holdfast_invariant_violations. Admin port only.
+  auditor:
+    build:
+      context: .
+      args: { SERVICE: auditor }
+    environment:
+      ENVIRONMENT: development
+      LOG_FORMAT: text
+      POSTGRES_DSN: postgres://holdfast:holdfast@postgres:5432/holdfast?sslmode=disable
+      VALKEY_ADDRS: valkey:6379
+    ports:
+      - "9097:9090" # admin: metrics, health, pprof (never expose in production)
+    depends_on:
+      postgres: { condition: service_healthy }
+      valkey: { condition: service_healthy }
+      holdfastctl: { condition: service_completed_successfully }
+    restart: unless-stopped
+
   # Exporters for the mission-control dashboard's health row (task 4.6):
   # Valkey's CPU and command rate, PostgreSQL's transactions and connections.
   valkey-exporter:
@@ -341,6 +361,7 @@ services:
     image: prom/prometheus:v3.15.0
     volumes:
       - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/alerting:/etc/prometheus/rules:ro
     ports: ["9090:9090"]
     depends_on: [inventory, queue]
     restart: unless-stopped

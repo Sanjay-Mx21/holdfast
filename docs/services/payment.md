@@ -9,8 +9,9 @@ Binary: `cmd/payment`. Code: `internal/payment` (the provider client in
 
 **Status:** built in Phase 3: the schema (task 3.8), the service (task 3.9),
 mockpsp, the local provider (task 3.10, `docs/services/mockpsp.md`), and
-refunds of bookings the final guard refused (task 3.11). The reconciler
-that reads the provider's settlement report arrives in Phase 5.
+refunds of bookings the final guard refused (task 3.11). Phase 5 (task 5.1)
+added the reconciler, which compares the provider's settlement report with
+the records.
 
 ## Responsibilities
 
@@ -21,6 +22,8 @@ that reads the provider's settlement report arrives in Phase 5.
   capture and refund in the ledger.
 - Find out what happened to intents with no news (status polling).
 - Refund the bookings booking-svc cannot confirm.
+- Reconcile with the provider's settlement report, repairing what lost
+  webhooks left behind and flagging what only a human can decide.
 - Announce every outcome on `holdfast.payment.v1` (the outbox).
 
 ## Internal gRPC API
@@ -104,7 +107,7 @@ X-PSP-Signature: <hex HMAC-SHA256 of "<timestamp>.<body>" with PSP_WEBHOOK_SECRE
 
 A capture whose amount differs from the intent's is **never** booked: it is
 logged as an error and counted (`holdfast_payment_amount_mismatch_total`) for
-a human (reconciliation, Phase 5).
+a human; the reconciler reports it too (`amount_mismatch`).
 
 ## Status polling
 
@@ -118,6 +121,36 @@ with a 3-second deadline per call.
 A captured, failed or expired order gets the same move, ledger entries and
 event as its webhook would have. The webhook arriving later then changes
 nothing.
+
+## Reconciliation
+
+Every `RECON_INTERVAL` (5 minutes, and once at start), one replica (under a
+PostgreSQL advisory lock; the others skip) fetches the provider's
+settlement report for the last `RECON_WINDOW` (2 hours) and compares it
+with the intents (design doc 9.9, `internal/payment/reconciler.go`):
+
+| The provider says | HoldFast says | Kind | What happens |
+|---|---|---|---|
+| captured | `CREATED`, `FAILED` or `EXPIRED` | `missed_capture` | Applied through the same path as the webhook: captured, booked, announced; the saga then confirms or refunds |
+| refund completed | `REFUND_PENDING` | `missed_refund` | Completed through the same path as the webhook |
+| (nothing) | `REFUND_PENDING` for `RECON_REFUND_STUCK` (15 minutes) | `refund_stuck` | The refund is asked for again (idempotent at the provider) |
+| a different amount | anything | `amount_mismatch` | Nothing changes; a human decides |
+| (no capture) | a capture booked in the window | `capture_unknown_to_psp` | Nothing changes; a data-integrity incident |
+| refund completed | not refunding | `refund_unknown_to_holdfast` | Nothing changes; a human decides |
+| money for a reference that is no intent | | `unknown_order` | Nothing changes; logged |
+
+- **Margins.** A webhook can arrive minutes after the capture, so HoldFast's
+  own captures are only checked against the report between `RECON_MARGIN`
+  (5 minutes) after the window's start and `RECON_MARGIN` before now. A
+  capture booked just inside the window may have happened at the provider
+  just before it, and one booked a moment ago may not be in the report yet.
+- **Counting.** Every finding is counted in
+  `holdfast_recon_mismatch_total{type}` on each pass while it persists, and
+  logged: repaired kinds at WARN, the others at ERROR. The alert
+  `ReconciliationNeedsAHuman` pages on the second group (runbook
+  `docs/runbooks/auditor.md`).
+- **Idempotent.** Applying a capture or a refund the webhook later also
+  brings changes nothing the second time, whichever comes first.
 
 ## Refunds
 
@@ -186,6 +219,10 @@ Shared settings (`ENVIRONMENT`, `LOG_*`, `HTTP_*`, `POSTGRES_*`, `KAFKA_*`,
 | `POLL_INTERVAL` | `30s` | Status polling period |
 | `POLL_AFTER` | `2m` | Age at which a `CREATED` intent is polled |
 | `POLL_BATCH` | `20` | Intents polled per pass |
+| `RECON_INTERVAL` | `5m` | Reconciliation period (at least 10 s) |
+| `RECON_WINDOW` | `2h` | How far back each pass looks (at least 3 × `RECON_MARGIN`) |
+| `RECON_MARGIN` | `5m` | Edges of the window where our own captures are not checked |
+| `RECON_REFUND_STUCK` | `15m` | Age at which a `REFUND_PENDING` refund is asked for again |
 | `OUTBOX_BATCH` | `500` | Events published per relay transaction |
 | `OUTBOX_INTERVAL` | `200ms` | Relay pause after a pass that found less than a full batch |
 
@@ -200,7 +237,10 @@ store. Locally, Compose maps the public port to
 |---|---|---|
 | `holdfast_payment_intents_created_total` | | Intents created |
 | `holdfast_webhooks_total` | `type`, `duplicate` | Webhooks by type (the provider's four, plus `malformed`, `bad_signature`, `other`) |
-| `holdfast_payment_captures_total` | `via` | Captures learned by `webhook` or `poll` |
+| `holdfast_payment_captures_total` | `via` | Captures learned by `webhook`, `poll` or `reconciler` |
+| `holdfast_recon_mismatch_total` | `type` | Reconciliation findings, by kind (above) |
+| `holdfast_recon_runs_total` | `result` | Reconciliation passes: ok, error, skipped (another replica holds the lock) |
+| `holdfast_recon_last_success_timestamp_seconds` | | When the last pass completed; `ReconcilerStale` fires after 15 minutes |
 | `holdfast_payment_amount_mismatch_total` | | Captures refused for a different amount: page a human |
 | `holdfast_payment_refund_requests_total` | `result` | Refund requests: requested, retry, rejected |
 | `holdfast_payment_polls_total` | `result` | Polled orders by provider status, `provider_error`, or `error` for a failed pass |
