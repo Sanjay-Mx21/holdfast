@@ -12,7 +12,7 @@ hand in a real browser: the queue fills, admissions flow, and the purchase
 shows up as a hold, a confirmed booking and a payment. Method and numbers:
 [`loadtest/results/README.md`](loadtest/results/README.md).*
 
-> **Status:** [v0.3.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.3.0) is the MVP backend. Phase 4 (identity, sale policies, proof of work, the web app and this dashboard) is built and awaiting review. The full design and build plan: [`docs/design/holdfast-design-and-build-plan.mdx`](docs/design/holdfast-design-and-build-plan.mdx).
+> **Status:** [v0.4.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.4.0) is the resume-ready product: phone sign-in, the sale rules, proof of work, the web app and this dashboard, on top of the MVP backend of [v0.3.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.3.0). Next: Phase 5, reliability (the reconciler and auditor, Valkey high availability, chaos experiments). The full design and build plan: [`docs/design/holdfast-design-and-build-plan.mdx`](docs/design/holdfast-design-and-build-plan.mdx).
 
 ## The problem
 
