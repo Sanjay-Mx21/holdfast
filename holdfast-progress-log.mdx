@@ -31,8 +31,8 @@ All times are IST (UTC+05:30).
 |---|---|
 | **Project** | A flash-sale booking engine that sells exactly the available units under extreme demand, never more |
 | **Plan version** | 2.0 (1 October 2026) |
-| **Milestones complete** | M0 Foundation, M1 Correctness core, M1.5 Bring-up and baseline, M2 Fair waiting room, and M3 MVP backend |
-| **Current milestone** | M4 Resume-ready product (Phase 4): all 8 tasks built, except the demo video v1, which is the owner's (section 10). **Work stopped for the owner's review** |
+| **Milestones complete** | M0 Foundation, M1 Correctness core, M1.5 Bring-up and baseline, M2 Fair waiting room, M3 MVP backend, and M4 Resume-ready product (the demo video deferred by the owner) |
+| **Current milestone** | M5 Hardened (Phase 5): starting task 5.1 |
 | **Progress to v1.0** | About 49% (25 of about 51 focused-work days, excluding Phase 7 stretch goals), counting Phase 2's and Phase 4's planned 7 days each |
 | **Repository** | [github.com/Sanjay-Mx21/holdfast](https://github.com/Sanjay-Mx21/holdfast), branch `main` |
 | **First commit** | `2173e50` "first commit", 2026-10-01 20:20, 82 files, 12,973 lines |
@@ -368,7 +368,7 @@ The rest of the list was already covered by tests written with tasks 3.4 to 3.12
 - **ADR 0012:** short-lived EdDSA access tokens verified locally; 30-day refresh tokens, hashed, in a strict cookie, rotating with family revocation on reuse; clients refresh one at a time.
 - **`docs/services/policy.md`:** every sale rule (the windows, the per-user cap, proof of work, rate limits, admission, the freeze switch), where each is enforced, and why there.
 - **`docs/services/auth.md`:** its status brought up to date. (The web app's doc was written with 4.5.)
-- **Also:** the architecture doc's security section points to both; the README's decisions table gains ADR 0012; P44 fixed (the design's ADR table). | Branch `feat/p4-docs`, issue #40 |
+- **Also:** the architecture doc's security section points to both; the README's decisions table gains ADR 0012; P44 fixed (the design's ADR table). | PR #102 (merged by the assistant at 02:00 after all 12 checks passed), `6bf589e`; issue #40 closed |
 | 2026-10-04 01:54 | **Phase 4 complete, apart from the owner's items; work stopped for the owner's review.**
 - **All 8 tasks are built** (PRs #95 to #102), except the demo video v1.
 - **Exit criteria:**
@@ -379,6 +379,8 @@ The rest of the list was already covered by tests written with tasks 3.4 to 3.12
   - the video, and whether to tag a release;
   - a `.wslconfig` memory limit (E24);
   - E2 at design scale still needs a separate load generator (Phase 6), unchanged. | This log |
+| 2026-10-06 | **WSL memory limit set by the owner** (E24's follow-up): `C:\Users\sanjay.m\.wslconfig` with `memory=6GB`, `swap=4GB`, `autoMemoryReclaim=gradual`, then `wsl --shutdown`. The containers restarted themselves. Docker Desktop's host port forwarding was stale (some admin ports hung; 9091 answered with queue-svc's checks), and inventory-svc's readiness was waiting on queue-svc's keys; `docker compose up -d --force-recreate` fixed both. Every service ready, 2.1 GB used of 5.8 GB | Conversation |
+| 2026-10-06 19:04 | **Owner's decisions after Phase 4:** leave the demo video for now, release v0.4.0, then start Phase 5. **Release v0.4.0 prepared:** CHANGELOG `[0.4.0]` (tasks 4.3 to 4.8 added to the entries of 4.1 and 4.2, and its known issues), the milestone tracker (M4 complete, M5 next), the README status and this log | Branch `release/v0.4.0` |
 
 ## 3. What is complete, and what each piece contributes
 
