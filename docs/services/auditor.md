@@ -20,6 +20,16 @@ of violations found. **Every value must be 0.** The alert
 | **I4** per-user cap | An (event, user) pair whose units held for payment or bought exceed the event's limit, by the bookings or by the guard's per-user counter | `booking.bookings`, `booking.user_event_purchases`, `booking.events` |
 | **I5** no lost units | A hold still in inventory's expiry index more than `HOLD_GRACE` (5 minutes) past its expiry, by Valkey's clock | Valkey `inv:events`, `inv:{E}:expiry` |
 
+Beside the invariants it compares each provisioned event's Valkey pool with
+PostgreSQL (task 5.3): `holdfast_inventory_drift_units{event}` is how many
+units `inv:{E}:avail` offers beyond capacity − sold − units in pending
+bookings. Healthy inventory never offers more (a hold not yet booked only
+lowers it); more means Valkey lost writes or drifted, and the remedy is a
+rebuild (`holdfastctl inventory rebuild`, RB-INV-4). Valkey is read before
+PostgreSQL, so a booking cancelled between the reads cannot look like
+drift; a purchase completing between them can, for one check, which is why
+`InventoryDrift` waits 2 minutes.
+
 The checks do not re-read what a database constraint already forces
 (`sold <= capacity`, at most 10 units per booking): each recomputes the
 invariant from independent records, so a bug in the code that maintains a
@@ -63,6 +73,7 @@ are defined in `internal/platform/config`. It serves only the admin port
 | Metric | Labels | Use |
 |---|---|---|
 | `holdfast_invariant_violations` | `invariant` | Violations found by the latest check; must be 0 |
+| `holdfast_inventory_drift_units` | `event` | Units Valkey offers beyond PostgreSQL's free units, per provisioned event (task 5.3); must be 0, `InventoryDrift` fires after 2 minutes |
 | `holdfast_auditor_runs_total` | `result` | Checks: ok, error (some invariant could not be checked) |
 | `holdfast_auditor_last_success_timestamp_seconds` | | When every invariant was last checked; `AuditorStale` fires after 2 minutes |
 

@@ -51,7 +51,8 @@ func commands() []command {
 		{"keys generate", "generate an Ed25519 key pair for admission tokens", cmdKeysGenerate},
 		{"token mint", "mint admission tokens (development and load tests only)", cmdTokenMint},
 		{"event create", "create an event in PostgreSQL and provision its inventory and queue", cmdEventCreate},
-		{"inventory provision", "provision or rebuild an event's Valkey inventory from PostgreSQL", cmdInventoryProvision},
+		{"inventory provision", "provision an event's Valkey inventory from PostgreSQL (a pool that exists is left alone)", cmdInventoryProvision},
+		{"inventory rebuild", "set an event's Valkey inventory to PostgreSQL's records, holds frozen (runbook RB-2)", cmdInventoryRebuild},
 		{"inventory status", "show an event's live availability", cmdInventoryStatus},
 		{"queue provision", "provision an event's waiting room (opening time from PostgreSQL by default)", cmdQueueProvision},
 		{"queue status", "show an event's waiting room: state, size, admission, sessions, leader", cmdQueueStatus},
@@ -368,8 +369,8 @@ func cmdInventoryProvision(ctx context.Context, args []string) error {
 		return err
 	}
 	// PostgreSQL is the source of truth: the pool starts at capacity minus
-	// units already sold. (Once booking-svc exists, units in pending
-	// bookings are subtracted too; see the inventory runbook.)
+	// units already sold. A pool that exists is left alone; 'inventory
+	// rebuild' replaces one, counting pending bookings too (runbook RB-2).
 	return provision(ctx, *vk, id.String(), inventory.EventConfig{
 		Capacity: e.Capacity, PerUserLimit: e.PerUserLimit, InitialAvailable: e.Capacity - e.Sold,
 	})

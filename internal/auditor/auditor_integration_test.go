@@ -207,3 +207,39 @@ func TestAFailedCheckKeepsTheOthers(t *testing.T) {
 		t.Fatal("a partial check must count as an error and not as a success")
 	}
 }
+
+// TestInventoryDriftIsReported: inventory offering more units than
+// PostgreSQL has free is reported per event; offering fewer (a hold not yet
+// booked) is healthy, and an event missing from the catalog is skipped.
+func TestInventoryDriftIsReported(t *testing.T) {
+	f := newFixture(t)
+	healthy := f.event(t, 10, 3, 4) // free: 10 - 3 sold - 2 pending = 5
+	f.booking(t, healthy, uuid.New(), 2, "PENDING_PAYMENT")
+	drifted := f.event(t, 10, 3, 4) // free: 7
+	unknown := uuid.New()
+	for e, avail := range map[uuid.UUID]int{healthy: 4, drifted: 9, unknown: 50} {
+		k := "inv:{" + e.String() + "}:avail"
+		if err := f.rdb.Set(ctx, k, avail, 0).Err(); err != nil {
+			t.Fatal(err)
+		}
+		f.rdb.SAdd(ctx, "inv:events", e.String())
+	}
+	f.check(t)
+	drift := func(e uuid.UUID) float64 { return testutil.ToFloat64(f.m.drift.WithLabelValues(e.String())) }
+	if got := drift(drifted); got != 2 {
+		t.Errorf("drifted event: %v units, want 2", got)
+	}
+	if got := drift(healthy); got != 0 {
+		t.Errorf("healthy event (one unit in an unbooked hold): %v units, want 0", got)
+	}
+	if n := testutil.CollectAndCount(f.m.drift); n != 2 {
+		t.Errorf("%d series, want 2: the event missing from the catalog must not be published", n)
+	}
+
+	// Rebuilt: back to 0.
+	f.rdb.Set(ctx, "inv:{"+drifted.String()+"}:avail", 7, 0)
+	f.check(t)
+	if got := drift(drifted); got != 0 {
+		t.Errorf("after the fix: %v units, want 0", got)
+	}
+}

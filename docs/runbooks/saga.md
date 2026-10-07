@@ -49,7 +49,7 @@ were not blocked.
    in `traceparent` finds the request in Jaeger. Typical causes, and what
    to do:
    - **`inventory: hold not found`:** inventory lost the hold (Valkey data
-     loss). Rebuild inventory first (`holdfastctl inventory provision`;
+     loss). Rebuild inventory first (`holdfastctl inventory rebuild`;
      runbook RB-INV-4).
    - **`the provider refused the refund`:** see RB-4.
    - **`decode` errors:** a producer sent something the consumer cannot

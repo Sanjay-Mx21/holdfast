@@ -30,6 +30,23 @@ groups:
             Check the reconciler's findings and the saga's dead-letter topic (RB-3, RB-4).
           runbook: docs/runbooks/auditor.md
 
+      # Task 5.3: Valkey offers units PostgreSQL does not have free (lost
+      # writes after a failover, or drift). Buyers would get holds the final
+      # guard refuses; the remedy is a rebuild. 2 minutes: a purchase made
+      # between the auditor's two reads can show a few units for a moment.
+      - alert: InventoryDrift
+        expr: max by (event) (holdfast_inventory_drift_units) > 0
+        for: 2m
+        labels:
+          severity: page
+        annotations:
+          summary: "Inventory offers {{ $value }} unit(s) more than PostgreSQL has free for event {{ $labels.event }}"
+          description: >-
+            Valkey's available count is above capacity - sold - pending bookings. No oversell follows (the
+            final guard decides), but buyers would pay and be refunded. Freeze the sale and rebuild its
+            inventory: holdfastctl inventory rebuild (runbook RB-INV-4).
+          runbook: docs/runbooks/auditor.md
+
       - alert: AuditorStale
         expr: time() - holdfast_auditor_last_success_timestamp_seconds > 120
         for: 1m

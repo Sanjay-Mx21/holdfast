@@ -108,6 +108,17 @@ func (a *Auditor) Check(ctx context.Context) (Report, error) {
 			a.log.ErrorContext(ctx, "auditor: invariant violated", "invariant", inv, "violations", n)
 		}
 	}
+	if drift, err := a.inventoryDrift(ctx); err != nil {
+		errs = append(errs, fmt.Errorf("inventory drift: %w", err))
+	} else {
+		a.m.drift.Reset() // events no longer provisioned drop out
+		for event, n := range drift {
+			a.m.drift.WithLabelValues(event).Set(float64(n))
+			if n > 0 {
+				a.log.WarnContext(ctx, "auditor: inventory offers more units than PostgreSQL has free", "event", event, "units", n)
+			}
+		}
+	}
 	if len(errs) > 0 {
 		a.m.runs.WithLabelValues("error").Inc()
 		return report, errors.Join(errs...)
@@ -213,4 +224,64 @@ func (a *Auditor) lostHolds(ctx context.Context) (int64, error) {
 		n += c.Val()
 	}
 	return n, nil
+}
+
+// inventoryDrift returns, for every provisioned event, the units inventory
+// offers beyond what PostgreSQL has free: Valkey's available minus
+// (capacity − sold − units in PENDING_PAYMENT bookings), or 0. Healthy
+// inventory never offers more, because holds not yet booked only lower
+// "available". A positive value means Valkey lost writes (a failover) or
+// drifted: buyers would get holds the final guard then refuses. No oversell
+// follows, but the remedy is a rebuild (runbook RB-INV-4), so it is not an
+// invariant of its own; the InventoryDrift alert waits 2 minutes, since a
+// purchase completing between the two reads can show a few units for a moment.
+func (a *Auditor) inventoryDrift(ctx context.Context) (map[string]int64, error) {
+	events, err := a.rdb.SMembers(ctx, "inv:events").Result()
+	if err != nil || len(events) == 0 {
+		return map[string]int64{}, err
+	}
+	// Valkey first: a booking cancelled between the reads then shows as more
+	// free units in PostgreSQL, never as drift.
+	pipe := a.rdb.Pipeline()
+	avail := make([]*redis.StringCmd, len(events))
+	for i, e := range events {
+		avail[i] = pipe.Get(ctx, "inv:{"+e+"}:avail")
+	}
+	if _, err := pipe.Exec(ctx); err != nil && !errors.Is(err, redis.Nil) {
+		return nil, err
+	}
+	rows, err := a.db.Query(ctx, `
+		SELECT i.event_id::text, i.capacity - i.sold - coalesce(p.pending, 0)
+		FROM booking.event_inventory i
+		LEFT JOIN (
+		  SELECT event_id, sum(qty) AS pending FROM booking.bookings
+		  WHERE status = 'PENDING_PAYMENT' GROUP BY event_id
+		) p ON p.event_id = i.event_id
+		WHERE i.event_id::text = ANY($1)`, events)
+	if err != nil {
+		return nil, err
+	}
+	free := map[string]int64{}
+	for rows.Next() {
+		var e string
+		var n int64
+		if err := rows.Scan(&e, &n); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		free[e] = n
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	drift := make(map[string]int64, len(events))
+	for i, e := range events {
+		f, known := free[e]
+		v, err := avail[i].Int64()
+		if !known || err != nil { // not in the catalog, or no pool: nothing to compare
+			continue
+		}
+		drift[e] = max(0, v-f)
+	}
+	return drift, nil
 }

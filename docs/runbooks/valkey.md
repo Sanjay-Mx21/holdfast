@@ -44,7 +44,8 @@ back. Every invariant stayed at 0 throughout.
   the replica had not yet received. At the drill's load the replica was
   never behind, so nothing was lost; under a sale's load, up to about a
   second of holds, joins and admissions can be. PostgreSQL's final guard
-  keeps I1 either way; RB-INV-4 puts inventory back.
+  keeps I1 either way; `holdfastctl inventory rebuild` (RB-INV-4) puts
+  inventory back.
 - **Never fail over without `COORDINATED`** (P49). A plain `SENTINEL
   FAILOVER` promotes the replica while the old primary still takes writes,
   and those are discarded when it becomes a replica: in the drill, a
@@ -64,10 +65,10 @@ back. Every invariant stayed at 0 throughout.
   not replicated are lost.
 - **Do:**
   1. If a sale is live, freeze it (`holdfastctl freeze`, RB-1).
-  2. Rebuild its inventory from PostgreSQL (RB-INV-4), which discards
-     whatever the failover lost: with the sale frozen, nothing changes
-     underneath it. (Task 5.3 extends the rebuild to units in pending
-     checkouts and to the per-user counters: RB-2.)
+  2. Rebuild its inventory from PostgreSQL: `holdfastctl inventory
+     rebuild --event E` (RB-INV-4, the design's RB-2), which repairs
+     whatever the failover lost: the pool, the per-user counters, and the
+     holds of bookings waiting for payment.
   3. Check the auditor's invariants (`localhost:9097/metrics`), then
      unfreeze.
   4. Bring the failed node back: it rejoins as a replica by itself (the

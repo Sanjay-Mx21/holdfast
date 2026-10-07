@@ -133,7 +133,9 @@ func TestCallsWithoutAValidTokenOrPermissionAreRefused(t *testing.T) {
 	// No token at all.
 	conn, _ := grpc.NewClient("passthrough:///bufnet", grpc.WithContextDialer(r.dialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	defer conn.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	// Only a guard against a hang: it covers the health check below too, and
+	// one second ran out under a loaded -race run (P50).
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_, err = inventoryv1.NewInventoryServiceClient(conn).GetHold(ctx, &inventoryv1.GetHoldRequest{})
 	if Code(err) != codes.Unauthenticated {

@@ -173,6 +173,7 @@ RELEASED <-------------+       (Confirm on RELEASED = late: units re-taken)
 | `mark_paying.lua` | {1 marked, 2 already paying, 0 expired or missing, -1 not owner} |
 | `release.lua` | 1 released, 0 nothing to do, -1 not expired yet, -2 paying (cannot cancel), -3 not owner |
 | `confirm.lua` | 1 confirmed, 2 replay, 3 late, -1 not owner |
+| `rebuild.lua` | Operator only (`holdfastctl inventory rebuild`, RB-INV-4): sets the pool, the per-user counters and the pending bookings' holds to PostgreSQL's records and freezes the sale; replies with what it changed (or would, in a dry run) |
 
 ## Configuration
 

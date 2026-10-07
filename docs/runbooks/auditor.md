@@ -84,3 +84,22 @@ minutes (reconciler).
 
 While the auditor is stale, nothing watches the invariants: treat a live
 sale with care until it is back.
+
+## RB-AUD-5 `InventoryDrift`
+
+**Symptom:** `holdfast_inventory_drift_units{event}` has been above 0 for 2
+minutes: Valkey's `inv:{E}:avail` is higher than PostgreSQL's free units
+(capacity − sold − units in `PENDING_PAYMENT` bookings). Healthy inventory
+is never higher, because holds not yet booked only lower it.
+
+**Cause:** Valkey lost writes (a failover, RB-VK-1), or a counter drifted
+(a bug, or a key edited by hand).
+
+**Impact:** no oversell (the final guard decides every sale), but inventory
+hands out holds for units that do not exist: those buyers pay, are refused
+at confirmation and refunded.
+
+**Do:** freeze the sale (RB-1), then rebuild its inventory from PostgreSQL
+(`holdfastctl inventory rebuild --event E`, RB-INV-4; `--dry-run` first
+shows what it will change), check that the gauge is back to 0, and
+unfreeze.

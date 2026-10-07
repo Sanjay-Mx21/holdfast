@@ -138,7 +138,7 @@ and caveats: [`loadtest/results/README.md`](loadtest/results/README.md).
 |---|---|---|
 | A stampede at T0 | The edge serves the cached status document and static pages; joins are rate-limited per IP and per user, cost a proof of work, and are refused cheaply before touching Valkey | [queue](docs/runbooks/queue.md) |
 | Valkey unreachable | 503 with `Retry-After`; readiness fails; nothing oversells, since PostgreSQL's guard decides every sale | [RB-INV-1](docs/runbooks/inventory.md) |
-| Valkey loses its data | The pool is rebuilt from PostgreSQL (capacity minus sold) | [RB-INV-4](docs/runbooks/inventory.md) |
+| Valkey loses its data | `holdfastctl inventory rebuild` resets the pool, per-user counters and pending checkouts' holds from PostgreSQL in one atomic step (1.25 s for a 50,000-buyer sale) | [RB-INV-4](docs/runbooks/inventory.md) |
 | The admission leader dies | Its PostgreSQL session drops and releases the lock; a standby takes over on its next attempt (every 2 s) with a newer epoch, and the old leader is fenced off | [RB-Q-6](docs/runbooks/queue.md) |
 | A payment webhook is lost, duplicated or late | Duplicates are dropped by event ID; quiet intents are polled; a capture after cancellation is honoured if the guard allows, refunded if not | [saga](docs/runbooks/saga.md) |
 | The payment provider is down | A circuit breaker stops calls; bookings wait; payment deadlines cancel and release what never got paid | [saga](docs/runbooks/saga.md) |
@@ -219,8 +219,8 @@ and `/readyz`.
 - **Phase 5, reliability (in progress):** the reconciler and the invariant
   auditor are built (they fill the dashboard's correctness tiles, with
   alerts), and Valkey fails over by itself (a replica and three Sentinels:
-  a killed primary is replaced in about 7 s, nothing lost in the drill);
-  next, the full inventory rebuild, adaptive admission (AIMD) with
+  a killed primary is replaced in about 7 s, nothing lost in the drill),
+  and inventory is rebuilt from PostgreSQL in one command; next, adaptive admission (AIMD) with
   backpressure from the payment provider, chaos experiments E3 and E4, and
   alerts.
 - **Phase 6, scale and polish:** the design-scale E2 and E5 scale-out (1, 2

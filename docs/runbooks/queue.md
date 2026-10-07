@@ -153,7 +153,7 @@ and in which order, cannot.
    `work list yes`. If T0 has passed, the state reads `OPEN`, and joins
    from now on are in arrival order.
 3. Buyers must join again. Tell them: their earlier places are gone. Rebuild
-   inventory too if its keys were lost (`holdfastctl inventory provision`,
+   inventory too if its keys were lost (`holdfastctl inventory rebuild`,
    RB-INV-4).
 
 ## RB-Q-9 Buyers are refused with `VERIFIED_ONLY` or `AGENT_LOCKOUT`
