@@ -20,7 +20,7 @@ type Metrics struct {
 // values.
 func NewMetrics(reg prometheus.Registerer) *Metrics {
 	f := promauto.With(reg)
-	return &Metrics{
+	m := &Metrics{
 		orders: f.NewCounterVec(prometheus.CounterOpts{
 			Name: "holdfast_mockpsp_orders_total", Help: "Order requests: created, replayed (same idempotency key), key_reused.",
 		}, []string{"result"}),
@@ -35,6 +35,23 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 			Name: "holdfast_mockpsp_faults_total", Help: "API faults injected: timeout, outage.",
 		}, []string{"fault"}),
 	}
+	// Every series at zero from the start, so increase() and the chaos
+	// scripts' before-and-after counts see the first event (P42, P54).
+	for _, r := range []string{"created", "replayed", "key_reused"} {
+		m.orders.WithLabelValues(r)
+	}
+	for _, r := range []string{"captured", "failed", "expired", "refunded"} {
+		m.payments.WithLabelValues(r)
+	}
+	for typ := range webhookTypes {
+		for _, r := range []string{"delivered", "retried", "gave_up", "dropped", "duplicated", "delayed"} {
+			m.webhooks.WithLabelValues(typ, r)
+		}
+	}
+	for _, f := range []string{"timeout", "outage"} {
+		m.faults.WithLabelValues(f)
+	}
+	return m
 }
 
 var webhookTypes = map[string]bool{

@@ -113,7 +113,13 @@ MODE ?= crash
 drill-valkey: ## Valkey failover drill on the running stack: make drill-valkey MODE=crash|planned|forced
 	bash scripts/valkey-failover-drill.sh $(MODE)
 
+chaos-e3: ## Experiment E3: purchases under payment-provider faults (needs make up; BUYERS=5000)
+	bash chaos/e3.sh
+
+chaos-e4: ## Experiment E4: purchases while Valkey, booking-svc, Kafka and PostgreSQL fail (needs make up)
+	bash chaos/e4.sh
+
 docker: ## Build container images for the deployable binaries
 	@for s in $(IMAGES); do docker build --build-arg SERVICE=$$s --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) -t holdfast/$$s:$(VERSION) . || exit 1; done
 
-.PHONY: help deps deps-upgrade tools fmt vet lint test itest cover build keys infra up down clean migrate event token run-inventory e1 fairness-e6 load-e2 drill-valkey topics gen docker
+.PHONY: help deps deps-upgrade tools fmt vet lint test itest cover build keys infra up down clean migrate event token run-inventory e1 fairness-e6 load-e2 drill-valkey chaos-e3 chaos-e4 topics gen docker

@@ -104,7 +104,18 @@ primary they fail with `READONLY`: fail back first.
   WSL2 steps the clock back about 60 ms every 30 s, so the Sentinels are in
   TILT about half the time (E26): a crash then takes up to 30 s longer to
   fail over (25.7 s instead of 7.1 s in the first drill). Production hosts
-  slew their clocks with NTP instead.
+  slew their clocks with NTP instead. Worse, when the steps come a little
+  faster than every 30 s, each lands just before TILT would end and the
+  Sentinels stay in TILT for minutes: in E4's first attempt (task 5.5) a
+  killed primary was not replaced within 120 s.
+- **Two primaries:** a killed primary that restarts keeps the role its
+  configuration file says, primary, until a Sentinel demotes it
+  (`+convert-to-slave` in the Sentinel log); while the Sentinels are in
+  TILT that waits. The services follow the Sentinels and never see it, but
+  anything talking to it directly (tools on the host, at localhost:6379)
+  would write to a node whose writes will be thrown away. Demote it by hand
+  if the Sentinels do not: `docker compose exec valkey valkey-cli REPLICAOF
+  <the primary's address> 6379`, then fail back with RB-VK-2 when wanted.
 
 ## RB-VK-4 The failover drill
 

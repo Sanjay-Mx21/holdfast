@@ -127,7 +127,7 @@ func TestConsumerConfigDefaults(t *testing.T) {
 	if err := cc.defaults(); err != nil {
 		t.Fatal(err)
 	}
-	if cc.MaxAttempts != 5 || cc.Backoff != 100*time.Millisecond || cc.MaxBackoff != 5*time.Second || cc.MaxPollRecords != 500 {
+	if cc.MaxAttempts != 5 || cc.RetryFor != 10*time.Minute || cc.Backoff != 100*time.Millisecond || cc.MaxBackoff != 5*time.Second || cc.MaxPollRecords != 500 {
 		t.Errorf("defaults = %+v", cc)
 	}
 }

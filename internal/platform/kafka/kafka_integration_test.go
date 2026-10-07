@@ -288,6 +288,71 @@ func TestUncommittedWorkIsRedelivered(t *testing.T) {
 	}
 }
 
+// TestAnOutageOutlastingMaxAttemptsIsWaitedOut (P56): a dependency that is
+// down longer than MaxAttempts' worth of backoff is retried until RetryFor,
+// and its message is handled when it comes back, never dead-lettered.
+func TestAnOutageOutlastingMaxAttemptsIsWaitedOut(t *testing.T) {
+	cfg := testenv.Kafka(t)
+	topic := testTopic(t, cfg, 1)
+	p, err := NewProducer(context.Background(), cfg, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+	ids := publish(t, p, topic, 2, func(int) string { return "k" })
+
+	// The "database" is down for 1 s from the first attempt: far longer than
+	// two attempts' backoff.
+	var first time.Time
+	col := &collector{fail: func(m Message) error {
+		if m.ID() != ids[0] {
+			return nil
+		}
+		if first.IsZero() {
+			first = time.Now()
+		}
+		if time.Since(first) < time.Second {
+			return errors.New("connection refused")
+		}
+		return nil
+	}}
+	stop := runConsumer(t, cfg, ConsumerConfig{Group: groupName(), Topics: []string{topic}, MaxAttempts: 2,
+		RetryFor: time.Minute, Backoff: 20 * time.Millisecond, MaxBackoff: 50 * time.Millisecond}, col.handle, nil)
+	waitFor(t, "the message behind the outage", func() bool {
+		for _, msg := range col.snapshot() {
+			if msg.ID() == ids[1] {
+				return true
+			}
+		}
+		return false
+	})
+	if err := stop(); err != nil {
+		t.Fatal(err)
+	}
+	attempts := 0
+	for _, msg := range col.snapshot() {
+		if msg.ID() == ids[0] {
+			attempts = max(attempts, msg.Attempt)
+		}
+	}
+	if attempts <= 2 {
+		t.Fatalf("the failing message was tried %d times: it should outlast MaxAttempts (2) until the outage ended", attempts)
+	}
+
+	// Nothing went to the dead-letter topic: a probe published there is the
+	// first message a fresh consumer of it sees.
+	probe := publish(t, p, DLQ(topic), 1, func(int) string { return "probe" })[0]
+	dead := &collector{}
+	stopDLQ := runConsumer(t, cfg, ConsumerConfig{Group: groupName(), Topics: []string{DLQ(topic)}}, dead.handle, nil)
+	waitFor(t, "the probe", func() bool { return len(dead.snapshot()) >= 1 })
+	if err := stopDLQ(); err != nil {
+		t.Fatal(err)
+	}
+	if got := dead.snapshot()[0].ID(); got != probe {
+		t.Fatalf("dead-lettered %s during a short outage", got)
+	}
+}
+
 // TestPoisonMessagesGoToTheDeadLetterTopic: retried, then dead-lettered with
 // their origin, while the messages behind them keep flowing.
 func TestPoisonMessagesGoToTheDeadLetterTopic(t *testing.T) {
@@ -313,7 +378,7 @@ func TestPoisonMessagesGoToTheDeadLetterTopic(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	m := NewMetrics(reg)
 	stop := runConsumer(t, cfg, ConsumerConfig{Group: groupName(), Topics: []string{topic}, MaxAttempts: 3,
-		Backoff: 10 * time.Millisecond, MaxBackoff: 20 * time.Millisecond}, col.handle, m)
+		RetryFor: time.Millisecond, Backoff: 10 * time.Millisecond, MaxBackoff: 20 * time.Millisecond}, col.handle, m)
 	waitFor(t, "the last message", func() bool {
 		for _, msg := range col.snapshot() {
 			if msg.ID() == ids[3] {

@@ -1,0 +1,26 @@
+{
+  "event": "01a115c9-b93e-7d2a-ae70-5fca31a4ca3d",
+  "buyers": 6000,
+  "concurrency": 200,
+  "started": "2026-10-07T09:55:11.439149636Z",
+  "seconds": 339.596375267,
+  "outcomes": {
+    "admit_failed": 356,
+    "book_failed": 12,
+    "confirmed": 1974,
+    "hold_failed": 1,
+    "join_failed": 872
+  },
+  "retries": {
+    "admit": 7975,
+    "book": 348,
+    "hold": 29,
+    "join": 20586
+  },
+  "payToConfirmMs": {
+    "max": 38222,
+    "p50": 4057,
+    "p95": 16089,
+    "p99": 22303
+  }
+}

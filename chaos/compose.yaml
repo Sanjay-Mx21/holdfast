@@ -1,0 +1,49 @@
+# The chaos experiments E3 and E4 (task 5.5, chaos/README.md), layered over
+# compose.yaml by chaos/e3.sh and chaos/e4.sh, which restore the normal stack
+# afterwards.
+#
+# - Simulated buyers (cmd/buyers) name themselves in X-Dev-User-Id instead of
+#   signing in with a phone code, and join without proof of work: both are
+#   the design's load-test bypasses, refused in production.
+# - They all come from one address, so the per-IP limits (the edge's and
+#   queue-svc's) are lifted, as in E2. The per-user limits stay.
+# - booking-svc, payment-svc and queue-svc reach PostgreSQL through
+#   Toxiproxy, so E4 can cut them off from it. The auditor and holdfastctl
+#   keep their direct connection: the observer must see through the fault.
+services:
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.12.0
+    command: ["-host=0.0.0.0", "-config=/config/toxiproxy.json"]
+    ports: ["8474:8474"] # Toxiproxy's API, for the scripts on the host (never expose)
+    volumes:
+      - ./chaos:/config:ro
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: unless-stopped
+
+  queue:
+    environment:
+      DEV_IDENTITY: "true"
+      POW_DIFFICULTY: "0"
+      JOIN_IP_PER_SECOND: "1000000"
+      JOIN_IP_BURST: "1000000"
+      POSTGRES_DSN: postgres://holdfast:holdfast@toxiproxy:15432/holdfast?sslmode=disable
+    depends_on:
+      toxiproxy: { condition: service_started }
+
+  booking:
+    environment:
+      DEV_IDENTITY: "true"
+      POSTGRES_DSN: postgres://holdfast:holdfast@toxiproxy:15432/holdfast?sslmode=disable
+    depends_on:
+      toxiproxy: { condition: service_started }
+
+  payment:
+    environment:
+      POSTGRES_DSN: postgres://holdfast:holdfast@toxiproxy:15432/holdfast?sslmode=disable
+    depends_on:
+      toxiproxy: { condition: service_started }
+
+  nginx:
+    volumes:
+      - ./loadtest/e2/edge-limits.conf:/etc/nginx/edge-limits.conf:ro

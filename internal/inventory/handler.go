@@ -3,6 +3,7 @@ package inventory
 import (
 	"context"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -247,10 +248,17 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 // so clients simply ask again at a gentle pace.
 const salePausedRetryAfter = 10
 
+// isUnavailable reports errors that mean Valkey cannot answer now but may
+// soon: unreachable, timed out, or in the middle of a failover (a dropped
+// connection, a write to a node just demoted, a replica still loading).
+// Callers should retry them (P57).
 func isUnavailable(err error) bool {
 	var netErr net.Error
 	return errors.Is(err, context.DeadlineExceeded) ||
 		errors.Is(err, redis.ErrClosed) ||
 		errors.Is(err, redis.ErrPoolTimeout) ||
-		errors.As(err, &netErr)
+		errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) ||
+		errors.As(err, &netErr) ||
+		redis.HasErrorPrefix(err, "READONLY") || redis.HasErrorPrefix(err, "LOADING") ||
+		redis.HasErrorPrefix(err, "MASTERDOWN") || redis.HasErrorPrefix(err, "TRYAGAIN")
 }

@@ -1,0 +1,148 @@
+== 11:07:07 switching to the chaos overlay
+== 11:08:04 E4: 12000 buyers, 200 at a time, event 01a1160c-7687-70b3-97bf-8e7ce6f33fbe admitting up to 15 a second; faults 60 s apart
+   15s  54 of 12000 buyers done
+   30s  204 of 12000 buyers done
+   45s  338 of 12000 buyers done
+   60s  482 of 12000 buyers done
+   75s  636 of 12000 buyers done
+   90s  801 of 12000 buyers done
+  105s  1008 of 12000 buyers done
+  120s  1204 of 12000 buyers done
+  135s  1430 of 12000 buyers done
+== 11:10:19 the Sentinels are still in TILT mode (E26); killing anyway
+== 11:10:19 1. killing the Valkey primary (valkey); buyers running: yes
+  150s  1462 of 12000 buyers done
+  165s  1462 of 12000 buyers done
+  180s  1491 of 12000 buyers done
+  195s  1491 of 12000 buyers done
+  210s  1519 of 12000 buyers done
+  225s  1520 of 12000 buyers done
+  240s  1548 of 12000 buyers done
+  255s  1549 of 12000 buyers done
+== 11:12:23 no promotion within 120 s (Sentinels in TILT mode: 1 of 1 checked); starting valkey again
+valkey_primary	not_promoted_tilt	120
+valkey_primary	inventory_ready_after_restart	132.6
+valkey_primary	queue_ready_after_restart	132.8
+== 11:12:32 RB-2: freeze, rebuild inventory from PostgreSQL, unfreeze
+inventory: holds frozen: no new holds
+queue: FROZEN: admissions paused
+rb2	freeze	0.1
+  270s  1549 of 12000 buyers done
+dry run: nothing was changed; a rebuild would do this:
+postgres    capacity 12000, sold 1472, 162 pending bookings (162 units), 1634 buyers with units
+available   10365 -> 10366
+per-user    0 counters set, 1 deleted
+holds       pending bookings: 0 recreated, 156 kept, 6 confirmed meanwhile; 1 without a booking released
+took        308.9ms
+rb2	dry_run	0.5
+inventory: holds frozen for the rebuild (already so)
+postgres    capacity 12000, sold 1482, 152 pending bookings (152 units), 1634 buyers with units
+available   10365 -> 10366
+per-user    0 counters set, 1 deleted
+holds       pending bookings: 0 recreated, 148 kept, 4 confirmed meanwhile; 1 without a booking released
+took        891.3ms
+holds stay frozen: check 'holdfastctl inventory status --event 01a1160c-7687-70b3-97bf-8e7ce6f33fbe' and the auditor, then 'holdfastctl unfreeze --event 01a1160c-7687-70b3-97bf-8e7ce6f33fbe'
+rb2	rebuild	1.3
+inventory: holds resumed
+queue: OPEN: admissions resumed
+rb2	unfreeze	0.1
+rb2	total	2.3
+  285s  1772 of 12000 buyers done
+  300s  1965 of 12000 buyers done
+  315s  2197 of 12000 buyers done
+  330s  2411 of 12000 buyers done
+== 11:13:35 2. killing booking-svc; buyers running: yes
+  345s  2460 of 12000 buyers done
+booking_svc	ready_after_kill	21.3
+  360s  2463 of 12000 buyers done
+  375s  2463 of 12000 buyers done
+  390s  2619 of 12000 buyers done
+  405s  2871 of 12000 buyers done
+== 11:14:56 3. restarting Kafka; buyers running: yes
+  420s  3123 of 12000 buyers done
+  435s  3135 of 12000 buyers done
+  450s  3135 of 12000 buyers done
+  465s  3135 of 12000 buyers done
+kafka	serving	52.1
+kafka	outboxes_drained	56.7
+  480s  3187 of 12000 buyers done
+  495s  3392 of 12000 buyers done
+  510s  3621 of 12000 buyers done
+  525s  3933 of 12000 buyers done
+== 11:16:52 4. cutting PostgreSQL off for 5 s; buyers running: yes
+postgres	services_ready	5.2
+== 11:16:57 faults done; waiting for the buyers
+  540s  4065 of 12000 buyers done
+  555s  4227 of 12000 buyers done
+  570s  4378 of 12000 buyers done
+  585s  4600 of 12000 buyers done
+  600s  4804 of 12000 buyers done
+  615s  5073 of 12000 buyers done
+  630s  5323 of 12000 buyers done
+  645s  5599 of 12000 buyers done
+  660s  5811 of 12000 buyers done
+  675s  6043 of 12000 buyers done
+  690s  6267 of 12000 buyers done
+  705s  6500 of 12000 buyers done
+  720s  6737 of 12000 buyers done
+  735s  6954 of 12000 buyers done
+  750s  7168 of 12000 buyers done
+  765s  7410 of 12000 buyers done
+  780s  7618 of 12000 buyers done
+  795s  7861 of 12000 buyers done
+  810s  8081 of 12000 buyers done
+  825s  8299 of 12000 buyers done
+  840s  8532 of 12000 buyers done
+  855s  8715 of 12000 buyers done
+  870s  8945 of 12000 buyers done
+  885s  9210 of 12000 buyers done
+  900s  9434 of 12000 buyers done
+  915s  9650 of 12000 buyers done
+  930s  9873 of 12000 buyers done
+  945s  10099 of 12000 buyers done
+  960s  10335 of 12000 buyers done
+  975s  10556 of 12000 buyers done
+  990s  10787 of 12000 buyers done
+ 1005s  11012 of 12000 buyers done
+ 1020s  11219 of 12000 buyers done
+ 1035s  11427 of 12000 buyers done
+ 1050s  11671 of 12000 buyers done
+ 1065s  11890 of 12000 buyers done
+
+12000 buyers for event 01a1160c-7687-70b3-97bf-8e7ce6f33fbe in 1073 s (200 at a time)
+outcomes:
+  admit_failed                     15
+  book_failed                       1
+  confirmed                     11913
+  join_failed                      71
+requests repeated after a failure, by stage:
+  admit                           435
+  book                            348
+  hold                              1
+  join                           2884
+  settle                          497
+payment to confirmed booking: p50 2070 ms, p95 26418 ms, p99 144954 ms, max 153273 ms
+
+== 11:25:53 results
+bookings:  CONFIRMED 11913
+intents:   CAPTURED 11913
+provider:  11913 captured; HoldFast knows 11913, 0 unresolved
+payment-svc captures by source: holdfast_payment_captures_total{via="poll"} 0 holdfast_payment_captures_total{via="reconciler"} 0 holdfast_payment_captures_total{via="webhook"} 11914 
+reconciler findings: 
+invariants: I1=0 I2=0 I3=0 I4=0 I5=0 
+recovery (seconds):
+  fault           measure                        seconds
+  valkey_primary  not_promoted_tilt              120
+  valkey_primary  inventory_ready_after_restart  132.6
+  valkey_primary  queue_ready_after_restart      132.8
+  rb2             freeze                         0.1
+  rb2             dry_run                        0.5
+  rb2             rebuild                        1.3
+  rb2             unfreeze                       0.1
+  rb2             total                          2.3
+  booking_svc     ready_after_kill               21.3
+  kafka           serving                        52.1
+  kafka           outboxes_drained               56.7
+  postgres        services_ready                 5.2
+RESULT: PASS - every fault recovered, settled 2.7 s after the buyers finished, every invariant 0
+== 11:26:00 restoring the normal stack

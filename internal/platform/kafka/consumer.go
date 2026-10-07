@@ -29,9 +29,17 @@ type Handler func(ctx context.Context, m Message) error
 type ConsumerConfig struct {
 	Group  string
 	Topics []string
-	// MaxAttempts is how often the handler is tried before the message goes
-	// to the dead-letter topic (default 5).
+	// MaxAttempts is how often the handler is tried at least before the
+	// message goes to the dead-letter topic (default 5).
 	MaxAttempts int
+	// RetryFor is how long a failing message keeps being retried before it
+	// is dead-lettered, whatever MaxAttempts says (default 10 minutes). A
+	// failure that is not Permanent is a dependency that may come back (a
+	// database, Valkey, another service): its partition waits for it rather
+	// than lose the message to the dead-letter topic, which needs a person
+	// to replay it. Five quick attempts dead-lettered payments during a 5 s
+	// database outage (P56, experiment E4).
+	RetryFor time.Duration
 	// Backoff is the first retry delay; it doubles per attempt, with jitter,
 	// up to MaxBackoff (defaults 100 ms and 5 s).
 	Backoff, MaxBackoff time.Duration
@@ -45,6 +53,9 @@ func (c *ConsumerConfig) defaults() error {
 	}
 	if c.MaxAttempts < 1 {
 		c.MaxAttempts = 5
+	}
+	if c.RetryFor == 0 {
+		c.RetryFor = 10 * time.Minute
 	}
 	if c.Backoff <= 0 {
 		c.Backoff = 100 * time.Millisecond
@@ -165,13 +176,15 @@ func (c *Consumer) Run(ctx context.Context) error {
 }
 
 // process hands one record to the handler until it succeeds, retrying with
-// backoff, and dead-letters it after MaxAttempts or a permanent error. A nil
-// return means the record may be committed.
+// backoff. It dead-letters a permanent error at once, and any other once it
+// has been tried MaxAttempts times and for RetryFor. A nil return means the
+// record may be committed.
 func (c *Consumer) process(ctx context.Context, r *kgo.Record) (perr error) {
 	sctx, span := startProcess(ctx, r, c.cfg.Group)
 	defer func() { endSpan(span, perr) }()
 	var err error
-	for attempt := 1; attempt <= c.cfg.MaxAttempts; attempt++ {
+	start := time.Now()
+	for attempt := 1; ; attempt++ {
 		err = c.handle(sctx, messageOf(r, attempt))
 		if err == nil {
 			c.m.inc(r.Topic, resultOK)
@@ -180,13 +193,17 @@ func (c *Consumer) process(ctx context.Context, r *kgo.Record) (perr error) {
 		if ctx.Err() != nil {
 			return ctx.Err() // shutting down: leave it uncommitted
 		}
-		if IsPermanent(err) || attempt == c.cfg.MaxAttempts {
+		if IsPermanent(err) || (attempt >= c.cfg.MaxAttempts && time.Since(start) >= c.cfg.RetryFor) {
 			break
 		}
 		c.m.inc(r.Topic, resultRetried)
 		span.AddEvent("handler failed; retrying", trace.WithAttributes(attribute.Int("attempt", attempt), attribute.String("error", err.Error())))
-		c.log.WarnContext(sctx, "kafka: handler failed; retrying", "topic", r.Topic, "partition", r.Partition,
-			"offset", r.Offset, "attempt", attempt, "err", err)
+		// Every attempt through MaxAttempts, then one in ten: an outage of
+		// minutes should not bury the log.
+		if attempt <= c.cfg.MaxAttempts || attempt%10 == 0 {
+			c.log.WarnContext(sctx, "kafka: handler failed; retrying", "topic", r.Topic, "partition", r.Partition,
+				"offset", r.Offset, "attempt", attempt, "retrying_for", time.Since(start).Round(time.Second), "err", err)
+		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()

@@ -55,7 +55,11 @@ were not blocked.
    - **`decode` errors:** a producer sent something the consumer cannot
      read. Fix the producer or the consumer; never the message.
    - **A transient cause** (a database or dependency outage) that outlasted
-     the retries: make sure it is over.
+     the retries, which last 10 minutes since P56 (they were 2 seconds, and
+     experiment E4's 5 s database outage dead-lettered payments): make sure
+     it is over. Replaying puts each payment through the saga again: a
+     capture whose booking was cancelled meanwhile is refunded, and one
+     whose booking was confirmed marks its hold sold in inventory.
 3. **Replay** once the cause is fixed:
 
    ```bash

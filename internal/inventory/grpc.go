@@ -119,6 +119,10 @@ func toStatus(err error) error {
 		return grpcx.Error(codes.DeadlineExceeded, "DEADLINE_EXCEEDED", "deadline exceeded")
 	case errors.Is(err, context.Canceled):
 		return grpcx.Error(codes.Canceled, "CANCELED", "call cancelled")
+	case isUnavailable(err):
+		// Valkey unreachable or failing over: UNAVAILABLE, which callers
+		// (and grpcx's retry policy) treat as worth retrying (P57).
+		return grpcx.Error(codes.Unavailable, "UNAVAILABLE", "inventory is temporarily unavailable")
 	}
 	return grpcx.Error(codes.Internal, "INTERNAL", "internal error")
 }

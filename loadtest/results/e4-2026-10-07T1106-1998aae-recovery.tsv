@@ -1,0 +1,13 @@
+fault	measure	seconds
+valkey_primary	not_promoted_tilt	120
+valkey_primary	inventory_ready_after_restart	132.6
+valkey_primary	queue_ready_after_restart	132.8
+rb2	freeze	0.1
+rb2	dry_run	0.5
+rb2	rebuild	1.3
+rb2	unfreeze	0.1
+rb2	total	2.3
+booking_svc	ready_after_kill	21.3
+kafka	serving	52.1
+kafka	outboxes_drained	56.7
+postgres	services_ready	5.2

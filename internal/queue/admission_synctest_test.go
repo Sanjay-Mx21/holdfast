@@ -298,6 +298,28 @@ func TestLeadCapsSessionsByUnitsLeft(t *testing.T) {
 	})
 }
 
+// P55: buyers who already took units keep their session slots for the TTL.
+// The cap leaves room for them, so admission keeps flowing while units sell.
+func TestUnitsCapLeavesRoomForSpentSessions(t *testing.T) {
+	c, _ := syncController(250 * time.Millisecond)
+	for _, tt := range []struct {
+		capacity, available, want int
+	}{
+		{100, 100, 130},    // nothing sold: 100 x 1.3
+		{100, 30, 39 + 70}, // 70 units gone to at most 70 sessions
+		{100, 1, 1 + 99},   // the last unit
+		{100, 0, 0},        // none left: no new sessions
+		{0, 40, 52},        // capacity unknown: no credit
+	} {
+		c.cfg.Inventory, c.cfg.Oversubscription = &fakeInventory{avail: func(int) (inventory.Availability, error) {
+			return inventory.Availability{Capacity: tt.capacity, Available: tt.available, ActiveHolds: 1}, nil
+		}}, 1.3
+		if got, _ := c.unitsLeft(t.Context()); got != tt.want {
+			t.Errorf("capacity %d, available %d: cap %d, want %d", tt.capacity, tt.available, got, tt.want)
+		}
+	}
+}
+
 func TestLeadMarksSoldOutWhenNoUnitsAndNoHolds(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		c, _ := syncController(250 * time.Millisecond)

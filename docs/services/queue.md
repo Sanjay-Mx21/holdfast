@@ -371,7 +371,11 @@ how a stale one is stopped: ADR 0007.
   then also capped at the units left × `OVERSUBSCRIPTION_FACTOR` (1.3: not
   everyone admitted buys), inside the same `advance.lua` step, so thousands
   are not admitted to fight over the last few units; units returned by
-  expired holds reopen admission. When no units are left and no hold is open
+  expired holds reopen admission. Buyers who already held or bought keep
+  their session slot until its TTL but are done shopping, so the cap also
+  leaves room for capacity − units left sessions (each took at least one
+  unit). Without that, admission stalled near the end of a sale until
+  finished buyers' slots expired (P55, found by experiment E3). When no units are left and no hold is open
   (none can return any), the leader marks the queue `SOLD_OUT` with the
   fenced `soldout.lua`: joins and claims are refused from then on, and the
   status document says so on the same tick. A `FROZEN` queue is never marked
