@@ -2,9 +2,17 @@ global:
   scrape_interval: 5s
   evaluation_interval: 5s
 
-# Alert rules (deploy/alerting, mounted by Compose): design doc 12.2.
+# Alert rules (deploy/alerting, mounted by Compose): design doc 12.2. Only
+# *.rules.yml: the folder also holds the rules' tests (tests.yml).
 rule_files:
-  - /etc/prometheus/rules/*.yml
+  - /etc/prometheus/rules/*.rules.yml
+
+# Firing alerts go to Alertmanager (task 5.6), which groups them, routes
+# them by severity, and holds silences.
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
 
 scrape_configs:
   - job_name: inventory

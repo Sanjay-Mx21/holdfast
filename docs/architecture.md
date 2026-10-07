@@ -355,11 +355,15 @@ stores every 15 seconds and publishes the number of violations of each
   0) and `holdfast_inventory_drift_units{event}` (units Valkey offers beyond
   PostgreSQL's free units: the signal to rebuild, task 5.3), and the
   reconciler `holdfast_recon_mismatch_total{type}`.
-- **Alerts** (tasks 5.1 and 5.3, `deploy/alerting/holdfast.rules.yml`, loaded by
-  Prometheus): `InvariantViolation`, `MoneySafetyBreach`, `InventoryDrift`,
-  `ReconciliationNeedsAHuman`, `AuditorStale` and `ReconcilerStale`, each
-  with its runbook in `docs/runbooks/auditor.md`. Nothing routes them yet
-  (Alertmanager is task 5.6); Prometheus's Alerts page shows them.
+- **Alerts** (tasks 5.1, 5.3 and 5.6, `deploy/alerting/holdfast.rules.yml`,
+  loaded by Prometheus): 15 rules, from the invariants and money safety to
+  service health, outbox and consumer lag, dead letters, checkout latency,
+  the provider's breaker, a stalled waiting room and Valkey's replica. Each
+  has a unit test (`deploy/alerting/tests.yml`, run by
+  `scripts/check-alerts.sh` in `make lint` and CI) and a runbook
+  (`docs/runbooks/alerts.md` is the index). **Alertmanager**
+  (http://localhost:9098) groups them, routes pages and tickets, and holds
+  silences; locally it sends nothing anywhere.
 - **Dashboards:** Grafana. **HoldFast / Mission control** (design doc 12.4,
   task 4.6) puts a live sale on one screen, filtered by event:
   - the queue: state, size, `admittedUpTo`, sessions against the budget, the admission rate, the proof-of-work difficulty, joins by result;

@@ -32,13 +32,13 @@ All times are IST (UTC+05:30).
 | **Project** | A flash-sale booking engine that sells exactly the available units under extreme demand, never more |
 | **Plan version** | 2.0 (1 October 2026) |
 | **Milestones complete** | M0 Foundation, M1 Correctness core, M1.5 Bring-up and baseline, M2 Fair waiting room, M3 MVP backend, and M4 Resume-ready product (the demo video deferred by the owner) |
-| **Current milestone** | M5 Hardened (Phase 5): tasks 5.1 to 5.5 built, both exit criteria met; 5.6 next (section 11) |
+| **Current milestone** | M5 Hardened (Phase 5): tasks 5.1 to 5.6 built, both exit criteria met; 5.7 next (section 11) |
 | **Progress to v1.0** | About 49% (25 of about 51 focused-work days, excluding Phase 7 stretch goals), counting Phase 2's and Phase 4's planned 7 days each |
 | **Repository** | [github.com/Sanjay-Mx21/holdfast](https://github.com/Sanjay-Mx21/holdfast), branch `main` |
 | **First commit** | `2173e50` "first commit", 2026-10-01 20:20, 82 files, 12,973 lines |
 | **Latest release** | [v0.4.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.4.0), 2026-10-06 19:13, on `eefee44` (before it: [v0.3.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.3.0), 2026-10-03 15:48, on `5ffa271`; [v0.2.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.2.0), 2026-10-02 21:51, on `cd0592a`; [v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0), 2026-10-01 23:47, on `9dcd2f8`) |
 | **CI** | Green since 2026-10-01 22:00; `main` is protected and every change needs a pull request with all 13 required checks passing (`images (booking)`, `images (payment)`, `images (mockpsp)` and `images (auth)` added on 2026-10-03, `web` on 2026-10-04, `images (auditor)` on 2026-10-06) |
-| **Issues so far** | 143 recorded: 138 resolved, 5 open (section 6) |
+| **Issues so far** | 145 recorded: 140 resolved, 5 open (section 6) |
 
 <Callout type="tip" title="Phase 4 built: identity, sale policies, the web app and mission control (2026-10-04)">
 
@@ -451,7 +451,19 @@ The rest of the list was already covered by tests written with tasks 3.4 to 3.12
   - P54: mockpsp's counters were not pre-registered.
 - **Also:** D58, D59, and E26 worse than thought.
 - **Gates:** gofmt, `make test`, `make lint`, `make itest` (30 packages) and `make e1` (RESULT: PASS).
-- **Docs:** `chaos/README.md`; `loadtest/results/README.md` (E3, E4, the failed run); the README's results table; the architecture doc (consumer retries, testing); the queue doc (P55); the Valkey runbook (two primaries); RB-3; the design doc (5.5 ✅, both exit criteria ✅) | Branch `feat/p5-chaos`; issue #45 |
+- **Docs:** `chaos/README.md`; `loadtest/results/README.md` (E3, E4, the failed run); the README's results table; the architecture doc (consumer retries, testing); the queue doc (P55); the Valkey runbook (two primaries); RB-3; the design doc (5.5 ✅, both exit criteria ✅) | PR #108 (merged by the assistant at 17:14 after all 13 checks passed), `d445da6`; issue #45 closed |
+| 2026-10-07 17:23 | **Task 5.6 (alerting) built:**
+- **Rules:** 9 new rules beside task 5.1's 6, 15 in all:
+  - from design doc 12.2: `OutboxLagHigh`, `ConsumerLagHigh`, `CheckoutLatencyHigh`, `PSPBreakerOpen`, `AdmissionStalled`;
+  - from Phase 5's lessons: `ServiceDown`, `MessagesDeadLettered` (any dead letter needs a person since P56), `CaptureToConfirmSlow`, `ValkeyReplicaMissing`.
+  - `AdmissionStalled` leaves out the waiting room's deliberate stops (a full session budget, a pause for the provider).
+- **Tests:** a unit test for every alert (`deploy/alerting/tests.yml`, promtool), fired and not fired; `scripts/check-alerts.sh` runs them in `make lint` and CI's lint job. Prometheus now loads only `*.rules.yml`.
+- **Alertmanager** (`deploy/alertmanager`, port 9098) routes pages and tickets, inhibits the breaker's symptoms, and holds silences; locally it sends nothing anywhere. Prometheus sends to it.
+- **Live:** all 15 rules loaded; on its first evaluation **`ReconcilerStale` fired**: every reconciliation pass had failed since the E3 and E4 runs, because the provider's report for 2 busy hours outgrew the client's 1 MiB response limit (P58). The report is now paged, and the next pass worked. Rebuilding mockpsp then emptied its in-memory store, and the reconciler logged 31,887 `capture_unknown_to_psp` errors in one pass (P59): its logging is now capped, the mock's limitation documented, and the expected alert silenced in Alertmanager for the window, with a comment.
+- **Gates:** gofmt, `make lint` (with the alert tests), `make test`, `make itest` (30 packages) and `make e1` (RESULT: PASS).
+- **Runbooks:** `docs/runbooks/alerts.md` (every alert, where to go), RB-5 (the provider down: `docs/runbooks/payment.md`).
+- **Docs:** the architecture doc, the payment and mockpsp docs, the README, the design doc (5.6 ✅) | Branch `feat/p5-alerting`; issue #46 |
+
 
 
 ## 3. What is complete, and what each piece contributes
@@ -529,10 +541,10 @@ Every problem met while bringing Drop 1 up and running the soak on 2026-10-01, i
 
 | Group | Recorded | Resolved | Open |
 |---|---|---|---|
-| P: defects in the repository | 57 | 54 | 3 |
+| P: defects in the repository | 59 | 56 | 3 |
 | E: machine and network | 27 | 25 | 2 |
 | D: diagnosis and process | 59 | 59 | 0 |
-| **Total** | **143** | **138** | **5** |
+| **Total** | **145** | **140** | **5** |
 
 CI took **three runs** to go green:
 
@@ -603,6 +615,8 @@ CI took **three runs** to go green:
 | P55 | E3's first trial: 60 buyers took 667 s. The units cap (P17) kept open sessions within units left × 1.3, but buyers who had already held or bought keep their session slot for its 10-minute TTL, so as units sold the cap fell below the live sessions and admission stopped until the finished buyers' slots expired | In a real sale, the last units would wait up to 10 minutes while people queued; found by experiment E3 | P17 counted every open session as a shopper | The cap leaves room for capacity − units left sessions (each spent session took at least one unit); with multi-unit buyers it may admit a few more, who get a cheap SOLD_OUT. The rerun: 151 s, limited only by the injected webhook delays | ✅ Task 5.5 |
 | P56 | **A money-safety defect found by experiment E4.** Consumers dead-lettered any failure after 5 attempts within about 2 seconds. During E4's 5 s PostgreSQL cut, three `payment.captured` events were dead-lettered before booking-svc's saga could confirm their bookings; the bookings expired unpaid and were cancelled, and the auditor counted **I3 at 3**. The Valkey failovers dead-lettered 26 more after their bookings were confirmed but before the holds were marked sold, which left 22 units of inventory drift (the 5.3 gauge reported it) | Paid buyers lost their tickets until an operator replayed the dead-letter topic; Valkey offered units already sold | The retry budget treated a few seconds of infrastructure outage like a poison message; handlers already mark the messages that can never succeed as `Permanent` | A failure that is not permanent is retried for 10 minutes (`RetryFor`), the partition waiting, before it is dead-lettered; test: an outage outlasting `MaxAttempts` is waited out. On the dev stack the 29 dead letters were replayed (RB-3, 3.7 s): the three refunded, the drift gone. The next E4 run, with a 132 s Valkey outage, dead-lettered nothing | ✅ Task 5.5 |
 | P57 | inventory-svc's gRPC API answered INTERNAL for Valkey errors (unreachable, timed out, a connection dropped at a failover, READONLY), where its HTTP API said 503: callers and grpcx's retry policy saw a bug, not an outage | Seen in E4's dead-letter reasons | `toStatus` had no case for them, and the HTTP check missed the failover errors | One `isUnavailable` (now with EOF, READONLY, LOADING, MASTERDOWN, TRYAGAIN) maps to UNAVAILABLE on both APIs; unit test | ✅ Task 5.5 |
+| P58 | Every reconciliation pass failed after experiments E3 and E4: "decode GET /v1/settlements: unexpected end of JSON input". The provider client reads at most 1 MiB of a response, and the settlement report for the last 2 hours (about 34,000 items) was larger, so it was cut off | The reconciler, the safety net for lost webhooks, did nothing; at the design's scale (50,000 units a sale) it would never have worked. Found by the new `ReconcilerStale` alert on its first evaluation | The report came in one response, whatever its size | The report is paged: mockpsp's `limit` and `after` (a keyset cursor of time and identity, so a page boundary never skips or repeats an item), and the client follows `next`. Tests: pages with ties at their boundaries; 2,500 captures across three pages through the client. The next pass succeeded | ✅ Task 5.6 |
+| P59 | After mockpsp was rebuilt (its store is in memory), the reconciler logged one ERROR line per finding: 31,887 `capture_unknown_to_psp` lines in one pass, every 5 minutes for 2 hours | A flood that would bury any other error; the alert paged meanwhile | Logging scaled with the findings | A pass logs 20 findings of a kind by name, then one summary line (the metric still counts all). mockpsp's doc explains the restart's effect; the alert was silenced in Alertmanager for the window | ✅ Task 5.6 |
 
 ### 6.3 Machine and network
 
@@ -808,9 +822,9 @@ Goal: HoldFast stays correct and recovers within minutes when its parts fail. Pl
 | 5.2 Valkey high availability | [#42](https://github.com/Sanjay-Mx21/holdfast/issues/42) | ✅ 2026-10-07 (PR #105): a replica and three Sentinels at fixed addresses, `holdfastctl valkey probe`, `make drill-valkey`; a killed primary replaced in 7.1 s with nothing lost |
 | 5.3 Full RB-2 rebuild | [#43](https://github.com/Sanjay-Mx21/holdfast/issues/43) | ✅ 2026-10-07 (PR #106): `holdfastctl inventory rebuild` (one atomic script, dry run), the auditor's drift gauge and `InventoryDrift`; 50,000 buyers in 1.25 s; practised on three drifted dev events |
 | 5.4 Adaptive admission | [#44](https://github.com/Sanjay-Mx21/holdfast/issues/44) | ✅ 2026-10-07 (PR #107): AIMD on each leader's rate from the provider's pressure (payment-svc's `GetPressure`), a pause while the breaker is open, and a prober so it closes again |
-| 5.5 Chaos | [#45](https://github.com/Sanjay-Mx21/holdfast/issues/45) | ✅ 2026-10-07: `cmd/buyers` and `chaos/`; E3 (5,000 purchases under payment faults) and E4 (12,000 under infrastructure faults) pass with every invariant 0; RB-1 and RB-2 practised mid-sale (2.0 to 2.3 s); P55 to P57 found and fixed |
-| 5.6 Alerting | [#46](https://github.com/Sanjay-Mx21/holdfast/issues/46) | ⏳ Next |
-| 5.7 Runbooks | [#47](https://github.com/Sanjay-Mx21/holdfast/issues/47) | ⏳ |
+| 5.5 Chaos | [#45](https://github.com/Sanjay-Mx21/holdfast/issues/45) | ✅ 2026-10-07 (PR #108): `cmd/buyers` and `chaos/`; E3 (5,000 purchases under payment faults) and E4 (12,000 under infrastructure faults) pass with every invariant 0; RB-1 and RB-2 practised mid-sale (2.0 to 2.3 s); P55 to P57 found and fixed |
+| 5.6 Alerting | [#46](https://github.com/Sanjay-Mx21/holdfast/issues/46) | ✅ 2026-10-07: 15 alert rules with promtool tests in CI, Alertmanager, the alert runbook index and RB-5; found P58 on its first evaluation |
+| 5.7 Runbooks | [#47](https://github.com/Sanjay-Mx21/holdfast/issues/47) | ⏳ Next |
 | 5.8 Docs | [#48](https://github.com/Sanjay-Mx21/holdfast/issues/48) | ⏳ |
 
 ## 12. Keeping this log current

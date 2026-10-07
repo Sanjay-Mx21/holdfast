@@ -171,7 +171,13 @@ with the intents (design doc 9.9, `internal/payment/reconciler.go`):
   just before it, and one booked a moment ago may not be in the report yet.
 - **Counting.** Every finding is counted in
   `holdfast_recon_mismatch_total{type}` on each pass while it persists, and
-  logged: repaired kinds at WARN, the others at ERROR. The alert
+  logged: repaired kinds at WARN, the others at ERROR; past 20 of a kind in
+  one pass, the rest are counted and summed up in one line (a provider that
+  lost its records produced 31,887 at once).
+- **Paged.** The report is read 1,000 items at a time, following the
+  provider's cursor (P58: one response for a busy 2 hours outgrew the
+  client's 1 MiB limit, and every pass failed until `ReconcilerStale`
+  said so). The alert
   `ReconciliationNeedsAHuman` pages on the second group (runbook
   `docs/runbooks/auditor.md`).
 - **Idempotent.** Applying a capture or a refund the webhook later also

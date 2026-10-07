@@ -44,9 +44,10 @@ fmt: ## Format all Go code
 vet: ## go vet, including integration-tagged files
 	$(GO) vet ./... && $(GO) vet -tags=integration ./...
 
-lint: ## golangci-lint + migration checks
+lint: ## golangci-lint, migration checks, and the alert rules' tests (needs Docker)
 	golangci-lint run ./...
 	./scripts/check-migrations.sh
+	bash scripts/check-alerts.sh
 
 test: ## Unit tests with the race detector (no external dependencies)
 	$(GO) test -race -count=1 ./...

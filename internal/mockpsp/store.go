@@ -10,8 +10,11 @@
 package mockpsp
 
 import (
+	"encoding/base64"
 	"errors"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -203,9 +206,62 @@ func (s *Store) CompleteRefund(id string, now time.Time) (r psp.Refund, orderID 
 	return ref.Refund, ref.orderID, true, nil
 }
 
-// Settlement reports the captures and completed refunds in [from, to),
-// oldest first.
-func (s *Store) Settlement(from, to time.Time) psp.Settlement {
+// Settlement reports every capture and completed refund in [from, to),
+// oldest first, in one piece (tests; the API pages it: SettlementPage).
+func (s *Store) Settlement(from, to time.Time) psp.Settlement { return s.settlement(from, to) }
+
+// SettlementPage is one page of the report: up to limit items after the
+// cursor (empty for the first page), and in Next the cursor of the page
+// after it, empty on the last. Pages are keyed on each item's time and
+// identity, so a page boundary never skips or repeats an item (P58: one
+// response for a busy window outgrew the client's 1 MiB limit).
+func (s *Store) SettlementPage(from, to time.Time, after string, limit int) (psp.Settlement, error) {
+	rep := s.settlement(from, to)
+	start := 0
+	if after != "" {
+		at, key, err := decodeCursor(after)
+		if err != nil {
+			return psp.Settlement{}, err
+		}
+		start = sort.Search(len(rep.Items), func(i int) bool {
+			it := rep.Items[i]
+			return it.At.After(at) || (it.At.Equal(at) && itemKey(it) > key)
+		})
+	}
+	end := min(len(rep.Items), start+limit)
+	page := rep.Items[start:end]
+	if end < len(rep.Items) && len(page) > 0 {
+		rep.Next = encodeCursor(page[len(page)-1])
+	}
+	rep.Items = page
+	return rep, nil
+}
+
+// itemKey orders items with the same time, and identifies an item.
+func itemKey(it psp.SettlementItem) string { return it.Type + "/" + it.PaymentID + "/" + it.RefundID }
+
+// A cursor is the last item's time and key, opaque to clients.
+func encodeCursor(it psp.SettlementItem) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(strconv.FormatInt(it.At.UnixNano(), 10) + "|" + itemKey(it)))
+}
+
+func decodeCursor(c string) (time.Time, string, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(c)
+	if err != nil {
+		return time.Time{}, "", ErrBadCursor
+	}
+	ns, key, ok := strings.Cut(string(raw), "|")
+	n, err := strconv.ParseInt(ns, 10, 64)
+	if !ok || err != nil {
+		return time.Time{}, "", ErrBadCursor
+	}
+	return time.Unix(0, n).UTC(), key, nil
+}
+
+// ErrBadCursor means a settlement cursor this provider did not issue.
+var ErrBadCursor = errors.New("mockpsp: bad settlement cursor")
+
+func (s *Store) settlement(from, to time.Time) psp.Settlement {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	rep := psp.Settlement{From: from.UTC(), To: to.UTC(), Items: []psp.SettlementItem{}}
@@ -226,7 +282,13 @@ func (s *Store) Settlement(from, to time.Time) psp.Settlement {
 			})
 		}
 	}
-	sort.Slice(rep.Items, func(i, j int) bool { return rep.Items[i].At.Before(rep.Items[j].At) })
+	sort.Slice(rep.Items, func(i, j int) bool {
+		a, b := rep.Items[i], rep.Items[j]
+		if !a.At.Equal(b.At) {
+			return a.At.Before(b.At)
+		}
+		return itemKey(a) < itemKey(b)
+	})
 	return rep
 }
 

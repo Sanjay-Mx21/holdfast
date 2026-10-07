@@ -137,6 +137,10 @@ func (r *Reconciler) Pass(ctx context.Context) ([]Finding, error) {
 	return findings, nil
 }
 
+// findingsLoggedPerKind is how many findings of each kind one pass logs by
+// name; the metric counts them all.
+const findingsLoggedPerKind = 20
+
 func (r *Reconciler) pass(ctx context.Context) ([]Finding, error) {
 	conn, err := r.svc.pool.Acquire(ctx)
 	if err != nil {
@@ -161,8 +165,16 @@ func (r *Reconciler) pass(ctx context.Context) ([]Finding, error) {
 		return nil, fmt.Errorf("payment: settlement report: %w", err)
 	}
 	var findings []Finding
+	logged := map[string]int{}
 	add := func(f Finding) {
 		findings = append(findings, f)
+		// The first few of each kind name their intents; a pass that finds
+		// thousands (a provider that lost its records: 31,887 after mockpsp
+		// restarted) must not bury the log every 5 minutes. The rest are
+		// counted, and summed up at the end of the pass.
+		if logged[f.Kind]++; logged[f.Kind] > findingsLoggedPerKind {
+			return
+		}
 		attrs := []any{"kind", f.Kind, "intent_id", f.IntentID, "detail", f.Detail}
 		switch f.Kind {
 		case FindingMissedCapture, FindingMissedRefund, FindingRefundStuck:
@@ -171,6 +183,14 @@ func (r *Reconciler) pass(ctx context.Context) ([]Finding, error) {
 			r.log.ErrorContext(ctx, "payment reconciler: a difference with the provider needs a human", attrs...)
 		}
 	}
+	defer func() {
+		for kind, n := range logged {
+			if n > findingsLoggedPerKind {
+				r.log.ErrorContext(ctx, "payment reconciler: more differences of this kind than logged",
+					"kind", kind, "found", n, "logged", findingsLoggedPerKind)
+			}
+		}
+	}()
 
 	reported := make(map[uuid.UUID]bool)
 	for _, item := range report.Items {

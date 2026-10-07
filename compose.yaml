@@ -1,7 +1,7 @@
 # Local development stack. `make up` generates dev keys first, then runs this.
 # Host ports: the edge (NGINX, the buyers' front door) 8088 (EDGE_PORT), inventory API 8081,
 # inventory admin 9091, queue API 8082, queue admin 9092, booking API 8083,
-# booking admin 9093, inventory gRPC 7071, Prometheus 9090,
+# booking admin 9093, inventory gRPC 7071, Prometheus 9090, Alertmanager 9098,
 # Grafana 3000, PostgreSQL 5432, Valkey 6379 (the replica 6380), Kafka 29092, Redpanda Console 8089,
 # Jaeger 16686, OTLP 4317 (gRPC) and 4318 (HTTP).
 # The 808x API ports bypass the edge and are for debugging only.
@@ -459,7 +459,17 @@ services:
       - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./deploy/alerting:/etc/prometheus/rules:ro
     ports: ["9090:9090"]
-    depends_on: [inventory, queue]
+    depends_on: [inventory, queue, alertmanager]
+    restart: unless-stopped
+
+  # Groups Prometheus's alerts, routes them by severity, holds silences
+  # (task 5.6; deploy/alertmanager). Locally it sends nothing anywhere.
+  alertmanager:
+    image: prom/alertmanager:v0.30.0
+    command: ["--config.file=/etc/alertmanager/alertmanager.yml", "--storage.path=/alertmanager"]
+    volumes:
+      - ./deploy/alertmanager:/etc/alertmanager:ro
+    ports: ["9098:9093"]
     restart: unless-stopped
 
   grafana:
