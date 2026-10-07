@@ -12,7 +12,7 @@ hand in a real browser: the queue fills, admissions flow, and the purchase
 shows up as a hold, a confirmed booking and a payment. Method and numbers:
 [`loadtest/results/README.md`](loadtest/results/README.md).*
 
-> **Status:** [v0.4.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.4.0) is the resume-ready product: phone sign-in, the sale rules, proof of work, the web app and this dashboard, on top of the MVP backend of [v0.3.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.3.0). Next: Phase 5, reliability (the reconciler and auditor, Valkey high availability, chaos experiments). The full design and build plan: [`docs/design/holdfast-design-and-build-plan.mdx`](docs/design/holdfast-design-and-build-plan.mdx).
+> **Status:** [v0.4.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.4.0) is the resume-ready product: phone sign-in, the sale rules, proof of work, the web app and this dashboard, on top of the MVP backend of [v0.3.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.3.0). Phase 5, reliability, is built and awaits review: the reconciler and invariant auditor, Valkey failover, inventory rebuilt from PostgreSQL, adaptive admission, alerting, and chaos experiments E3 and E4 passed with every invariant at 0 (how fast it recovers: below). The full design and build plan: [`docs/design/holdfast-design-and-build-plan.mdx`](docs/design/holdfast-design-and-build-plan.mdx).
 
 ## The problem
 
@@ -116,6 +116,27 @@ and caveats: [`loadtest/results/README.md`](loadtest/results/README.md).
 | **E5 Scale-out:** 1, 2 and 4 instances | Not run yet | ⏳ Phase 6 |
 | **E6 Fairness:** 100,000 joins before T0, then after | Join time did not predict position before T0 (Spearman ρ = −0.0008); exactly arrival order after (ρ = 1) | ✅ |
 
+### How fast it recovers
+
+Measured mid-sale on the development laptop, with purchases flowing
+(experiment E4 and the runbook drills, `loadtest/results/README.md`). Every
+invariant stayed at 0 in each.
+
+| When this fails | Recovered in | How |
+|---|---|---|
+| Valkey's primary is killed | **7.3 s** to a new primary; services ready in 9.2 s | Sentinel promotes the replica; clients follow by themselves |
+| Valkey lost writes | **2.0 to 2.3 s** to freeze, rebuild from PostgreSQL and unfreeze a 12,000-buyer sale | Runbook RB-2 (`holdfastctl inventory rebuild`) |
+| The payment provider goes down | admissions **paused in 1.9 s**; resumed **7.1 s** after it came back; full rate after 26 s | Automatic: backpressure and adaptive admission (ADR 0013) |
+| booking-svc is killed mid-saga | ready again in 21 s (10 s of it down by design) | Restart; the saga resumes from Kafka |
+| Kafka restarts | serving in 52 s; the outboxes drained 5 s later | Events wait in the outbox, then flow |
+| PostgreSQL is unreachable for 5 s | services ready 0.2 s after it is back | Consumers wait the outage out (P56) |
+| Payments dead-lettered | replayed in 3.7 s | Runbook RB-3 |
+| A refund the provider refused for good | refunded 30 s after the operator's command | Runbook RB-4 |
+
+One limit of the laptop: WSL2 steps its clock every 30 s, which can hold
+Sentinel in its TILT mode, and then no failover happens (two of four E4
+attempts); production hosts slew their clocks.
+
 ## Key design decisions
 
 | Decision | Why | ADR |
@@ -131,6 +152,7 @@ and caveats: [`loadtest/results/README.md`](loadtest/results/README.md).
 | An orchestrated saga | One owner for each booking's state machine | [0010](docs/adr/0010-orchestrated-saga.md) |
 | sqlc for database queries | Type-checked SQL, no ORM | [0011](docs/adr/0011-sqlc-for-database-queries.md) |
 | 15-minute access tokens; refresh tokens that rotate with reuse detection | Verified locally on the hot path; a stolen refresh token betrays itself and revokes the login | [0012](docs/adr/0012-access-tokens-and-rotating-refresh-tokens.md) |
+| Admission adapts to the payment provider (AIMD), and pauses while it is down | The configured rate becomes a ceiling; nobody is let into a checkout that cannot be paid | [0013](docs/adr/0013-adaptive-admission-and-provider-backpressure.md) |
 
 ## Failure modes
 
@@ -218,14 +240,14 @@ and `/readyz`.
 
 ## What's next
 
-- **Phase 5, reliability (in progress):** the reconciler and the invariant
+- **Phase 5, reliability (built, awaiting review):** the reconciler and the invariant
   auditor are built (they fill the dashboard's correctness tiles, with
   alerts), and Valkey fails over by itself (a replica and three Sentinels:
   a killed primary is replaced in about 7 s, nothing lost in the drill),
   inventory is rebuilt from PostgreSQL in one command, admission adapts to
   the payment provider's health (AIMD, pausing while it is down), and the
-  chaos experiments E3 and E4 pass (results above); next, the remaining
-  alerts, the runbooks written up, and ADR 0013.
+  chaos experiments E3 and E4 pass (results above), with 15 alert rules,
+  Alertmanager, and runbooks RB-1 to RB-5 practised and timed.
 - **Phase 6, scale and polish:** the design-scale E2 and E5 scale-out (1, 2
   and 4 instances) with profiling, a security pass, and v1.0.0; optionally a
   Kubernetes or public demo deployment.

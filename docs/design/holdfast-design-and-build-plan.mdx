@@ -1683,7 +1683,7 @@ Write one ADR per significant decision in `docs/adr/`, starting from `0000-templ
 | 0010 | Orchestrated saga in booking-svc, instead of choreography or Temporal | 3 | ✅ |
 | 0011 | sqlc for booking and payment queries | 3 | ✅ |
 | 0012 | Access tokens and refresh rotation with reuse detection | 4 | ✅ |
-| 0013 | AIMD adaptive admission and PSP backpressure | 5 | ⏳ |
+| 0013 | AIMD adaptive admission and PSP backpressure | 5 | ✅ |
 
 Interviewers love ADRs: they show you weighed alternatives instead of copying a tutorial.
 
@@ -1864,7 +1864,7 @@ Durations are the original **focused-work-day** estimates, which assumed learnin
 | M2 Fair waiting room | 2 | ✅ Complete (2026-10-02) | v0.2.0, released 2026-10-02 | E6 passed; leader-failover test passes; E2 accepted at 30-second polling, design load moved to task 6.1 (`loadtest/results/`) |
 | M3 MVP backend | 3 | ✅ Complete (2026-10-03) | v0.3.0, released 2026-10-03 | One purchase is one trace across every service (`loadtest/results/phase3-one-purchase-trace.png`); a 1,000-purchase fault run kept I1, I2 and I4 at 0 (`loadtest/results/`) |
 | M4 Resume-ready product | 4 | ✅ Complete (2026-10-04) | v0.4.0, released 2026-10-06 | A ticket bought by hand during a k6 rush with the dashboard live (`loadtest/results/phase4-stampede.gif`); README v1. The demo video v1 is deferred by the owner |
-| M5 Hardened | 5 | ⏳ **Next** | v0.5.0 | E3 and E4 pass with every invariant at 0; recovery times documented |
+| M5 Hardened | 5 | ✅ Built (2026-10-07), awaiting the owner's review | v0.5.0, on approval | E3 and E4 passed with every invariant at 0; recovery times documented (`loadtest/results/README.md`, the README); RB-1 and RB-2 practised mid-sale |
 | M6 v1.0, proven at scale | 6 | ⏳ Planned | v1.0.0 | Every published number traces to a committed results file |
 | M7 Stretch | 7 | Optional | v1.x | Depends on the goal chosen |
 
@@ -2152,7 +2152,7 @@ The dates are illustrative. The gates are not.
 - [x] 5.5 **Chaos.** Toxiproxy scenarios and kill scripts in `chaos/`; run E3 and E4. *Built as `cmd/buyers` (simulated buyers making whole purchases through the edge, every request retried with its idempotency key) and `chaos/` (an overlay with dev identity, no proof of work, no per-IP limits and PostgreSQL behind Toxiproxy; `make chaos-e3` and `make chaos-e4`). E3: 5,000 purchases under the full fault mix, I2 0 throughout, every capture resolved. E4: 12,000 purchases through a Valkey primary kill (with RB-2 practised, 2.0 to 2.3 s), a booking-svc kill, a Kafka restart and a 5 s PostgreSQL cut, every invariant 0. The runs found P55 (admission stalled at the end of a sale), P56 (the saga dead-lettered payments during a 5 s outage, leaving paid bookings cancelled: I3), P57 (inventory reported failover errors as INTERNAL) and P54, all fixed; on the laptop, Sentinel's TILT mode (E26) can prevent a failover. Results in `loadtest/results/README.md`.*
 - [x] 5.6 **Alerting.** Prometheus alert rules in `deploy/alerting/`, with Alertmanager optional. *Built: 15 rules, those of 12.2 plus `ServiceDown`, `MessagesDeadLettered` (any dead letter needs a person since P56), `CaptureToConfirmSlow`, `InventoryDrift` (5.3) and `ValkeyReplicaMissing`, with promtool unit tests run by `make lint` and CI; `AdmissionStalled` excludes the waiting room's deliberate stops (a full session budget, a pause for the provider). Alertmanager in Compose routes pages and tickets, inhibits the breaker's symptoms, and holds silences. `ReconcilerStale` fired on its first day: the provider's settlement report had outgrown the client's 1 MiB limit, so the report is now paged (P58). Runbook index `docs/runbooks/alerts.md`; RB-5 in `docs/runbooks/payment.md`.*
 - [x] 5.7 **Runbooks.** RB-1 to RB-5 written, practised and timed during E4. *RB-1 and RB-2 in E4 mid-sale (freeze 0.1 s; freeze, rebuild and unfreeze 2.0 to 2.3 s); RB-3 on a real incident (E4's 29 dead-lettered payments, replayed in 3.7 s); RB-5 with `make drill-rb5` (admissions paused 1.9 s after the provider went down, resumed 7.1 s after it came back); RB-4 with `make drill-rb4` (a refund the outage defeated, made by hand: REFUNDED in 30 s, the money back inside I3's 15 minutes). RB-5 is new, in `docs/runbooks/payment.md`; `docs/runbooks/README.md` indexes them with their timings.*
-- [ ] 5.8 **Docs.** ADR 0013 (AIMD admission and PSP backpressure); runbook updates; recovery times in the README.
+- [x] 5.8 **Docs.** ADR 0013 (AIMD admission and PSP backpressure); runbook updates; recovery times in the README. *ADR 0013 (`docs/adr/0013-adaptive-admission-and-provider-backpressure.md`), the runbooks updated with tasks 5.1 to 5.7 (`docs/runbooks/README.md` indexes them), and the README's "How fast it recovers" table.*
 
 **Exit criteria:**
 
