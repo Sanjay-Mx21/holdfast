@@ -31,6 +31,8 @@ jobs:
           version: v2.14.0
       - name: Migration files
         run: ./scripts/check-migrations.sh
+      - name: "Alert rules: promtool check and tests"
+        run: bash scripts/check-alerts.sh
       - uses: bufbuild/buf-action@v1
         with:
           version: 1.73.0

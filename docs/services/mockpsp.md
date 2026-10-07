@@ -10,7 +10,11 @@ a real provider's sandbox cannot (design doc section 4). Binary:
 
 - it never asks for card details;
 - no real money moves;
-- its state is in memory and resettable;
+- its state is in memory and resettable. A restart forgets every order:
+  for the reconciler's window (2 hours) afterwards, HoldFast's captures from
+  before it are missing from the report, and the reconciler reports them as
+  `capture_unknown_to_psp`. Silence `ReconciliationNeedsAHuman` for that
+  kind in Alertmanager when restarting mockpsp on purpose;
 - it must never face the internet.
 
 **Status:** built in task 3.10. Compose runs it, and payment-svc and
@@ -26,7 +30,7 @@ The same key is payment-svc's `PSP_API_KEY`.
 | `POST /v1/orders` | Opens an order. `Idempotency-Key` is required (payment-svc sends the intent ID). The same key and body return the same order (200, `Idempotent-Replayed: true`); the same key with a different body is 422 `IDEMPOTENCY_KEY_REUSED`. Body: `amountPaise` > 0, `currency` `INR`, `expiresAt` in the future, `reference`. 201 with `orderId`, `checkoutUrl`, `status` `CREATED`. |
 | `GET /v1/orders/{orderId}` | The order: `CREATED`, `CAPTURED` (with `paymentId`), `FAILED` (with `failureReason`) or `EXPIRED`. 404 `ORDER_NOT_FOUND`. |
 | `POST /v1/refunds` | A full refund of a captured payment, once per payment. `Idempotency-Key` is required. Body: `paymentId`, `amountPaise`. 201 `PENDING`; it completes after `REFUND_DELAY` with a `refund.completed` webhook. Errors: 404 `PAYMENT_NOT_FOUND`, 422 `NOT_REFUNDABLE` (not captured, or not the full amount), 409 `ALREADY_REFUNDED`. |
-| `GET /v1/settlements?from=&to=` | The settlement report: captures and completed refunds in `[from, to)` (RFC 3339, at most 31 days), oldest first. Each item has `type` (`capture` or `refund`), `orderId`, `paymentId`, `refundId`, `reference` (the intent ID), `amountPaise` and `at`. The reconciler (Phase 5) compares it with HoldFast's records. |
+| `GET /v1/settlements?from=&to=&limit=&after=` | The settlement report: captures and completed refunds in `[from, to)` (RFC 3339, at most 31 days), oldest first. Each item has `type` (`capture` or `refund`), `orderId`, `paymentId`, `refundId`, `reference` (the intent ID), `amountPaise` and `at`. Paged (P58): up to `limit` items (default 1,000, at most 5,000); `next`, when present, is the cursor to pass as `after` for the following page; 400 `INVALID_LIMIT` or `INVALID_CURSOR` otherwise. The reconciler compares it with HoldFast's records. |
 
 ## Checkout (public port)
 

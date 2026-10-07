@@ -1,0 +1,262 @@
+# Unit tests for holdfast.rules.yml (task 5.6): synthetic series, and the
+# alerts that must (and must not) fire. Run with scripts/check-alerts.sh,
+# which CI's lint job runs too.
+rule_files:
+  - holdfast.rules.yml
+
+evaluation_interval: 15s
+
+tests:
+  # An invariant above 0 pages at once; I3 pages twice (MoneySafetyBreach).
+  - interval: 15s
+    input_series:
+      - series: 'holdfast_invariant_violations{invariant="I1"}'
+        values: '0x8'
+      - series: 'holdfast_invariant_violations{invariant="I3"}'
+        values: '0 0 2x6'
+    alert_rule_test:
+      - eval_time: 15s
+        alertname: InvariantViolation
+        exp_alerts: []
+      - eval_time: 1m
+        alertname: InvariantViolation
+        exp_alerts:
+          - exp_labels: { severity: page, invariant: I3 }
+            exp_annotations:
+              summary: "Invariant I3 is violated (2 found by the auditor)"
+              description: "The auditor found 2 violation(s) of I3. Freeze the sale (runbook RB-1), then find the records with the queries in internal/auditor/auditor.go."
+              runbook: docs/runbooks/auditor.md
+      - eval_time: 1m
+        alertname: MoneySafetyBreach
+        exp_alerts:
+          - exp_labels: { severity: page, invariant: I3 }
+            exp_annotations:
+              summary: "2 captured payment(s) unresolved for more than 15 minutes"
+              description: "Money was taken and the booking is neither confirmed nor refunded (invariant I3). Check the reconciler's findings and the saga's dead-letter topic (RB-3, RB-4)."
+              runbook: docs/runbooks/auditor.md
+
+  # Inventory drift must last 2 minutes: a purchase between the auditor's
+  # two reads shows for a moment.
+  - interval: 15s
+    input_series:
+      - series: 'holdfast_inventory_drift_units{event="e1"}'
+        values: '0 2 0 0 3x12'
+    alert_rule_test:
+      - eval_time: 45s
+        alertname: InventoryDrift
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: InventoryDrift
+        exp_alerts:
+          - exp_labels: { severity: page, event: e1 }
+            exp_annotations:
+              summary: "Inventory offers 3 unit(s) more than PostgreSQL has free for event e1"
+              description: "Valkey's available count is above capacity - sold - pending bookings. No oversell follows (the final guard decides), but buyers would pay and be refunded. Freeze the sale and rebuild its inventory: holdfastctl inventory rebuild (runbook RB-INV-4)."
+              runbook: docs/runbooks/auditor.md
+
+  - interval: 15s
+    input_series:
+      - series: 'up{job="booking", instance="booking:9090"}'
+        values: '1 1 0x8'
+      - series: 'up{job="queue", instance="queue:9090"}'
+        values: '1x10'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: ServiceDown
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: ServiceDown
+        exp_alerts:
+          - exp_labels: { severity: page, job: booking, instance: "booking:9090" }
+            exp_annotations:
+              summary: "booking has been unreachable for a minute"
+              description: "Prometheus cannot scrape booking:9090: the process is down or its admin port unreachable."
+              runbook: docs/runbooks/alerts.md
+
+  - interval: 15s
+    input_series:
+      - series: 'holdfast_outbox_lag_seconds{schema="payment", job="payment"}'
+        values: '0 10 45 60 75 90 105 120'
+      - series: 'holdfast_outbox_lag_seconds{schema="booking", job="booking"}'
+        values: '0x8'
+    alert_rule_test:
+      - eval_time: 105s
+        alertname: OutboxLagHigh
+        exp_alerts:
+          - exp_labels: { severity: page, schema: payment }
+            exp_annotations:
+              summary: "The payment outbox's oldest event has waited 2m 0s"
+              description: "Events are not reaching Kafka: the saga and refunds wait for them. Kafka may be down, or the relay has no leader."
+              runbook: docs/runbooks/alerts.md
+
+  # A consumer 400 behind is fine; 900 behind for 2 minutes is not.
+  - interval: 30s
+    input_series:
+      - series: 'holdfast_kafka_consumer_lag{group="booking-saga", topic="holdfast.payment.v1"}'
+        values: '400 400 900x6'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: ConsumerLagHigh
+        exp_alerts: []
+      - eval_time: 3m30s
+        alertname: ConsumerLagHigh
+        exp_alerts:
+          - exp_labels: { severity: page, group: booking-saga, topic: holdfast.payment.v1 }
+            exp_annotations:
+              summary: "booking-saga is 900 messages behind on holdfast.payment.v1"
+              description: "A consumer is not keeping up, or is waiting out a dependency (since P56 a failing message holds its partition for up to 10 minutes rather than being dead-lettered). Its logs say which."
+              runbook: docs/runbooks/alerts.md
+
+  - interval: 1m
+    input_series:
+      - series: 'holdfast_kafka_consumed_total{topic="holdfast.payment.v1", result="dead_lettered"}'
+        values: '0 0 0 1 1 1 1 1 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: MessagesDeadLettered
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: MessagesDeadLettered
+        exp_alerts:
+          - exp_labels: { severity: page, topic: holdfast.payment.v1 }
+            exp_annotations:
+              summary: "1 message(s) from holdfast.payment.v1 went to the dead-letter topic"
+              description: "A message failed for good (unreadable, or a dependency down for 10 minutes). Until it is replayed, a payment may sit unapplied: runbook RB-3."
+              runbook: docs/runbooks/saga.md
+      - eval_time: 11m
+        alertname: MessagesDeadLettered
+        exp_alerts: []
+
+  - interval: 15s
+    input_series:
+      - series: 'holdfast_psp_breaker_state{job="payment"}'
+        values: '0 0 0.5 1 1'
+    alert_rule_test:
+      - eval_time: 30s
+        alertname: PSPBreakerOpen
+        exp_alerts: []
+      - eval_time: 45s
+        alertname: PSPBreakerOpen
+        exp_alerts:
+          - exp_labels: { severity: page }
+            exp_annotations:
+              summary: "The payment provider's circuit breaker is open"
+              description: "The provider is failing; checkouts get 503 and admissions are paused (backpressure). They resume by themselves once the prober's trial call succeeds."
+              runbook: docs/runbooks/payment.md
+
+  # Hold p99 over 100 ms for 2 minutes: every hold takes about 200 ms.
+  - interval: 30s
+    input_series:
+      - series: 'holdfast_http_request_duration_seconds_bucket{route="POST /v1/events/{eventID}/holds", le="0.1"}'
+        values: '0x10'
+      - series: 'holdfast_http_request_duration_seconds_bucket{route="POST /v1/events/{eventID}/holds", le="0.25"}'
+        values: '0+100x10'
+      - series: 'holdfast_http_request_duration_seconds_bucket{route="POST /v1/events/{eventID}/holds", le="+Inf"}'
+        values: '0+100x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: CheckoutLatencyHigh
+        exp_alerts:
+          - exp_labels: { severity: ticket, route: "POST /v1/events/{eventID}/holds" }
+            exp_annotations:
+              summary: "POST /v1/events/{eventID}/holds p99 is 248.5ms, over its SLO"
+              description: "Checkout is slow: buyers wait, and sessions last longer than planned."
+              runbook: docs/runbooks/alerts.md
+
+  # A stalled waiting room pages; one that stops on purpose does not.
+  - interval: 15s
+    input_series:
+      # e1: open, 500 waiting, units left, nothing admitted: stalled.
+      - series: 'holdfast_queue_size{event="e1"}'
+        values: '1000x12'
+      - series: 'holdfast_queue_admitted_up_to{event="e1"}'
+        values: '500x12'
+      - series: 'holdfast_queue_state{event="e1", state="OPEN"}'
+        values: '1x12'
+      - series: 'holdfast_inventory_available{event="e1"}'
+        values: '300x12'
+      - series: 'holdfast_queue_admission_rate{event="e1"}'
+        values: '50x12'
+      - series: 'holdfast_queue_active_sessions{event="e1"}'
+        values: '100x12'
+      - series: 'holdfast_queue_max_sessions{event="e1"}'
+        values: '1000x12'
+      # e2: the same, but paused for the provider (rate 0): on purpose.
+      - series: 'holdfast_queue_size{event="e2"}'
+        values: '1000x12'
+      - series: 'holdfast_queue_admitted_up_to{event="e2"}'
+        values: '500x12'
+      - series: 'holdfast_queue_state{event="e2", state="OPEN"}'
+        values: '1x12'
+      - series: 'holdfast_inventory_available{event="e2"}'
+        values: '300x12'
+      - series: 'holdfast_queue_admission_rate{event="e2"}'
+        values: '0x12'
+      - series: 'holdfast_queue_active_sessions{event="e2"}'
+        values: '100x12'
+      - series: 'holdfast_queue_max_sessions{event="e2"}'
+        values: '1000x12'
+      # e3: the session budget is full: on purpose.
+      - series: 'holdfast_queue_size{event="e3"}'
+        values: '1000x12'
+      - series: 'holdfast_queue_admitted_up_to{event="e3"}'
+        values: '500x12'
+      - series: 'holdfast_queue_state{event="e3", state="OPEN"}'
+        values: '1x12'
+      - series: 'holdfast_inventory_available{event="e3"}'
+        values: '300x12'
+      - series: 'holdfast_queue_admission_rate{event="e3"}'
+        values: '50x12'
+      - series: 'holdfast_queue_active_sessions{event="e3"}'
+        values: '1000x12'
+      - series: 'holdfast_queue_max_sessions{event="e3"}'
+        values: '1000x12'
+      # e4: admitting: fine.
+      - series: 'holdfast_queue_size{event="e4"}'
+        values: '1000x12'
+      - series: 'holdfast_queue_admitted_up_to{event="e4"}'
+        values: '500+10x12'
+      - series: 'holdfast_queue_admitted_total{event="e4"}'
+        values: '0+10x12'
+      - series: 'holdfast_queue_state{event="e4", state="OPEN"}'
+        values: '1x12'
+      - series: 'holdfast_inventory_available{event="e4"}'
+        values: '300x12'
+      - series: 'holdfast_queue_admission_rate{event="e4"}'
+        values: '50x12'
+      - series: 'holdfast_queue_active_sessions{event="e4"}'
+        values: '100x12'
+      - series: 'holdfast_queue_max_sessions{event="e4"}'
+        values: '1000x12'
+    alert_rule_test:
+      - eval_time: 2m30s
+        alertname: AdmissionStalled
+        exp_alerts:
+          - exp_labels: { severity: page, event: e1 }
+            exp_annotations:
+              summary: "Event e1 has people waiting and units left, but nobody was admitted for 2 minutes"
+              description: "The admission leader is missing, failing, or capped: runbook RB-Q-5 walks through each."
+              runbook: docs/runbooks/queue.md
+
+  - interval: 30s
+    input_series:
+      - series: 'redis_instance_info{instance="redis://valkey:6379", role="master"}'
+        values: '1x10'
+      - series: 'redis_connected_slaves{instance="redis://valkey:6379"}'
+        values: '1 1 0x8'
+      - series: 'redis_instance_info{instance="redis://valkey-replica:6379", role="slave"}'
+        values: '1x10'
+      - series: 'redis_connected_slaves{instance="redis://valkey-replica:6379"}'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: ValkeyReplicaMissing
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ValkeyReplicaMissing
+        exp_alerts:
+          - exp_labels: { severity: ticket }
+            exp_annotations:
+              summary: "Valkey's primary has no replica"
+              description: "A failover would have nothing to promote: the next primary failure is an outage. Runbook RB-VK-1."
+              runbook: docs/runbooks/valkey.md

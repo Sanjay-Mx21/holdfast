@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -226,8 +227,29 @@ func (p *Provider) settlements(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteProblem(w, r, httpx.BadRequest("INVALID_WINDOW", "from and to must be RFC 3339 times, from before to, at most 31 days apart"))
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, p.store.Settlement(from, to))
+	// Paged (P58): up to limit items per answer, and "next" to ask for more.
+	limit := defaultSettlementPage
+	if v := r.URL.Query().Get("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > maxSettlementPage {
+			httpx.WriteProblem(w, r, httpx.BadRequest("INVALID_LIMIT", fmt.Sprintf("limit must be 1 to %d", maxSettlementPage)))
+			return
+		}
+		limit = n
+	}
+	page, err := p.store.SettlementPage(from, to, r.URL.Query().Get("after"), limit)
+	if err != nil {
+		httpx.WriteProblem(w, r, httpx.BadRequest("INVALID_CURSOR", "after must be a cursor from a previous page's next"))
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, page)
 }
+
+// The settlement report's page sizes.
+const (
+	defaultSettlementPage = 1000
+	maxSettlementPage     = 5000
+)
 
 // Name implements app.Component: the expiry loop.
 func (p *Provider) Name() string { return "order-expiry" }

@@ -117,8 +117,8 @@ func (c *Client) Pressure() Pressure {
 // half-open call that closes it again (task 5.4). Under the breaker's
 // cooldown it returns at once without calling.
 func (c *Client) Probe(ctx context.Context) error {
-	now := c.now().UTC().Format(time.RFC3339Nano)
-	q := url.Values{"from": {now}, "to": {now}}
+	now := c.now().UTC()
+	q := url.Values{"from": {now.Add(-time.Second).Format(time.RFC3339Nano)}, "to": {now.Format(time.RFC3339Nano)}, "limit": {"1"}}
 	var s Settlement
 	return c.do(ctx, "probe", http.MethodGet, "/v1/settlements?"+q.Encode(), "", nil, &s)
 }

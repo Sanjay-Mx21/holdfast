@@ -2,6 +2,7 @@ package mockpsp
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -84,6 +85,55 @@ func TestExpiry(t *testing.T) {
 	}
 	if again := s.Expire(t0.Add(8 * time.Minute)); len(again) != 0 {
 		t.Fatalf("expired twice: %v", again)
+	}
+}
+
+// P58: the report comes in pages that neither skip nor repeat an item, even
+// when several items share a time across a page boundary.
+func TestSettlementPages(t *testing.T) {
+	s := NewStore("http://psp.test")
+	want := map[string]bool{}
+	for i := range 7 {
+		o := newOrder(t, s, fmt.Sprintf("p%d", i), 100)
+		at := t0.Add(time.Minute)
+		if i >= 4 {
+			at = t0.Add(2 * time.Minute)
+		}
+		paid, _, _ := s.Pay(o.OrderID, true, "", at) // four captures share one time, three another
+		want[paid.PaymentID] = true
+	}
+	seen := map[string]bool{}
+	after, pages := "", 0
+	for {
+		page, err := s.SettlementPage(t0, t0.Add(time.Hour), after, 3)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pages++
+		for _, it := range page.Items {
+			if seen[it.PaymentID] {
+				t.Fatalf("page %d repeats %s", pages, it.PaymentID)
+			}
+			seen[it.PaymentID] = true
+		}
+		if page.Next == "" {
+			break
+		}
+		after = page.Next
+	}
+	if pages != 3 || len(seen) != len(want) {
+		t.Fatalf("%d pages, %d items; want 3 pages and %d items", pages, len(seen), len(want))
+	}
+	for id := range want {
+		if !seen[id] {
+			t.Fatalf("%s missing from the pages", id)
+		}
+	}
+	if _, err := s.SettlementPage(t0, t0.Add(time.Hour), "not-a-cursor!", 3); !errors.Is(err, ErrBadCursor) {
+		t.Fatalf("a made-up cursor: %v", err)
+	}
+	if page, _ := s.SettlementPage(t0, t0.Add(time.Hour), "", 10); page.Next != "" || len(page.Items) != 7 {
+		t.Fatalf("one page for everything: %d items, next %q", len(page.Items), page.Next)
 	}
 }
 

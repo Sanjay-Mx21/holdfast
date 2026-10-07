@@ -23,6 +23,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -87,6 +88,9 @@ type Settlement struct {
 	From  time.Time        `json:"from"`
 	To    time.Time        `json:"to"`
 	Items []SettlementItem `json:"items"`
+	// Next is the cursor of the next page (the "after" parameter), empty on
+	// the last. Settlements follows it, so its result has every item.
+	Next string `json:"next,omitempty"`
 }
 
 // SettlementItem is one capture or completed refund.
@@ -188,12 +192,37 @@ func (c *Client) CreateRefund(ctx context.Context, intentID, paymentID string, a
 	return r, err
 }
 
-// Settlements returns the captures and completed refunds in [from, to).
+// settlementPage is how many items to ask for at a time: about 250 KB, well
+// inside the 1 MiB a response may be (P58: one response for a busy window
+// was cut off there, and every reconciliation failed).
+const settlementPage = 1000
+
+// Settlements returns the captures and completed refunds in [from, to),
+// page after page until the report ends.
 func (c *Client) Settlements(ctx context.Context, from, to time.Time) (Settlement, error) {
-	var s Settlement
-	q := url.Values{"from": {from.UTC().Format(time.RFC3339Nano)}, "to": {to.UTC().Format(time.RFC3339Nano)}}
-	err := c.do(ctx, "settlements", http.MethodGet, "/v1/settlements?"+q.Encode(), "", nil, &s)
-	return s, err
+	all := Settlement{From: from.UTC(), To: to.UTC(), Items: []SettlementItem{}}
+	after := ""
+	for {
+		q := url.Values{
+			"from": {from.UTC().Format(time.RFC3339Nano)}, "to": {to.UTC().Format(time.RFC3339Nano)},
+			"limit": {strconv.Itoa(settlementPage)},
+		}
+		if after != "" {
+			q.Set("after", after)
+		}
+		var page Settlement
+		if err := c.do(ctx, "settlements", http.MethodGet, "/v1/settlements?"+q.Encode(), "", nil, &page); err != nil {
+			return Settlement{}, err
+		}
+		all.Items = append(all.Items, page.Items...)
+		switch {
+		case page.Next == "":
+			return all, nil
+		case page.Next == after || len(page.Items) == 0:
+			return Settlement{}, fmt.Errorf("psp: the settlement report's cursor did not advance (%q)", page.Next)
+		}
+		after = page.Next
+	}
 }
 
 // do runs one call through the breaker, retrying what may succeed later.

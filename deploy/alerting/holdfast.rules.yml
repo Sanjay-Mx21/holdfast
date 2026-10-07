@@ -78,3 +78,121 @@ groups:
           summary: "No reconciliation pass has completed for over 15 minutes"
           description: "payment-svc's reconciler is failing (the provider's settlement report or PostgreSQL)."
           runbook: docs/runbooks/auditor.md
+
+  # Task 5.6: the purchase path's health (design doc 12.2), and what Phase 5's
+  # chaos experiments showed needs watching. Each has a test in
+  # deploy/alerting/tests.yml (promtool test rules).
+  - name: holdfast-operations
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $labels.job }} has been unreachable for a minute"
+          description: "Prometheus cannot scrape {{ $labels.instance }}: the process is down or its admin port unreachable."
+          runbook: docs/runbooks/alerts.md
+
+      - alert: OutboxLagHigh
+        expr: max by (schema) (holdfast_outbox_lag_seconds) > 30
+        for: 1m
+        labels:
+          severity: page
+        annotations:
+          summary: "The {{ $labels.schema }} outbox's oldest event has waited {{ $value | humanizeDuration }}"
+          description: >-
+            Events are not reaching Kafka: the saga and refunds wait for them. Kafka may be down, or the
+            relay has no leader.
+          runbook: docs/runbooks/alerts.md
+
+      - alert: ConsumerLagHigh
+        expr: max by (group, topic) (holdfast_kafka_consumer_lag) > 500
+        for: 2m
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $labels.group }} is {{ $value }} messages behind on {{ $labels.topic }}"
+          description: >-
+            A consumer is not keeping up, or is waiting out a dependency (since P56 a failing message holds
+            its partition for up to 10 minutes rather than being dead-lettered). Its logs say which.
+          runbook: docs/runbooks/alerts.md
+
+      - alert: MessagesDeadLettered
+        expr: sum by (topic) (increase(holdfast_kafka_consumed_total{result="dead_lettered"}[5m])) > 0
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $value }} message(s) from {{ $labels.topic }} went to the dead-letter topic"
+          description: >-
+            A message failed for good (unreadable, or a dependency down for 10 minutes). Until it is
+            replayed, a payment may sit unapplied: runbook RB-3.
+          runbook: docs/runbooks/saga.md
+
+      - alert: CheckoutLatencyHigh
+        # Hold p99 over 100 ms, or booking p99 over 300 ms (design doc 2.4;
+        # the booking figure includes the provider's order call). The same
+        # pressure slows admission down (AIMD, task 5.4).
+        expr: >-
+          histogram_quantile(0.99, sum by (le, route) (rate(holdfast_http_request_duration_seconds_bucket{route="POST /v1/events/{eventID}/holds"}[2m]))) > 0.1
+          or
+          histogram_quantile(0.99, sum by (le, route) (rate(holdfast_http_request_duration_seconds_bucket{route="POST /v1/bookings"}[2m]))) > 0.3
+        for: 2m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "{{ $labels.route }} p99 is {{ $value | humanizeDuration }}, over its SLO"
+          description: "Checkout is slow: buyers wait, and sessions last longer than planned."
+          runbook: docs/runbooks/alerts.md
+
+      - alert: CaptureToConfirmSlow
+        expr: histogram_quantile(0.99, sum by (le) (rate(holdfast_capture_to_confirm_seconds_bucket[5m]))) > 5
+        for: 5m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Paid bookings take {{ $value | humanizeDuration }} (p99) to confirm, over the 5 s SLO"
+          description: "The saga is slow or waiting: consumer lag, the outbox, or inventory confirmations."
+          runbook: docs/runbooks/alerts.md
+
+      - alert: PSPBreakerOpen
+        expr: max(holdfast_psp_breaker_state) == 1
+        labels:
+          severity: page
+        annotations:
+          summary: "The payment provider's circuit breaker is open"
+          description: >-
+            The provider is failing; checkouts get 503 and admissions are paused (backpressure). They resume
+            by themselves once the prober's trial call succeeds.
+          runbook: docs/runbooks/payment.md
+
+      - alert: AdmissionStalled
+        # Open, people waiting, units left, nobody admitted for a minute, and
+        # none of the reasons the waiting room stops on purpose: a full
+        # session budget, or adaptive admission paused for the provider.
+        expr: >-
+          (
+            (max by (event) (holdfast_queue_size) - max by (event) (holdfast_queue_admitted_up_to) > 0)
+            and on (event) (max by (event) (holdfast_queue_state{state="OPEN"}) == 1)
+            and on (event) (max by (event) (holdfast_inventory_available) > 0)
+          )
+          unless on (event) (sum by (event) (increase(holdfast_queue_admitted_total[1m])) > 0)
+          unless on (event) (max by (event) (holdfast_queue_active_sessions) >= max by (event) (holdfast_queue_max_sessions))
+          unless on (event) (max by (event) (holdfast_queue_admission_rate) == 0)
+        for: 1m
+        labels:
+          severity: page
+        annotations:
+          summary: "Event {{ $labels.event }} has people waiting and units left, but nobody was admitted for 2 minutes"
+          description: "The admission leader is missing, failing, or capped: runbook RB-Q-5 walks through each."
+          runbook: docs/runbooks/queue.md
+
+      - alert: ValkeyReplicaMissing
+        expr: sum(redis_connected_slaves * on (instance) group_left () redis_instance_info{role="master"}) < 1
+        for: 2m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Valkey's primary has no replica"
+          description: "A failover would have nothing to promote: the next primary failure is an outage. Runbook RB-VK-1."
+          runbook: docs/runbooks/valkey.md

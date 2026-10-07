@@ -268,6 +268,29 @@ func TestRefundAndSettlement(t *testing.T) {
 	}
 }
 
+// P58: a report larger than one page reaches the client whole, page by
+// page, each well inside the client's 1 MiB per response.
+func TestSettlementsArriveWholeAcrossPages(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	const n = 2500 // three pages of 1,000
+	for range n {
+		_, o := h.order(t, 100)
+		h.payJSON(t, o.OrderID, "pay")
+	}
+	rep, err := h.client.Settlements(ctx, time.Now().Add(-time.Hour), time.Now().Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]bool{}
+	for _, it := range rep.Items {
+		seen[it.PaymentID] = true
+	}
+	if len(rep.Items) != n || len(seen) != n || rep.Next != "" {
+		t.Fatalf("%d items (%d distinct), next %q; want %d", len(rep.Items), len(seen), rep.Next, n)
+	}
+}
+
 func TestAPIKeyIsRequired(t *testing.T) {
 	h := newHarness(t)
 	bad, _ := psp.New(psp.Config{BaseURL: h.public, APIKey: "wrong"}, nil)

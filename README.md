@@ -208,7 +208,9 @@ work off; never in production.
 
 </details>
 
-Other tools on the local stack: Prometheus at http://localhost:9090, Jaeger
+Other tools on the local stack: Prometheus at http://localhost:9090
+(alerts: [`docs/runbooks/alerts.md`](docs/runbooks/alerts.md)), Alertmanager
+at http://localhost:9098, Jaeger
 at http://localhost:16686 (one trace per purchase, across every service),
 Redpanda Console at http://localhost:8089 (Kafka). Each service's metrics and
 health checks are on its admin port, for example http://localhost:9091/metrics

@@ -1,0 +1,26 @@
+# Alertmanager (task 5.6): groups the alerts of deploy/alerting, routes them
+# by severity, and holds silences (http://localhost:9098).
+#
+# Locally nothing is sent anywhere: both receivers are empty, so alerts are
+# seen in Alertmanager's UI and API (and Prometheus's). A deployment gives
+# "page" a pager and "ticket" a ticket queue, here and nowhere else.
+route:
+  receiver: ticket
+  group_by: [alertname, event, invariant]
+  group_wait: 10s
+  group_interval: 1m
+  repeat_interval: 4h
+  routes:
+    - matchers: ['severity="page"']
+      receiver: page
+      repeat_interval: 30m
+
+# Page for the cause, not every symptom: while the provider's breaker is
+# open, checkouts are slow or refused and admissions pause, on purpose.
+inhibit_rules:
+  - source_matchers: ['alertname="PSPBreakerOpen"']
+    target_matchers: ['alertname=~"AdmissionStalled|CheckoutLatencyHigh"']
+
+receivers:
+  - name: page
+  - name: ticket
