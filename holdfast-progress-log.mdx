@@ -32,13 +32,13 @@ All times are IST (UTC+05:30).
 | **Project** | A flash-sale booking engine that sells exactly the available units under extreme demand, never more |
 | **Plan version** | 2.0 (1 October 2026) |
 | **Milestones complete** | M0 Foundation, M1 Correctness core, M1.5 Bring-up and baseline, M2 Fair waiting room, M3 MVP backend, and M4 Resume-ready product (the demo video deferred by the owner) |
-| **Current milestone** | M5 Hardened (Phase 5): tasks 5.1 and 5.2 built, 5.3 next (section 11) |
+| **Current milestone** | M5 Hardened (Phase 5): tasks 5.1 to 5.3 built, 5.4 next (section 11) |
 | **Progress to v1.0** | About 49% (25 of about 51 focused-work days, excluding Phase 7 stretch goals), counting Phase 2's and Phase 4's planned 7 days each |
 | **Repository** | [github.com/Sanjay-Mx21/holdfast](https://github.com/Sanjay-Mx21/holdfast), branch `main` |
 | **First commit** | `2173e50` "first commit", 2026-10-01 20:20, 82 files, 12,973 lines |
 | **Latest release** | [v0.4.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.4.0), 2026-10-06 19:13, on `eefee44` (before it: [v0.3.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.3.0), 2026-10-03 15:48, on `5ffa271`; [v0.2.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.2.0), 2026-10-02 21:51, on `cd0592a`; [v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0), 2026-10-01 23:47, on `9dcd2f8`) |
 | **CI** | Green since 2026-10-01 22:00; `main` is protected and every change needs a pull request with all 13 required checks passing (`images (booking)`, `images (payment)`, `images (mockpsp)` and `images (auth)` added on 2026-10-03, `web` on 2026-10-04, `images (auditor)` on 2026-10-06) |
-| **Issues so far** | 131 recorded: 126 resolved, 5 open (section 6) |
+| **Issues so far** | 134 recorded: 129 resolved, 5 open (section 6) |
 
 <Callout type="tip" title="Phase 4 built: identity, sale policies, the web app and mission control (2026-10-04)">
 
@@ -405,7 +405,20 @@ The rest of the list was already covered by tests written with tasks 3.4 to 3.12
   - Every invariant stayed at 0.
 - **Gates:** gofmt, `make test`, `make lint`, `make itest` (29 packages) and `make e1` (RESULT: PASS).
 - **Found on the way:** P47 (hostnames stalled Sentinel into TILT; no failover in the first crash drill), P49, E26 (WSL2 steps the clock back every 30 s, which puts Sentinel in TILT), D55, D56.
-- **Also:** Prometheus scrapes both nodes through redis_exporter's multi-target endpoint, and the dashboard's Valkey panel follows the primary; a probe integration test; runbook `docs/runbooks/valkey.md` (RB-VK-1 to 4) with the measurements; the inventory runbook, the architecture doc, the README (results table), the design doc (5.2 ✅) | Branch `feat/p5-valkey-ha`; issue #42 |
+- **Also:** Prometheus scrapes both nodes through redis_exporter's multi-target endpoint, and the dashboard's Valkey panel follows the primary; a probe integration test; runbook `docs/runbooks/valkey.md` (RB-VK-1 to 4) with the measurements; the inventory runbook, the architecture doc, the README (results table), the design doc (5.2 ✅) | PR #105 (merged by the assistant at 12:05 after all 13 checks passed), `962173a`; issue #42 closed |
+| 2026-10-07 12:41 | **Task 5.3 (the full RB-2 rebuild) built:**
+- **`holdfastctl inventory rebuild --event E [--dry-run]`:** freezes the event's holds, reads booking's records in one repeatable-read transaction (`booking.ReadInventorySnapshot`, three sqlc queries), and runs `rebuild.lua`, one atomic script that sets:
+  - available = capacity − sold − units in `PENDING_PAYMENT` bookings;
+  - per-user counters = bought + pending (others deleted);
+  - each pending booking's hold kept, or recreated as PAYING until its deadline plus grace (so its confirmation is not a "late" one counting its units twice); a hold confirmed meanwhile left SOLD;
+  - every other open hold released (`REBUILD`); the event's config from the catalog, and holds left frozen.
+  - `--dry-run` runs the same script without writing. `inventory provision` keeps creating pools only.
+- **The signal to rebuild:** the auditor now publishes `holdfast_inventory_drift_units{event}`, the units Valkey offers beyond PostgreSQL's free units (healthy inventory never offers more), and `InventoryDrift` fires after 2 minutes (RB-AUD-5).
+- **Measured:** a sale with 50,000 buyers, 10,000 pending bookings and 5,000 abandoned holds rebuilds in 1.25 s, blocking Valkey 662 ms (dry run 158 ms).
+- **RB-2 practised live** on the three dev events the new gauge flagged (P51): dry run, rebuild and unfreeze each; the pools went 1→0, 3→0 and 3→0, drift and every invariant at 0. Each rebuild took 2 to 6 ms; each command 11 to 14 s, almost all of it `docker compose run` starting a container.
+- **Tests:** unit (the plan, the script's reply), 3 integration tests of the script (drift and loss repaired, a dry run, idempotence, the recreated hold confirmed normally, a hold confirmed meanwhile, a rebuild from nothing), the scale measurement (opt-in), an end-to-end holdfastctl test, the auditor's drift test.
+- **Gates:** gofmt, `make test`, `make lint`, `make itest` (29 packages) and `make e1` (RESULT: PASS).
+- **Docs:** RB-INV-4 rewritten as the full rebuild (RB-2), with the races and the cost; the Valkey, sale, queue and saga runbooks, the inventory and auditor docs, the architecture doc, the README, the design doc (5.3 ✅). P50 fixed on the way | Branch `feat/p5-rebuild`; issue #43 |
 
 ## 3. What is complete, and what each piece contributes
 
@@ -482,10 +495,10 @@ Every problem met while bringing Drop 1 up and running the soak on 2026-10-01, i
 
 | Group | Recorded | Resolved | Open |
 |---|---|---|---|
-| P: defects in the repository | 49 | 46 | 3 |
+| P: defects in the repository | 51 | 48 | 3 |
 | E: machine and network | 26 | 24 | 2 |
-| D: diagnosis and process | 56 | 56 | 0 |
-| **Total** | **131** | **126** | **5** |
+| D: diagnosis and process | 57 | 57 | 0 |
+| **Total** | **134** | **129** | **5** |
 
 CI took **three runs** to go green:
 
@@ -548,6 +561,8 @@ CI took **three runs** to go green:
 | P47 | The first Valkey HA layout named every member by hostname (`sentinel resolve-hostnames`). In the first crash drill the killed primary's name stopped resolving; Sentinel resolves names inside its main loop, each lookup stalled it for seconds, all three Sentinels entered TILT mode, and **no failover happened in 90 s**. The stack had no writable Valkey for about 2 minutes until the drill's operator restarted the node | Caught by the drill, before any commit; on a real primary crash Valkey would have stayed down | A design choice that looked right for containers (IPs change on recreate) without knowing that Sentinel's resolution blocks | Fixed addresses on a dedicated `valkey` network; everything announces addresses; no DNS in Sentinel's path. The next crash drill failed over (7.1 s once out of TILT) | ✅ Task 5.2 |
 | P48 | holdfastctl ignored `VALKEY_SENTINEL_MASTER`: its Valkey client took the addresses alone, so with Sentinel addresses it would have built a Cluster client and failed. Every holdfastctl command against a Sentinel deployment was broken, including `freeze` (RB-1) | Latent since Phase 1 (the services read the setting; holdfastctl had its own client set-up); found while wiring 5.2 | Two places built a Valkey configuration | `valkeyConfig` reads the same variables as the services, with a unit test; `docker compose run holdfastctl` works through the Sentinels | ✅ Task 5.2 |
 | P49 | A plain `SENTINEL FAILOVER` lost 10 acknowledged writes (about one second at 10 writes/s) in the drill: the replica is promoted while the old primary still takes writes, and those are discarded when it becomes a replica | Any planned switch done that way loses a second of holds, joins and admissions | Sentinel's manual failover is not coordinated unless asked | Valkey 9's `SENTINEL FAILOVER holdfast COORDINATED` pauses writes until the replica catches up: 0 lost, 74 ms pause. Runbook RB-VK-2 and the drill's failback always use it; `forced` mode remains to show the difference | ✅ Task 5.2 |
+| P50 | `TestCallsWithoutAValidTokenOrPermissionAreRefused` (grpcx) failed once in task 5.3's `make test`: its health check hit "context deadline exceeded" | One failed run; 8 of 8 reruns passed | One 1-second deadline covered two RPCs and a call between them, and the machine was busy (a full `-race` run beside a script running many `docker exec`) | The deadline, only a guard against hangs, is 5 seconds | ✅ Task 5.3 |
+| P51 | Three dev-stack events offered more units in Valkey than PostgreSQL had free: "Saga check" 1 more, the two "Runbook check" events 3 more each, with Valkey's capacity (3, 4, 4) different from the catalog's (2, 1, 1). Nothing noticed: the auditor's I1 reads only PostgreSQL | On the dev stack only; in a sale, inventory would hand out holds the final guard refuses, and those buyers would pay and be refunded | Left by manual checks in Phases 3 and 4 (the exact steps are not recorded); the deeper gap was that no check compared Valkey with PostgreSQL | Found by the first dry run of `inventory rebuild`. The auditor now publishes `holdfast_inventory_drift_units` with alert `InventoryDrift`, which flagged exactly these three; RB-2 rebuilt them (drift 0) | ✅ Task 5.3 |
 
 ### 6.3 Machine and network
 
@@ -640,6 +655,7 @@ CI took **three runs** to go green:
 | D54 | Verifying the v0.4.0 release, `gh release view --json isLatest` failed: the field does not exist | One failed command; the release itself was fine | Guessed a JSON field name | Checked with `gh release list`, which shows v0.4.0 as Latest | ✅ |
 | D55 | When the first crash drill found no promotion (P47), the drill script exited and left the killed primary down: the stack had no writable Valkey for about 2 minutes until it was restarted by hand | No data lost; nothing was running a sale | The script handled success only | The drill now restarts a node it killed whenever it stops early (an exit trap) | ✅ |
 | D56 | PR #104's squash commit is titled "... (task 5.1) (#104) (#104)": the merge script appends the PR number, and the assistant passed a subject that already had it | Cosmetic, in `main`'s history | Forgot what the script does with the subject | Subjects go to the merge script without the number | ✅ |
+| D57 | D48 a third time: the auditor's drift test was appended with a shell heredoc | No harm (the test was then fixed with the edit tool) | Haste | Same rule: file tools for code | ✅ |
 
 ### 6.5 Owner setup actions
 
@@ -746,9 +762,9 @@ Goal: HoldFast stays correct and recovers within minutes when its parts fail. Pl
 | Task | Issue | Status |
 |---|---|---|
 | 5.1 Reconciler and auditor | [#41](https://github.com/Sanjay-Mx21/holdfast/issues/41) | ✅ 2026-10-06 (PR #104): the settlement-report reconciler in payment-svc, `cmd/auditor` with I1 to I5, five alert rules and runbook RB-AUD |
-| 5.2 Valkey high availability | [#42](https://github.com/Sanjay-Mx21/holdfast/issues/42) | ✅ 2026-10-07: a replica and three Sentinels at fixed addresses, `holdfastctl valkey probe`, `make drill-valkey`; a killed primary replaced in 7.1 s with nothing lost |
-| 5.3 Full RB-2 rebuild | [#43](https://github.com/Sanjay-Mx21/holdfast/issues/43) | ⏳ Next |
-| 5.4 Adaptive admission | [#44](https://github.com/Sanjay-Mx21/holdfast/issues/44) | ⏳ |
+| 5.2 Valkey high availability | [#42](https://github.com/Sanjay-Mx21/holdfast/issues/42) | ✅ 2026-10-07 (PR #105): a replica and three Sentinels at fixed addresses, `holdfastctl valkey probe`, `make drill-valkey`; a killed primary replaced in 7.1 s with nothing lost |
+| 5.3 Full RB-2 rebuild | [#43](https://github.com/Sanjay-Mx21/holdfast/issues/43) | ✅ 2026-10-07: `holdfastctl inventory rebuild` (one atomic script, dry run), the auditor's drift gauge and `InventoryDrift`; 50,000 buyers in 1.25 s; practised on three drifted dev events |
+| 5.4 Adaptive admission | [#44](https://github.com/Sanjay-Mx21/holdfast/issues/44) | ⏳ Next |
 | 5.5 Chaos | [#45](https://github.com/Sanjay-Mx21/holdfast/issues/45) | ⏳ |
 | 5.6 Alerting | [#46](https://github.com/Sanjay-Mx21/holdfast/issues/46) | ⏳ |
 | 5.7 Runbooks | [#47](https://github.com/Sanjay-Mx21/holdfast/issues/47) | ⏳ |

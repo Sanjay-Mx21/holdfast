@@ -61,5 +61,6 @@ Holds resume first, so the people admitted already can buy, then admissions.
 - Each half has an admin endpoint (`POST /internal/v1/events/{id}/freeze` and
   `/unfreeze`, operator token, on each service's admin port) for automation;
   freezing only one half is rarely what you want.
-- A freeze needs the event's inventory in Valkey. After Valkey lost it
-  (RB-INV-4), provision the inventory first, then freeze.
+- A freeze needs the event's inventory in Valkey. After Valkey lost it,
+  `holdfastctl inventory rebuild` (RB-INV-4) recreates it with holds
+  frozen; `freeze` then pauses the queue as well.

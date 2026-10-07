@@ -340,9 +340,11 @@ stores every 15 seconds and publishes the number of violations of each
   dead_lettered).
 - **Correctness:** the auditor publishes
   `holdfast_invariant_violations{invariant}` (I1 to I5, every value must be
-  0), and the reconciler `holdfast_recon_mismatch_total{type}`.
-- **Alerts** (task 5.1, `deploy/alerting/holdfast.rules.yml`, loaded by
-  Prometheus): `InvariantViolation`, `MoneySafetyBreach`,
+  0) and `holdfast_inventory_drift_units{event}` (units Valkey offers beyond
+  PostgreSQL's free units: the signal to rebuild, task 5.3), and the
+  reconciler `holdfast_recon_mismatch_total{type}`.
+- **Alerts** (tasks 5.1 and 5.3, `deploy/alerting/holdfast.rules.yml`, loaded by
+  Prometheus): `InvariantViolation`, `MoneySafetyBreach`, `InventoryDrift`,
   `ReconciliationNeedsAHuman`, `AuditorStale` and `ReconcilerStale`, each
   with its runbook in `docs/runbooks/auditor.md`. Nothing routes them yet
   (Alertmanager is task 5.6); Prometheus's Alerts page shows them.
@@ -384,7 +386,7 @@ stores every 15 seconds and publishes the number of violations of each
 |---|---|---|
 | Valkey unreachable | 503 `UNAVAILABLE` with `Retry-After`; readiness fails | RB-INV-1 |
 | Valkey's primary dies | Sentinel promotes the replica in about 7 s (drill: 6.4 s without writes, 0 acknowledged writes lost at 10 writes/s); clients follow by themselves. Writes not yet replicated are lost | RB-VK-1, then RB-INV-4 |
-| Valkey data lost | Rebuild the pool from PostgreSQL (capacity minus sold) | RB-INV-4 |
+| Valkey data lost | `holdfastctl inventory rebuild` sets the pool (capacity − sold − pending), the per-user counters and the pending bookings' holds from PostgreSQL, atomically, holds frozen | RB-INV-4 |
 | Something looks wrong during a sale | Freeze: no new holds, no admissions; holds and payments in flight carry on | RB-1 |
 | inventory-svc unreachable from queue-svc | Admission ignores the units left until it is back (fails open; inventory still guards capacity) | RB-Q-5 |
 | Sweeper failing | Expired holds keep units; any healthy replica recovers them | RB-INV-2 |

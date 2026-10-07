@@ -38,18 +38,49 @@ Each entry lists symptoms, impact, how to diagnose, how to mitigate, and follow-
   run `holdfastctl inventory provision --event E`. Deleting the keys drops live
   holds, so do this only when no sale is running.
 
-## RB-INV-4 Rebuild Valkey inventory from PostgreSQL
+## RB-INV-4 Rebuild Valkey inventory from PostgreSQL (RB-2)
 
-Use this after Valkey data loss (crash without AOF, failover to an empty
-replica, accidental flush).
+Use this after Valkey lost writes or everything: a failover (RB-VK-1), a
+crash, an accidental flush, or counters that disagree with PostgreSQL.
+PostgreSQL is the source of truth; `holdfastctl inventory rebuild` (task
+5.3) makes Valkey agree with it, for one event, in one atomic script:
 
-1. Stop hold traffic: scale inventory-svc to zero or block `/v1/events/E/holds` at the edge.
-2. For each event, run `holdfastctl inventory provision --event E`. The pool starts
-   at capacity minus units sold in PostgreSQL. Per-user counters start empty;
-   the final guard still enforces caps at confirmation.
-3. Check with `holdfastctl inventory status --event E`, then restore traffic.
+| Valkey | Set to, from PostgreSQL |
+|---|---|
+| `inv:{E}:avail` | capacity − sold − units in `PENDING_PAYMENT` bookings |
+| `inv:{E}:user:U` | units the user bought (`user_event_purchases`) plus their pending bookings'; every other counter deleted |
+| the pending bookings' holds | kept, or recreated, as PAYING until the payment deadline plus `PAYMENT_GRACE` (`--grace`, 3 minutes): their confirmation then finds them and does not take their units twice |
+| every other open hold | released (`released_by` `REBUILD`): it has no booking, so its units are back |
+| `inv:{E}:config` | capacity and per-user limit from the catalog; `frozen` set |
 
-Once booking-svc exists (Phase 3), units in pending checkouts are subtracted too.
+1. **Freeze the sale** (RB-1): `holdfastctl freeze --event E`. The rebuild
+   freezes inventory's holds itself before reading PostgreSQL, but the
+   queue's admissions are only paused by `freeze`. (If Valkey lost the
+   event entirely, `freeze` reports inventory "not provisioned": go on.)
+2. **Look first:** `holdfastctl inventory rebuild --event E --dry-run`
+   prints what PostgreSQL says, the pool before and after, and how many
+   counters and holds would change. It writes nothing.
+3. **Rebuild:** `holdfastctl inventory rebuild --event E`. Holds stay
+   frozen afterwards. It is idempotent: a second run changes nothing.
+4. **Check:** `holdfastctl inventory status --event E`, and the auditor's
+   invariants (`localhost:9097/metrics`: I1, I4 and I5 at 0).
+5. **Unfreeze:** `holdfastctl unfreeze --event E`.
+
+Buyers whose holds had no booking yet see "hold expired, try again"; buyers
+paying keep their holds. Repeat for each event on sale.
+
+- **Races are on the safe side.** Payments carry on during a freeze. A
+  booking confirmed between the read and the rebuild keeps its SOLD hold
+  ("confirmed meanwhile"), and its units are counted once either way. A
+  booking cancelled in between leaves its units out of the pool until the
+  next rebuild: fewer units for sale, never more. PostgreSQL's final guard
+  decides every sale regardless.
+- **Cost:** the script blocks Valkey while it runs, for every event on
+  that Valkey: 662 ms for a sale with 50,000 buyers, 10,000 pending
+  bookings and 5,000 abandoned holds (1.25 s end to end; dry run 158 ms).
+  Smaller sales take milliseconds.
+- `holdfastctl inventory provision` only creates a missing pool and never
+  replaces one: it is for new events.
 
 ## RB-INV-5 Rotate the admission-token signing key
 
@@ -75,8 +106,8 @@ With key files only (`ADMISSION_PUBLIC_KEY_FILES`):
 - **Unexpected case (no late confirms):** stop the sale, capture
   `valkey-cli get 'inv:{E}:avail'` and
   `SELECT capacity, sold FROM booking.event_inventory WHERE event_id = 'E'`,
-  and open an incident. PostgreSQL is authoritative; rebuild with RB-INV-4 after
-  the investigation. E1 runs on every CI build to keep this case impossible.
+  and open an incident. PostgreSQL is authoritative; rebuild with RB-INV-4
+  (`holdfastctl inventory rebuild`) after the investigation. E1 runs on every CI build to keep this case impossible.
 
 ## RB-INV-7 booking-svc's gRPC calls are refused
 
