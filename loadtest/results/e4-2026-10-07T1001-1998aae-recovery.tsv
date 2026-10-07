@@ -1,0 +1,12 @@
+fault	measure	seconds
+valkey_primary	promoted	7.8
+valkey_primary	inventory_ready	8.5
+valkey_primary	queue_ready	9.2
+rb2	freeze	0.2
+rb2	dry_run	0.4
+rb2	rebuild	0.7
+rb2	unfreeze	0.2
+rb2	total	2.0
+booking_svc	ready_after_kill	24.2
+kafka	outboxes_drained	191.0
+postgres	services_ready	5.2

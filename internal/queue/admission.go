@@ -324,7 +324,14 @@ func (c *Controller) unitsLeft(ctx context.Context) (unitsCap int, soldOut bool)
 	if a.Available <= 0 {
 		return 0, a.ActiveHolds == 0
 	}
-	return int(math.Floor(float64(a.Available) * c.cfg.Oversubscription)), false
+	// A buyer who has held or bought keeps their session slot until its TTL
+	// runs out, but is no longer shopping. Each such session took at least
+	// one unit, so at most capacity − available of the open sessions are
+	// spent; leaving room for them keeps admission flowing as units sell.
+	// Without it, admission stalled near the end of a sale until the
+	// finished buyers' slots expired (P55, found by experiment E3).
+	spent := max(0, a.Capacity-a.Available)
+	return int(math.Floor(float64(a.Available)*c.cfg.Oversubscription)) + spent, false
 }
 
 // leaderLockKey maps an event to its advisory-lock key. FNV-1a over a

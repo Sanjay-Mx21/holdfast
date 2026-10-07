@@ -1,0 +1,43 @@
+== 09:54:32 switching to the chaos overlay
+== 09:55:10 E4: 6000 buyers, 200 at a time, event 01a115c9-b93e-7d2a-ae70-5fca31a4ca3d admitting up to 15 a second; faults 60 s apart
+   15s  0 of 6000 buyers done
+   30s  227 of 6000 buyers done
+   45s  503 of 6000 buyers done
+   60s  789 of 6000 buyers done
+   75s  962 of 6000 buyers done
+   90s  1181 of 6000 buyers done
+  105s  1459 of 6000 buyers done
+  120s  1689 of 6000 buyers done
+  135s  1923 of 6000 buyers done
+== 09:57:25 the Sentinels are still in TILT mode (E26); killing anyway
+== 09:57:26 1. killing the Valkey primary (valkey)
+  150s  1958 of 6000 buyers done
+  165s  1967 of 6000 buyers done
+  180s  2146 of 6000 buyers done
+  195s  2166 of 6000 buyers done
+  210s  2344 of 6000 buyers done
+  225s  2365 of 6000 buyers done
+  240s  2542 of 6000 buyers done
+  255s  2564 of 6000 buyers done
+no promotion within 120 s
+== 09:59:35 restoring the normal stack
+  270s  2569 of 6000 buyers done
+  285s  2569 of 6000 buyers done
+  300s  2618 of 6000 buyers done
+  315s  2767 of 6000 buyers done
+  330s  2918 of 6000 buyers done
+
+6000 buyers for event 01a115c9-b93e-7d2a-ae70-5fca31a4ca3d in 340 s (200 at a time)
+outcomes:
+  admit_failed                    356
+  book_failed                      12
+  confirmed                      1974
+  hold_failed                       1
+  join_failed                     872
+requests repeated after a failure, by stage:
+  admit                          7975
+  book                            348
+  hold                             29
+  join                          20586
+payment to confirmed booking: p50 4057 ms, p95 16089 ms, p99 22303 ms, max 38222 ms
+buyers: context canceled

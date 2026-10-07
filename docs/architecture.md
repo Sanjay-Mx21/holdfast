@@ -211,8 +211,12 @@ payment events, each documented with its `ce_type`). Every message carries Cloud
 deduplication key; `ce_type`; `ce_source`; `ce_time`). `internal/platform/kafka`
 produces with `acks=all` and idempotence, and consumes with manual commits:
 an offset is committed only after the handler finishes, so handlers must be
-idempotent, and a message that keeps failing is dead-lettered instead of
-stalling its partition.
+idempotent. A message that cannot ever succeed (marked `kafka.Permanent`:
+unreadable, or data needing a person) is dead-lettered at once; any other
+failure is a dependency that may come back, so it is retried for up to 10
+minutes (`RetryFor`), holding its partition, before it is dead-lettered
+(P56: five quick attempts dead-lettered payments during a 5 s database
+outage in experiment E4).
 
 ## 7. Background work
 
@@ -262,9 +266,9 @@ transaction (`internal/platform/outbox`; ADR 0009).
 - payment-svc's refunds (`payment-refunds` on `holdfast.booking.v1`).
 
 Each message is applied in one transaction with its dedup record. Offsets
-are committed after it. A message that keeps failing goes to its
-dead-letter topic, which `holdfastctl dlq replay` drains (runbook RB-3,
-`docs/runbooks/saga.md`).
+are committed after it. A message that cannot succeed, or keeps failing
+for 10 minutes, goes to its dead-letter topic, which `holdfastctl dlq
+replay` drains (runbook RB-3, `docs/runbooks/saga.md`).
 
 booking-svc's **deadline job** cancels overdue `PENDING_PAYMENT` bookings
 (`FOR UPDATE SKIP LOCKED`). payment-svc's **status poller** asks the
@@ -460,6 +464,12 @@ stores every 15 seconds and publishes the number of violations of each
 - E2 (`make load-e2`): a k6 stampede through the edge, comparing the status
   polls the edge answers with those that reach queue-svc. Results and their
   limits are in `loadtest/results/README.md`.
+- E3 and E4 (`make chaos-e3`, `make chaos-e4`; `chaos/README.md`, task
+  5.5): simulated buyers (`cmd/buyers`) make whole purchases through the
+  running stack while mockpsp injects payment faults (E3) or Valkey's
+  primary, booking-svc and Kafka are killed and PostgreSQL is cut off
+  through Toxiproxy (E4); each ends when every capture is resolved, and
+  checks every invariant with the auditor.
 
 ## 12. Adding a service
 

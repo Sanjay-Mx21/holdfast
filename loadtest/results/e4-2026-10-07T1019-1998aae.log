@@ -1,0 +1,193 @@
+== 10:20:06 switching to the chaos overlay
+== 10:20:41 E4: 12000 buyers, 200 at a time, event 01a115e1-17fd-7004-ba83-cf6f8e96f346 admitting up to 15 a second; faults 60 s apart
+   15s  0 of 12000 buyers done
+   30s  235 of 12000 buyers done
+   45s  547 of 12000 buyers done
+   60s  791 of 12000 buyers done
+== 10:21:44 1. killing the Valkey primary (valkey); buyers running: yes
+valkey_primary	promoted	7.3
+valkey_primary	inventory_ready	8.7
+valkey_primary	queue_ready	9.2
+   75s  859 of 12000 buyers done
+   90s  974 of 12000 buyers done
+  105s  1191 of 12000 buyers done
+  120s  1395 of 12000 buyers done
+  135s  1622 of 12000 buyers done
+  150s  1828 of 12000 buyers done
+  165s  2063 of 12000 buyers done
+  180s  2292 of 12000 buyers done
+  195s  2463 of 12000 buyers done
+  210s  2621 of 12000 buyers done
+  225s  2866 of 12000 buyers done
+  240s  3042 of 12000 buyers done
+valkey_primary	old_primary_rejoined	176.0
+== 10:24:54 RB-2: freeze, rebuild inventory from PostgreSQL, unfreeze
+inventory: holds frozen: no new holds
+queue: FROZEN: admissions paused
+rb2	freeze	0.1
+dry run: nothing was changed; a rebuild would do this:
+postgres    capacity 12000, sold 3221, 148 pending bookings (148 units), 3369 buyers with units
+available   8631 -> 8631
+per-user    0 counters set, 0 deleted
+holds       pending bookings: 0 recreated, 143 kept, 5 confirmed meanwhile; 3 without a booking released
+took        203.5ms
+rb2	dry_run	0.4
+inventory: holds frozen for the rebuild (already so)
+postgres    capacity 12000, sold 3231, 138 pending bookings (138 units), 3369 buyers with units
+available   8631 -> 8631
+per-user    0 counters set, 0 deleted
+holds       pending bookings: 0 recreated, 134 kept, 4 confirmed meanwhile; 3 without a booking released
+took        593.1ms
+holds stay frozen: check 'holdfastctl inventory status --event 01a115e1-17fd-7004-ba83-cf6f8e96f346' and the auditor, then 'holdfastctl unfreeze --event 01a115e1-17fd-7004-ba83-cf6f8e96f346'
+rb2	rebuild	0.9
+inventory: holds resumed
+queue: OPEN: admissions resumed
+rb2	unfreeze	0.2
+rb2	total	2.0
+  255s  3240 of 12000 buyers done
+  270s  3411 of 12000 buyers done
+  285s  3722 of 12000 buyers done
+  300s  4002 of 12000 buyers done
+== 10:25:56 2. killing booking-svc; buyers running: yes
+  315s  4216 of 12000 buyers done
+  330s  4216 of 12000 buyers done
+booking_svc	ready_after_kill	20.6
+  345s  4238 of 12000 buyers done
+  360s  4239 of 12000 buyers done
+  375s  4507 of 12000 buyers done
+  390s  4836 of 12000 buyers done
+== 10:27:16 3. restarting Kafka; buyers running: yes
+  405s  4955 of 12000 buyers done
+  420s  4955 of 12000 buyers done
+  435s  4955 of 12000 buyers done
+kafka	serving	47.9
+kafka	outboxes_drained	52.4
+  450s  4955 of 12000 buyers done
+  465s  5222 of 12000 buyers done
+  480s  5469 of 12000 buyers done
+  495s  5742 of 12000 buyers done
+== 10:29:09 4. cutting PostgreSQL off for 5 s; buyers running: yes
+  510s  5916 of 12000 buyers done
+postgres	services_ready	5.3
+== 10:29:14 faults done; waiting for the buyers
+  525s  6073 of 12000 buyers done
+  540s  6308 of 12000 buyers done
+  555s  6540 of 12000 buyers done
+  570s  6764 of 12000 buyers done
+  585s  6989 of 12000 buyers done
+  600s  7213 of 12000 buyers done
+  615s  7437 of 12000 buyers done
+  630s  7648 of 12000 buyers done
+  645s  7851 of 12000 buyers done
+  660s  8104 of 12000 buyers done
+  675s  8320 of 12000 buyers done
+  690s  8558 of 12000 buyers done
+  705s  8776 of 12000 buyers done
+  720s  8998 of 12000 buyers done
+  735s  9220 of 12000 buyers done
+  750s  9464 of 12000 buyers done
+  765s  9693 of 12000 buyers done
+  780s  9900 of 12000 buyers done
+  795s  10138 of 12000 buyers done
+  810s  10345 of 12000 buyers done
+  825s  10568 of 12000 buyers done
+  840s  10800 of 12000 buyers done
+  855s  11039 of 12000 buyers done
+  870s  11264 of 12000 buyers done
+  885s  11495 of 12000 buyers done
+  900s  11550 of 12000 buyers done
+  915s  11777 of 12000 buyers done
+
+12000 buyers for event 01a115e1-17fd-7004-ba83-cf6f8e96f346 in 924 s (200 at a time)
+outcomes:
+  confirmed                     11997
+  unsettled_PENDING_PAYMENT         3
+requests repeated after a failure, by stage:
+  admit                           776
+  book                            466
+  hold                             42
+  join                             70
+  settle                          296
+payment to confirmed booking: p50 4027 ms, p95 20205 ms, p99 52924 ms, max 63299 ms
+   10:36:04 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:36:20 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:36:36 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:36:53 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:37:11 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:37:28 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:37:45 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:38:01 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:38:17 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:38:33 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:38:49 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:39:05 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:39:25 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:39:45 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:40:03 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:40:16 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:40:38 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:40:56 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:41:13 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:41:29 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:41:45 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:42:02 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:42:18 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:42:34 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:42:50 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:43:05 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:43:22 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:43:37 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:43:54 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:44:09 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:44:26 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:44:41 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:44:58 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:45:14 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:45:30 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:45:46 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:46:02 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:46:17 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:46:33 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:46:49 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:47:05 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:47:21 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:47:38 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:47:55 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:48:10 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:48:26 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:48:42 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:48:58 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:49:14 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:49:31 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:49:49 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:50:05 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:50:20 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:50:37 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+   10:50:53 captured at the provider 12000, known to HoldFast 12000, unresolved 3
+
+== 10:51:08 results
+bookings:  CANCELLED 3 CONFIRMED 11997
+intents:   CAPTURED 12000
+provider:  12000 captured; HoldFast knows 12000, 3 unresolved
+payment-svc captures by source: holdfast_payment_captures_total{via="poll"} 0 holdfast_payment_captures_total{via="reconciler"} 0 holdfast_payment_captures_total{via="webhook"} 12000 
+reconciler findings: 
+invariants: I1=0 I2=0 I3=3 I4=0 I5=0 
+recovery (seconds):
+  fault           measure               seconds
+  valkey_primary  promoted              7.3
+  valkey_primary  inventory_ready       8.7
+  valkey_primary  queue_ready           9.2
+  valkey_primary  old_primary_rejoined  176.0
+  rb2             freeze                0.1
+  rb2             dry_run               0.4
+  rb2             rebuild               0.9
+  rb2             unfreeze              0.2
+  rb2             total                 2.0
+  booking_svc     ready_after_kill      20.6
+  kafka           serving               47.9
+  kafka           outboxes_drained      52.4
+  postgres        services_ready        5.3
+FAIL: not settled 15 minutes after the buyers finished
+FAIL: an invariant is violated
+RESULT: FAIL
+== 10:54:15 restoring the normal stack

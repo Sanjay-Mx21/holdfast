@@ -3,6 +3,159 @@
 Raw evidence for every number HoldFast publishes. A number that is not backed
 by a file in this folder must not appear in the README, a resume or a post.
 
+## E4 infrastructure chaos, 2026-10-07 (task 5.5)
+
+**Result: PASS. 12,000 buyers bought through the running stack while,
+one after another, Valkey's primary was killed, booking-svc was killed,
+Kafka was restarted and PostgreSQL was cut off for 5 s. Every capture was
+resolved, every invariant was 0, nothing was dead-lettered, and runbook
+RB-2 rebuilt the sale's inventory from PostgreSQL in 2.3 s mid-sale. The
+run before it failed, and found P56.**
+
+| File | Content |
+|---|---|
+| `e4-2026-10-07T1106-1998aae.log` | The passing run: the faults, the buyers' report, the settlement check |
+| `e4-2026-10-07T1106-1998aae-recovery.tsv` | Its recovery times |
+| `e4-2026-10-07T1106-1998aae-buyers.json` | Its buyers' report |
+| `e4-2026-10-07T1019-1998aae.*` | The run that failed (P56), with a real Valkey failover |
+| `e4-2026-10-07T0953-1998aae.*`, `e4-2026-10-07T1001-1998aae.*` | Earlier attempts: no failover (Sentinel in TILT, E26); a PostgreSQL cut that came after the sale |
+
+### Method
+
+```bash
+make chaos-e4   # BUYERS=12000 CONCURRENCY=200 RATE=15 GAP=60
+```
+
+- **Load:** the same buyers as E3 (`cmd/buyers`), admitted at 15 a
+  second, so the sale lasts through all four faults (the log says, at each
+  fault, that the buyers were still running). No payment faults.
+- **Faults, 60 s apart:**
+  1. the Valkey primary is killed (SIGKILL); once Sentinel promotes the
+     replica (or, if it cannot, the killed node is started again), runbook
+     RB-2 is practised: freeze the sale, dry run, rebuild inventory from
+     PostgreSQL, unfreeze;
+  2. booking-svc is killed, mid-saga, and started 10 s later;
+  3. Kafka is restarted;
+  4. PostgreSQL is cut off from booking-svc, payment-svc and queue-svc
+     for 5 s (Toxiproxy).
+- **Pass:** every payment the provider captured is known to HoldFast and
+  resolved within 15 minutes of the buyers finishing, and every invariant
+  is 0.
+
+### Recovery times
+
+| Fault | Measure | Passing run (T1106) | Failover run (T1019) |
+|---|---|---|---|
+| Valkey primary killed | Replica promoted | none: the Sentinels were in TILT mode (E26); the killed node was restarted after 120 s | **7.3 s** |
+| | inventory-svc and queue-svc ready | 132.6 s, 132.8 s (after the restart) | **8.7 s, 9.2 s** |
+| | The killed node back as a replica | (it was the primary again) | 176 s (TILT delayed the Sentinels' demotion) |
+| RB-2 | Freeze, dry run, rebuild, unfreeze | 0.1, 0.5, 1.3, 0.1 s: **2.3 s** | 0.1, 0.4, 0.9, 0.2 s: **2.0 s** |
+| booking-svc killed | Ready again (10 s of it down by design) | 21.3 s | 20.6 s |
+| Kafka restarted | Serving / both outboxes drained | 52.1 s / 56.7 s | 47.9 s / 52.4 s |
+| PostgreSQL cut 5 s | booking-svc and payment-svc ready | 5.2 s | 5.3 s |
+
+### Numbers (the passing run)
+
+| Measure | Value |
+|---|---|
+| Buyers / confirmed | 12,000 / 11,913 |
+| Gave up during the 132 s Valkey outage | 87 (71 joining, 15 claiming their turn, 1 booking): retries ran out before Valkey came back; none had paid |
+| Captures at the provider / known / unresolved | 11,913 / 11,913 / 0 |
+| Dead-lettered messages | 0 (the payment topic stayed at the 29 left by earlier runs, replayed with RB-3) |
+| Inventory drift afterwards | 0 on every event |
+| Every invariant | 0 |
+| Requests repeated after a failure | joining 2,884, admission claims 435, bookings 348, booking reads 497, holds 1 |
+
+### What the failed run found (P56)
+
+The run with the real failover ended with **I3 at 3**: three buyers paid,
+and their bookings were cancelled, unpaid, seven minutes later. Their
+`payment.captured` events had reached booking-svc's saga during the 5 s
+PostgreSQL cut, failed five quick attempts in two seconds, and gone to the
+dead-letter topic. The Valkey failovers had dead-lettered 26 more, after
+the saga confirmed the bookings but before it could mark their holds sold,
+which left 22 units of inventory drift that the auditor's gauge reported.
+Replaying the dead-letter topic (RB-3, 3.7 s) refunded the three and
+repaired the drift. The fix: a consumer retries a failure that is not
+permanent for 10 minutes before dead-lettering it, and inventory-svc
+reports Valkey failover errors as UNAVAILABLE (P57). The passing run,
+with a longer Valkey outage, dead-lettered nothing.
+
+### Caveats
+
+- **The laptop's clock defeats Sentinel (E26).** WSL2 steps the clock
+  back every 30 s; Sentinel enters TILT mode on each step and, when steps
+  come slightly faster than its 30 s period, stays in it. Two of the four
+  attempts could not fail over at all. The failover numbers (7.3 s)
+  come from the run where TILT allowed it, and match task 5.2's drill
+  (7.1 s).
+- **One run each**, on one machine shared by the stack and the load.
+- No payment faults during E4: they are E3's.
+
+## E3 payment chaos, 2026-10-07 (task 5.5)
+
+**Result: PASS. 5,000 buyers made whole purchases through the running
+stack under the design's full fault mix. I2 (no double charge) stayed 0
+throughout, every capture reached HoldFast (220 lost capture webhooks,
+every one recovered by status polling), and no captured money was left
+unresolved once the buyers finished.**
+
+| File | Content |
+|---|---|
+| `e3-2026-10-07T0908-1998aae.log` | The run: the auditor and admission rate every 15 s, the buyers' report, the settlement check |
+| `e3-2026-10-07T0908-1998aae-buyers.json` | The buyers' report (outcomes, retries, payment to confirmation) |
+| `e3-2026-10-07T0908-1998aae-mockpsp-metrics.txt` | mockpsp's counters afterwards (they include two 60-buyer trial runs made just before) |
+
+### Method
+
+```bash
+BUYERS=5000 CONCURRENCY=300 RATE=200 make chaos-e3
+```
+
+- **Path:** every buyer goes through the edge like a browser: join the
+  waiting room, claim the turn, hold one unit at inventory-svc, book at
+  booking-svc, pay at mockpsp's checkout, then wait for the booking to
+  settle (`cmd/buyers`). The stack runs under `chaos/compose.yaml`: buyers
+  identify themselves with `X-Dev-User-Id`, join without proof of work,
+  and the per-IP limits are lifted (one load generator).
+- **Faults (mockpsp, the design's E3 mix):** 20% of webhooks duplicated,
+  10% delayed 30 to 90 s, 5% lost; 10% of payments fail; 5% of API answers
+  held back 10 s, past payment-svc's 2 s attempt timeout.
+- **Event:** 5,000 units, admission up to 200 a second (adaptive), a
+  session budget of 1,000 (see the caveats).
+- **Machine:** the development laptop, with the whole stack and the load
+  generator; WSL2 limited to 6 GB.
+
+### Numbers
+
+| Measure | Value |
+|---|---|
+| Buyers | 5,000 |
+| Paid and confirmed | 4,481 |
+| Payment declined (the failure fault) and the booking cancelled | 519 (10.4%) |
+| Captures at the provider / known to HoldFast / unresolved | 4,481 / 4,481 / 0 |
+| Capture webhooks lost / recovered by polling | 220 / 220 |
+| I2 violations, sampled every 15 s | 0 throughout |
+| Every invariant at the end | 0 |
+| Booking requests repeated after a 503 (the timeout fault) | 523, all then succeeded |
+| Payment to confirmed booking | p50 6.4 s, p95 90 s, p99 148 s (the 30 to 90 s delays, and polling's 2-minute wait for lost webhooks) |
+| Admission rate applied (adaptive) | 200/s most of the time; down to 10/s while timeouts pushed the provider's p99 over 2 s |
+
+### Caveats
+
+- **Slow because of the session budget, by mistake (D58).** The run took
+  44 minutes: it stalled at 1,000, 2,000 and 3,000 buyers for 6 to 8
+  minutes each, because every admitted buyer keeps a session slot for its
+  10-minute TTL and the event allowed 1,000. The design sizes the budget
+  by Little's Law (rate × TTL: 120,000 here); the scripts do so now. It
+  changes how long the run takes, not what it checks.
+- **I3's 15 minutes were never tested at the edge:** everything settled
+  within seconds of the last buyer, because polling recovered every lost
+  capture within its 2-minute wait. The reconciler had nothing to repair.
+- **The first trial run found P55:** admission stalled near the end of a
+  sale because buyers who had already bought still counted against the
+  units cap. Fixed before this run.
+
 ## Phase 4 demo: a ticket bought by hand during a stampede, 2026-10-04
 
 **Result: the buyer's purchase went through mid-rush and the dashboard showed

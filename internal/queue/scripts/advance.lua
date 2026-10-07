@@ -18,7 +18,8 @@
 -- KEYS[7] q:{E}:status
 -- ARGV[1] the caller's epoch   ARGV[2] most people to admit this tick (from the rate)
 -- ARGV[3] most sessions to have open at once for the units left (units left
---         times the oversubscription factor; P17), or -1 for no such cap
+--         times the oversubscription factor, plus room for the sessions of
+--         buyers who already took units; P17, P55), or -1 for no such cap
 -- Returns {code, admitted_up_to, admitted_now, active_sessions, queue_size, state}
 -- (state as the status document shows it)
 --    1 admitted some       0 nothing to admit (not OPEN, no budget, or nobody waiting)

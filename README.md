@@ -110,9 +110,9 @@ and caveats: [`loadtest/results/README.md`](loadtest/results/README.md).
 | **E1 Contention:** 50,000 concurrent buyers for 1,000 units, 10,000 confirmations through the guard | Exactly 1,000 holds and exactly 1,000 sold in **100 of 100 runs** (900 of 900 invariant checks) | ✅ Passes in CI on every push |
 | **E1 part B:** whole purchases with injected payment faults (10% failures, duplicated, delayed and lost webhooks, provider timeouts) | 1,000 purchases with **I1, I2 and I4 at 0**: 898 confirmed, 102 failed and returned, every duplicate dropped, 45 captures recovered by polling | ✅ |
 | **E2 Waiting-room stampede:** k6 through the edge | The origin answered **about 0.5 status requests a second whatever the edge served** (up to 13,572 polls per origin request). 50,000 users flowed from join to token at 30-second polling. The design's 3-second polling did not fit on the laptop, and join p99 (203 ms) missed its 150 ms SLO | ⚠️ Design scale moves to Phase 6 |
-| **E3 Payment chaos** at full scale | E1 part B ran the fault mix with shorter delays | ⏳ Phase 5 |
+| **E3 Payment chaos:** 5,000 purchases through the stack under duplicate, delayed (30 to 90 s) and lost webhooks, failed payments and provider timeouts | **I2 at 0 throughout**; every capture known and resolved (220 lost webhooks, all recovered by polling); every invariant 0 | ✅ |
 | **Valkey failover drill:** the primary killed while writes flow through Sentinel | Promoted in **7.1 s**; writes stopped for 6.4 s; **0 acknowledged writes lost**; a planned (coordinated) switch paused writes for 74 ms ([runbook](docs/runbooks/valkey.md)) | ✅ |
-| **E4 Infrastructure chaos:** kill Valkey, booking-svc, Kafka mid-sale | Not run yet | ⏳ Phase 5 |
+| **E4 Infrastructure chaos:** 12,000 purchases while Valkey's primary, booking-svc and Kafka are killed and PostgreSQL is cut off | Every capture resolved, every invariant 0, nothing dead-lettered; failover **7.3 s**, inventory rebuilt from PostgreSQL mid-sale (RB-2) in **2.0 to 2.3 s**, booking-svc back in 21 s, Kafka in 52 s, PostgreSQL in 5 s. The first full run found a money-safety bug (P56), now fixed | ✅ |
 | **E5 Scale-out:** 1, 2 and 4 instances | Not run yet | ⏳ Phase 6 |
 | **E6 Fairness:** 100,000 joins before T0, then after | Join time did not predict position before T0 (Spearman ρ = −0.0008); exactly arrival order after (ρ = 1) | ✅ |
 
@@ -220,9 +220,10 @@ and `/readyz`.
   auditor are built (they fill the dashboard's correctness tiles, with
   alerts), and Valkey fails over by itself (a replica and three Sentinels:
   a killed primary is replaced in about 7 s, nothing lost in the drill),
-  and inventory is rebuilt from PostgreSQL in one command; next, adaptive admission (AIMD) with
-  backpressure from the payment provider, chaos experiments E3 and E4, and
-  alerts.
+  inventory is rebuilt from PostgreSQL in one command, admission adapts to
+  the payment provider's health (AIMD, pausing while it is down), and the
+  chaos experiments E3 and E4 pass (results above); next, the remaining
+  alerts, the runbooks written up, and ADR 0013.
 - **Phase 6, scale and polish:** the design-scale E2 and E5 scale-out (1, 2
   and 4 instances) with profiling, a security pass, and v1.0.0; optionally a
   Kubernetes or public demo deployment.
