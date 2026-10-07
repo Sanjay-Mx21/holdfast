@@ -31,14 +31,33 @@ All times are IST (UTC+05:30).
 |---|---|
 | **Project** | A flash-sale booking engine that sells exactly the available units under extreme demand, never more |
 | **Plan version** | 2.0 (1 October 2026) |
-| **Milestones complete** | M0 Foundation, M1 Correctness core, M1.5 Bring-up and baseline, M2 Fair waiting room, M3 MVP backend, and M4 Resume-ready product (the demo video deferred by the owner) |
-| **Current milestone** | M5 Hardened (Phase 5): tasks 5.1 to 5.7 built, both exit criteria met; 5.8 next (section 11) |
-| **Progress to v1.0** | About 49% (25 of about 51 focused-work days, excluding Phase 7 stretch goals), counting Phase 2's and Phase 4's planned 7 days each |
+| **Milestones complete** | M0 Foundation, M1 Correctness core, M1.5 Bring-up and baseline, M2 Fair waiting room, M3 MVP backend, M4 Resume-ready product (the demo video deferred by the owner), and M5 Hardened (built 2026-10-07, awaiting the owner's review) |
+| **Current milestone** | M5 Hardened (Phase 5): all 8 tasks built and both exit criteria met; work stopped for the owner's review. Next: release v0.5.0 on approval, then Phase 6 |
+| **Progress to v1.0** | About 65% (33 of about 51 focused-work days, excluding Phase 7 stretch goals), counting each phase at its planned days (Phase 5: 8) |
 | **Repository** | [github.com/Sanjay-Mx21/holdfast](https://github.com/Sanjay-Mx21/holdfast), branch `main` |
 | **First commit** | `2173e50` "first commit", 2026-10-01 20:20, 82 files, 12,973 lines |
 | **Latest release** | [v0.4.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.4.0), 2026-10-06 19:13, on `eefee44` (before it: [v0.3.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.3.0), 2026-10-03 15:48, on `5ffa271`; [v0.2.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.2.0), 2026-10-02 21:51, on `cd0592a`; [v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0), 2026-10-01 23:47, on `9dcd2f8`) |
 | **CI** | Green since 2026-10-01 22:00; `main` is protected and every change needs a pull request with all 13 required checks passing (`images (booking)`, `images (payment)`, `images (mockpsp)` and `images (auth)` added on 2026-10-03, `web` on 2026-10-04, `images (auditor)` on 2026-10-06) |
 | **Issues so far** | 146 recorded: 141 resolved, 5 open (section 6) |
+
+<Callout type="tip" title="Phase 5 built: HoldFast survives its failures, and says so (2026-10-07)">
+
+Tasks 5.1 to 5.8 are merged (PRs #104 to #111). Built:
+- the reconciler against the provider's settlement report, and the invariant auditor with alerts;
+- Valkey with a replica and three Sentinels, and a failover drill;
+- `holdfastctl inventory rebuild` (RB-2), with the auditor's drift gauge as its trigger;
+- adaptive admission (AIMD) with backpressure from the payment provider (ADR 0013);
+- `cmd/buyers` and `chaos/`, with experiments E3 and E4;
+- 15 alert rules with tests, and Alertmanager;
+- runbooks RB-1 to RB-5, each practised and timed.
+
+**Both exit criteria are met with evidence** (`loadtest/results/README.md`):
+- E3 (5,000 purchases under payment faults) and E4 (12,000 purchases through a Valkey kill, a booking-svc kill, a Kafka restart and a PostgreSQL cut) passed with every invariant at 0, and the recovery times are in the README;
+- RB-1 and RB-2 were practised mid-sale in E4 (2.0 to 2.3 s).
+
+The experiments earned their keep. They found a money-safety defect (P56: paid bookings cancelled after a 5 s database outage), a stall at the end of every sale (P55), a reconciler that silently stopped working at volume (P58), and three smaller defects; all are fixed. One machine limit remains: WSL2's clock can hold Sentinel in TILT mode, preventing a failover (E26). Work stopped for the owner's review, as agreed.
+
+</Callout>
 
 <Callout type="tip" title="Phase 4 built: identity, sale policies, the web app and mission control (2026-10-04)">
 
@@ -469,7 +488,26 @@ The rest of the list was already covered by tests written with tasks 3.4 to 3.12
 - **RB-5, new** (`docs/runbooks/payment.md`), practised with `make drill-rb5` (`chaos/drill-rb5.sh`): the provider down for 60 s with 4,000 buyers. The breaker opened at 1.5 s and admissions paused at 1.9 s; the provider was back at 60.3 s, the breaker closed at 66.1 s (the prober), admissions resumed at 67.4 s and reached the full rate at 86.2 s. 3,949 confirmed, every capture resolved, every invariant 0.
 - **RB-4,** practised with `make drill-rb4` (`chaos/drill-rb4.sh`): Valkey lost a sale (injected), a buyer paid for units that did not exist, and the provider went down as it captured the money. The guard refused the sale (31 s), the refund was retried for 10 minutes and dead-lettered (623 s), then `holdfastctl refund` refunded the buyer in 30 s. The money was back 657 s after the capture, inside I3's 15 minutes; RB-2 repaired the drift; every invariant 0. The drill's first run hung on a script flaw (D60).
 - **Gates:** scripts and docs only, no Go code: `make lint` (with the alert tests) and `make test` pass.
-- **Docs:** `docs/runbooks/README.md` (the five, where they live, their timings, the drills); each runbook's "practised" note; `chaos/README.md`; `loadtest/results/README.md`; the design doc (5.7 ✅) | Branch `feat/p5-runbooks`; issue #47 |
+- **Docs:** `docs/runbooks/README.md` (the five, where they live, their timings, the drills); each runbook's "practised" note; `chaos/README.md`; `loadtest/results/README.md`; the design doc (5.7 ✅) | PR #110 (merged by the assistant at 19:45 after all 13 checks passed), `a926a51`; issue #47 closed |
+| 2026-10-07 19:48 | **Task 5.8 (docs) done:**
+- **ADR 0013:** adaptive admission (AIMD) with backpressure from the payment provider: the context, the options (a fixed rate, control from metrics, backpressure alone), the decision, and its consequences, with what is not wired yet.
+- **The README:**
+  - a "How fast it recovers" table (failover 7.3 s; RB-2 2.0 to 2.3 s; the provider's outage paused admissions in 1.9 s and resumed them 7.1 s after its return; booking-svc 21 s; Kafka 52 s; PostgreSQL 0.2 s after its return; RB-3 3.7 s; RB-4 30 s);
+  - ADR 0013 in the decisions table, and the status and what's next.
+- **The runbooks** were updated through tasks 5.1 to 5.7.
+- **CHANGELOG:** Phase 5 under `[Unreleased]` (added, changed, fixed, known issues), ready for v0.5.0.
+- **The design doc:** 5.8 ✅, ADR 0013 ✅, M5 built and awaiting review.
+- **Gates:** docs only; `make lint` passes | Branch `docs/p5-close`; issue #48 |
+| 2026-10-07 19:48 | **Phase 5 complete; work stopped for the owner's review.**
+- **All 8 tasks are built** (PRs #104 to #111), and both exit criteria are met (above; `loadtest/results/README.md`).
+- **Defects the phase found and fixed:** P45 to P59, among them P56 (money safety), P55, P58 and P47.
+- **Open for the owner:**
+  - approve release v0.5.0;
+  - E26: WSL2's clock steps keep Sentinel in TILT mode on this laptop, so a failover can fail to happen. The project cannot fix it; a Linux host or a WSL time setting may;
+  - E24: the memory limit stands (6 GB was enough for every experiment);
+  - the demo video and the resume (from Phase 4);
+  - E2 at design scale, still for Phase 6 | This log; `explanation/phase5.mdx` |
+
 
 
 
@@ -833,8 +871,8 @@ Goal: HoldFast stays correct and recovers within minutes when its parts fail. Pl
 | 5.4 Adaptive admission | [#44](https://github.com/Sanjay-Mx21/holdfast/issues/44) | ✅ 2026-10-07 (PR #107): AIMD on each leader's rate from the provider's pressure (payment-svc's `GetPressure`), a pause while the breaker is open, and a prober so it closes again |
 | 5.5 Chaos | [#45](https://github.com/Sanjay-Mx21/holdfast/issues/45) | ✅ 2026-10-07 (PR #108): `cmd/buyers` and `chaos/`; E3 (5,000 purchases under payment faults) and E4 (12,000 under infrastructure faults) pass with every invariant 0; RB-1 and RB-2 practised mid-sale (2.0 to 2.3 s); P55 to P57 found and fixed |
 | 5.6 Alerting | [#46](https://github.com/Sanjay-Mx21/holdfast/issues/46) | ✅ 2026-10-07 (PR #109): 15 alert rules with promtool tests in CI, Alertmanager, the alert runbook index and RB-5; found P58 on its first evaluation |
-| 5.7 Runbooks | [#47](https://github.com/Sanjay-Mx21/holdfast/issues/47) | ✅ 2026-10-07: RB-1 to RB-5 practised and timed (E4, a real incident, `make drill-rb5`, `make drill-rb4`); the runbook index |
-| 5.8 Docs | [#48](https://github.com/Sanjay-Mx21/holdfast/issues/48) | ⏳ Next |
+| 5.7 Runbooks | [#47](https://github.com/Sanjay-Mx21/holdfast/issues/47) | ✅ 2026-10-07 (PR #110): RB-1 to RB-5 practised and timed (E4, a real incident, `make drill-rb5`, `make drill-rb4`); the runbook index |
+| 5.8 Docs | [#48](https://github.com/Sanjay-Mx21/holdfast/issues/48) | ✅ 2026-10-07: ADR 0013, the README's recovery times, the runbooks brought up to date |
 
 ## 12. Keeping this log current
 

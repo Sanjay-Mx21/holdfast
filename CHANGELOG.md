@@ -6,6 +6,76 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
 
 ## [Unreleased]
 
+Hardened (milestone M5, build plan Phase 5): HoldFast survives its
+failures, notices when something is wrong, and says how fast it recovers.
+The reconciler, the invariant auditor, Valkey failover, inventory rebuilt
+from PostgreSQL, adaptive admission, chaos experiments E3 and E4, alerting
+with Alertmanager, and runbooks RB-1 to RB-5 practised and timed, with
+ADR 0013.
+
+### Added
+
+- **The reconciler** (task 5.1, payment-svc): every 5 minutes, one replica
+  compares the provider's settlement report for the last 2 hours with the
+  records, applies captures and refunds whose webhooks were lost, asks
+  again for refunds stuck 15 minutes, and reports what needs a person
+  (`holdfast_recon_mismatch_total{type}`).
+- **The invariant auditor** (task 5.1, `cmd/auditor`, port 9097):
+  recomputes I1 to I5 every 15 s over read-only connections
+  (`holdfast_invariant_violations{invariant}`), and inventory drift per
+  event (`holdfast_inventory_drift_units{event}`, task 5.3).
+- **Valkey high availability** (task 5.2): a replica and three Sentinels at
+  fixed addresses; the services and holdfastctl follow the primary through
+  the Sentinels; `holdfastctl valkey probe` and `make drill-valkey`.
+- **`holdfastctl inventory rebuild`** (task 5.3, runbook RB-2): sets an
+  event's pool, per-user counters and pending bookings' holds to
+  PostgreSQL's records in one atomic script, holds frozen; `--dry-run`.
+- **Adaptive admission** (task 5.4, ADR 0013): each admission leader runs
+  AIMD on its rate from the payment provider's pressure (payment-svc's new
+  `GetPressure` RPC), pausing while the provider's breaker is open;
+  payment-svc probes the provider so the breaker can close again.
+- **Chaos** (task 5.5): `cmd/buyers` (simulated buyers making whole
+  purchases), `chaos/` with Toxiproxy, `make chaos-e3` and
+  `make chaos-e4`; results in `loadtest/results/README.md`.
+- **Alerting** (tasks 5.1 and 5.6): 15 Prometheus rules with promtool unit
+  tests in `make lint` and CI, and Alertmanager (port 9098); runbook index
+  `docs/runbooks/alerts.md`.
+- **Runbooks** (task 5.7): RB-5 (the provider down), `make drill-rb5` and
+  `make drill-rb4`, and `docs/runbooks/README.md` with every runbook's
+  measured time.
+- The README's "How fast it recovers" table; ADR 0013.
+
+### Changed
+
+- Kafka consumers retry a failure that is not permanent for 10 minutes
+  before dead-lettering it (it was 5 attempts in about 2 seconds).
+- The provider's settlement report is paged (`limit`, `after`, `next`).
+- Prometheus loads only `*.rules.yml` from `deploy/alerting/`.
+
+### Fixed
+
+- P56: a 5 s database outage dead-lettered payments, leaving paid bookings
+  cancelled (I3), and Valkey failovers left inventory drift.
+- P55: admission stalled near the end of a sale while finished buyers'
+  sessions counted against the units cap.
+- P58: the reconciler failed on every pass once the settlement report
+  outgrew 1 MiB.
+- P57: inventory-svc's gRPC API reported Valkey failover errors as
+  INTERNAL, not UNAVAILABLE.
+- P47 (Sentinel stalled on hostnames), P48 (holdfastctl ignored
+  `VALKEY_SENTINEL_MASTER`), P49 (planned switches now coordinated), P52
+  and P54 (counters pre-registered), P53 (the breaker could not close
+  under backpressure), P59 (reconciler log floods).
+
+### Known issues
+
+- On WSL2 the clock steps back every 30 s; Sentinel then sits in TILT mode
+  and may not fail over (E26). Production hosts slew their clocks.
+- Hold and booking p99 do not yet feed adaptive admission; only the
+  payment provider's pressure does.
+- mockpsp keeps its state in memory: restarting it makes the reconciler
+  report the captures made before (silence the alert for its window).
+
 ## [0.4.0] - 2026-10-06
 
 The resume-ready product (milestone M4, build plan Phase 4): a real person
