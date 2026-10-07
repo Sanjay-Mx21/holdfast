@@ -104,6 +104,16 @@ the status document is.
 5. Repeated `fenced off by a newer leader` warnings mean two processes keep
    taking over from each other; check that every replica reaches the same
    PostgreSQL.
+6. Is adaptive admission holding it back (task 5.4)?
+   `holdfast_queue_admission_rate{event="<event id>"}` is the rate the leader
+   applies now. 0 with `admission: paused` in the logs: the payment
+   provider's circuit breaker is open, and admissions resume by themselves
+   once it closes (RB-5; payment-svc's prober tries the provider every
+   `PSP_PROBE_INTERVAL`). Below the event's rate:
+   `holdfast_queue_admission_backoffs_total` says why (latency, errors, or
+   unknown when `holdfast_queue_pressure_reads_total{result="error"}` grows:
+   check payment-svc, and that it trusts `queue.pub`). It climbs back by 5%
+   of the event's rate a second once the provider copes.
 
 ## RB-Q-6 Moving leadership to another replica
 

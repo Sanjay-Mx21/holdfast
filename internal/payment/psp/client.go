@@ -121,6 +121,8 @@ type Client struct {
 	breaker *breaker.Breaker
 	m       *Metrics
 	sleep   func(context.Context, time.Duration) error
+	now     func() time.Time
+	window  window // the recent calls, for Pressure
 }
 
 // New returns a client.
@@ -144,6 +146,7 @@ func New(cfg Config, m *Metrics) (*Client, error) {
 		cfg:  cfg,
 		http: &http.Client{Timeout: cfg.Timeout, Transport: otelhttp.NewTransport(http.DefaultTransport)},
 		m:    m,
+		now:  time.Now,
 		sleep: func(ctx context.Context, d time.Duration) error {
 			select {
 			case <-ctx.Done():
@@ -199,8 +202,15 @@ func (c *Client) do(ctx context.Context, op, method, path, idemKey string, body,
 		c.m.request(op, "breaker_open")
 		return fmt.Errorf("%w: circuit breaker open", ErrUnavailable)
 	}
+	start := c.now()
 	err := c.retry(ctx, op, method, path, idemKey, body, out)
-	c.breaker.Done(errors.Is(err, ErrUnavailable) && ctx.Err() == nil) // the caller giving up is not the provider failing
+	failed := errors.Is(err, ErrUnavailable)
+	if ctx.Err() == nil { // the caller giving up says nothing about the provider
+		c.window.observe(c.now(), c.now().Sub(start), failed)
+	} else {
+		failed = false
+	}
+	c.breaker.Done(failed)
 	return err
 }
 
@@ -282,7 +292,7 @@ type Metrics struct {
 // NewMetrics registers the provider metrics.
 func NewMetrics(reg prometheus.Registerer) *Metrics {
 	f := promauto.With(reg)
-	return &Metrics{
+	m := &Metrics{
 		requests: f.NewCounterVec(prometheus.CounterOpts{
 			Name: "holdfast_psp_requests_total",
 			Help: "Calls to the payment provider by operation and result: ok, retried (one failed attempt), rejected (4xx), unavailable, breaker_open.",
@@ -292,6 +302,13 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 			Help: "The provider's circuit breaker: 0 closed, 0.5 half-open, 1 open.",
 		}),
 	}
+	// At zero from the start, so increase() sees every first call (P42, P52).
+	for _, op := range []string{"create_order", "get_order", "create_refund", "settlements", "probe"} {
+		for _, r := range []string{"ok", "retried", "rejected", "unavailable", "breaker_open"} {
+			m.requests.WithLabelValues(op, r)
+		}
+	}
+	return m
 }
 
 func (m *Metrics) request(op, result string) {

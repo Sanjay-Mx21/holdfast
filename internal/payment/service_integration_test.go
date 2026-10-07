@@ -34,6 +34,7 @@ import (
 	"github.com/Sanjay-Mx21/holdfast/internal/payment/paymentdb"
 	"github.com/Sanjay-Mx21/holdfast/internal/payment/psp"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/authn"
+	"github.com/Sanjay-Mx21/holdfast/internal/platform/breaker"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/grpcx"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/kafka"
 	"github.com/Sanjay-Mx21/holdfast/internal/testenv"
@@ -455,7 +456,8 @@ func TestGRPCContract(t *testing.T) {
 		"booking": bookingKey.Public().(ed25519.PublicKey), "queue": queueKey.Public().(ed25519.PublicKey),
 	}, time.Second)
 	srv := grpcx.NewServer(grpcx.ServerConfig{Verifier: v, Allow: GRPCAllow()}, prometheus.NewRegistry(), slog.New(slog.NewTextHandler(io.Discard, nil)))
-	paymentv1.RegisterPaymentServiceServer(srv, NewGRPCServer(f.svc))
+	pressure := psp.Pressure{Breaker: breaker.Open, Calls: 7, Failures: 3, P99: 750 * time.Millisecond, Window: psp.PressureWindow}
+	paymentv1.RegisterPaymentServiceServer(srv, NewGRPCServer(f.svc, fixedPressure{pressure}))
 	var lc net.ListenConfig
 	ln, err := lc.Listen(ctx, "tcp", "127.0.0.1:0")
 	if err != nil {
@@ -493,10 +495,22 @@ func TestGRPCContract(t *testing.T) {
 	}
 	f.psp.setDown(false)
 	// Only booking-svc may create intents.
-	if _, _, err := dial(queueKey, "queue").CreateIntent(ctx, uuid.New(), eventID, 100, time.Now()); grpcx.Code(err) != codes.PermissionDenied {
+	q := dial(queueKey, "queue")
+	if _, _, err := q.CreateIntent(ctx, uuid.New(), eventID, 100, time.Now()); grpcx.Code(err) != codes.PermissionDenied {
 		t.Fatalf("queue-svc's call: %v, want PERMISSION_DENIED", err)
 	}
+	// Only queue-svc may read the provider's pressure (task 5.4).
+	if got, err := q.GetPressure(ctx); err != nil || got != pressure {
+		t.Fatalf("GetPressure = %+v, %v; want %+v", got, err, pressure)
+	}
+	if _, err := c.GetPressure(ctx); grpcx.Code(err) != codes.PermissionDenied {
+		t.Fatalf("booking-svc's pressure read: %v, want PERMISSION_DENIED", err)
+	}
 }
+
+type fixedPressure struct{ p psp.Pressure }
+
+func (f fixedPressure) Pressure() psp.Pressure { return f.p }
 
 // TestPollerRotates pins P34: intents whose polls keep failing must not be
 // claimed again and again ahead of the rest.

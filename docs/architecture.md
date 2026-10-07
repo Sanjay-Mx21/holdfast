@@ -31,7 +31,7 @@ IDs match section 2.3 of the design doc.
 | Service | Status | Owns | Talks to |
 |---|---|---|---|
 | inventory-svc (`cmd/inventory`) | Built; internal gRPC API from task 3.4; the freeze flag from task 4.3 | Valkey keys `inv:*` | Valkey; called by booking-svc and queue-svc over gRPC |
-| queue-svc (`cmd/queue`) | Built (Phase 2): provisioning, joining, the T0 transition, positions, admission, the status document, admission tokens and their JWKS; task 4.3: policy windows, the freeze switch, admission by units left and `SOLD_OUT` | Valkey keys `q:*`, `adm:*`, `rl:*` | Valkey; PostgreSQL for leader election only; inventory-svc over gRPC (units left) |
+| queue-svc (`cmd/queue`) | Built (Phase 2): provisioning, joining, the T0 transition, positions, admission, the status document, admission tokens and their JWKS; task 4.3: policy windows, the freeze switch, admission by units left and `SOLD_OUT`; task 5.4: adaptive admission (AIMD) | Valkey keys `q:*`, `adm:*`, `rl:*` | Valkey; PostgreSQL for leader election only; inventory-svc over gRPC (units left); payment-svc over gRPC (the provider's pressure) |
 | NGINX edge (`deploy/nginx`) | Built (Phase 2) | Nothing | queue-svc, inventory-svc, booking-svc, auth-svc, the web app |
 | web app (`web/`) | Built (Phase 4, task 4.5): Next.js static export served by nginx; `docs/web.md` | Nothing (static files) | The public API, through the edge |
 | booking-svc (`cmd/booking`) | Built (Phase 3): the idempotent booking API, the deadline job, the saga (ADR 0010) | `booking` schema (with the final guard, `internal/booking/guard`) | PostgreSQL; inventory-svc and payment-svc over gRPC |
@@ -238,6 +238,14 @@ without the units cap (inventory still refuses every hold beyond capacity).
 The fenced `soldout.lua` marks a queue `SOLD_OUT` once no units are left and
 no hold is open.
 
+**Adaptive admission** (task 5.4): one watcher per queue-svc replica reads
+the payment provider's pressure from payment-svc every second (its circuit
+breaker, and the failures and p99 of its last 10 seconds of calls). Each
+leader halves its rate when the provider is slow or failing, pauses while
+the breaker is open, and otherwise climbs back to the event's rate (AIMD).
+payment-svc's prober tries the provider while the breaker is open, so
+recovery does not wait for checkout traffic that the pause has stopped.
+
 **The freeze switch** (runbook RB-1, `docs/runbooks/sale.md`) is two flags:
 inventory's `frozen` field stops new holds, and the queue's `FROZEN` state
 stops admissions. `holdfastctl freeze` sets both, holds first.
@@ -393,6 +401,7 @@ stores every 15 seconds and publishes the number of violations of each
 | Payment confirmed after hold expiry | `confirm.lua` re-takes the units ("late") instead of dropping the sale | RB-INV-6 |
 | Pod killed | Readiness drains first; in-flight requests finish within `SHUTDOWN_TIMEOUT` | n/a |
 | queue-svc or inventory-svc down behind the edge | The edge keeps serving the last cached status and availability (stale, up to 30 s); other paths return 502 | RB-Q-2, RB-INV-1 |
+| The payment provider down | Its circuit breaker opens; create-booking returns 503; admissions pause within a second (AIMD); the prober tries the provider every 5 s and admissions climb back from 5% of the rate once it answers | RB-5, RB-Q-5 |
 | A provider webhook lost, and polling gave up | The reconciler applies the capture or refund from the settlement report within one pass (5 minutes) | RB-AUD-3 |
 | An invariant violated | The auditor's gauge rises within 15 s; `InvariantViolation` fires | RB-AUD-1, RB-AUD-2 |
 | The auditor or the reconciler stops | Its last-success timestamp stops; `AuditorStale` or `ReconcilerStale` fires | RB-AUD-4 |

@@ -2,10 +2,12 @@ syntax = "proto3";
 
 package holdfast.payment.v1;
 
+import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
-// PaymentService is payment-svc's internal API, for booking-svc. Calls carry a
-// service token and a deadline, like every internal gRPC call.
+// PaymentService is payment-svc's internal API, for booking-svc (intents) and
+// queue-svc (pressure). Calls carry a service token and a deadline, like
+// every internal gRPC call.
 //
 // Errors are gRPC status codes with a google.rpc.ErrorInfo reason:
 // INVALID_REQUEST (INVALID_ARGUMENT), INTENT_CONFLICT (FAILED_PRECONDITION:
@@ -18,6 +20,37 @@ service PaymentService {
   // later call for the same booking returns the same intent and URL, so
   // booking-svc can retry it freely.
   rpc CreateIntent(CreateIntentRequest) returns (CreateIntentResponse);
+
+  // GetPressure reports how the payment provider is coping, for queue-svc's
+  // admission leaders (task 5.4): the circuit breaker's state and the
+  // provider calls of the last few seconds. It never calls the provider.
+  rpc GetPressure(GetPressureRequest) returns (GetPressureResponse);
+}
+
+// BreakerState is the provider client's circuit breaker.
+enum BreakerState {
+  BREAKER_STATE_UNSPECIFIED = 0;
+  // Calls go through.
+  BREAKER_STATE_CLOSED = 1;
+  // Calls fail at once: the provider is down. Admissions pause.
+  BREAKER_STATE_OPEN = 2;
+  // One trial call decides between closed and open again.
+  BREAKER_STATE_HALF_OPEN = 3;
+}
+
+message GetPressureRequest {}
+
+message GetPressureResponse {
+  BreakerState breaker = 1;
+  // The provider calls completed within the window, and how many of them
+  // failed: unreachable, timed out or 5xx after the retries. A valid refusal
+  // (a 4xx) is an answer, not a failure.
+  int64 calls = 2;
+  int64 failures = 3;
+  // The 99th percentile of those calls' durations, retries included, as a
+  // histogram bucket's upper bound; zero without calls.
+  google.protobuf.Duration p99 = 4;
+  google.protobuf.Duration window = 5;
 }
 
 message CreateIntentRequest {

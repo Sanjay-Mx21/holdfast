@@ -29,8 +29,9 @@ the records.
 ## Internal gRPC API
 
 `holdfast.payment.v1.PaymentService` (`proto/holdfast/payment/v1`) on
-`GRPC_ADDR` (`:7070`), through `internal/platform/grpcx`. Only booking-svc may
-call it (service tokens; `GRPC_TRUSTED_CALLERS`).
+`GRPC_ADDR` (`:7070`), through `internal/platform/grpcx`. Callers are
+service-token holders (`GRPC_TRUSTED_CALLERS`), each allowed its own method:
+booking-svc `CreateIntent`, queue-svc `GetPressure`.
 
 ### `CreateIntent`
 
@@ -50,7 +51,15 @@ payment deadline). Response: `intent_id`, `checkout_url`.
 | `FAILED_PRECONDITION` | `INTENT_CONFLICT` | The booking already has an intent for another amount |
 | `UNAVAILABLE` | `PSP_UNAVAILABLE` | The provider is unreachable or the breaker is open; retry |
 
-booking-svc's typed client is `payment.Client`.
+### `GetPressure` (task 5.4)
+
+Request: empty. Response: `breaker` (`BREAKER_STATE_CLOSED`, `_OPEN` or
+`_HALF_OPEN`), `calls` and `failures` within `window` (10 s), and `p99` (the
+upper bound of a histogram bucket; zero without calls). It reads the
+provider client's own counts and never calls the provider: see "Pressure,
+for adaptive admission" below.
+
+booking-svc's and queue-svc's typed client is `payment.Client`.
 
 ## The provider client (`internal/payment/psp`)
 
@@ -121,6 +130,22 @@ with a 3-second deadline per call.
 A captured, failed or expired order gets the same move, ledger entries and
 event as its webhook would have. The webhook arriving later then changes
 nothing.
+
+## Pressure, for adaptive admission (task 5.4)
+
+The provider client keeps the last 10 seconds of its calls: how many, how
+many failed (unreachable, timed out or 5xx after the retries; a 4xx is an
+answer), and a latency histogram (`internal/payment/psp/pressure.go`).
+`GetPressure` (gRPC, for queue-svc only) returns them with the circuit
+breaker's state; it never calls the provider. queue-svc's admission
+leaders slow down when the provider is slow or failing and pause while the
+breaker is open (`docs/services/queue.md`).
+
+An open breaker closes only after a trial call succeeds, and while
+admissions are paused no checkout makes one. So the **prober** makes a cheap
+call (an empty settlement report) every `PSP_PROBE_INTERVAL` (5 s) while the
+breaker is not closed: within the breaker's 30-second cooldown it fails at
+once without calling; after it, it is the trial.
 
 ## Reconciliation
 
@@ -209,7 +234,7 @@ Shared settings (`ENVIRONMENT`, `LOG_*`, `HTTP_*`, `POSTGRES_*`, `KAFKA_*`,
 | Variable | Default | Meaning |
 |---|---|---|
 | `GRPC_ADDR` | `:7070` | Internal gRPC API |
-| `GRPC_TRUSTED_CALLERS` | empty | `name=/path/to/key.pub` pairs; Compose trusts booking-svc |
+| `GRPC_TRUSTED_CALLERS` | empty | `name=/path/to/key.pub` pairs; Compose trusts booking-svc and queue-svc |
 | `TOKEN_LEEWAY` | `5s` | Clock skew allowed on service tokens |
 | `PSP_BASE_URL` | `http://mockpsp:8080` | The provider's API |
 | `PSP_API_KEY` | empty | Bearer key for the provider |
@@ -219,6 +244,7 @@ Shared settings (`ENVIRONMENT`, `LOG_*`, `HTTP_*`, `POSTGRES_*`, `KAFKA_*`,
 | `POLL_INTERVAL` | `30s` | Status polling period |
 | `POLL_AFTER` | `2m` | Age at which a `CREATED` intent is polled |
 | `POLL_BATCH` | `20` | Intents polled per pass |
+| `PSP_PROBE_INTERVAL` | `5s` | How often the prober tries the provider while the breaker is not closed (1s to 1m) |
 | `RECON_INTERVAL` | `5m` | Reconciliation period (at least 10 s) |
 | `RECON_WINDOW` | `2h` | How far back each pass looks (at least 3 × `RECON_MARGIN`) |
 | `RECON_MARGIN` | `5m` | Edges of the window where our own captures are not checked |
@@ -244,7 +270,7 @@ store. Locally, Compose maps the public port to
 | `holdfast_payment_amount_mismatch_total` | | Captures refused for a different amount: page a human |
 | `holdfast_payment_refund_requests_total` | `result` | Refund requests: requested, retry, rejected |
 | `holdfast_payment_polls_total` | `result` | Polled orders by provider status, `provider_error`, or `error` for a failed pass |
-| `holdfast_psp_requests_total` | `op`, `result` | Provider calls: ok, retried, rejected, unavailable, breaker_open |
+| `holdfast_psp_requests_total` | `op`, `result` | Provider calls (`op`: create_order, get_order, create_refund, settlements, probe): ok, retried, rejected, unavailable, breaker_open; every series exists from the start at 0 (P52) |
 | `holdfast_psp_breaker_state` | | 0 closed, 0.5 half-open, 1 open |
 | `holdfast_outbox_*` | `schema` | The relay, as in booking-svc |
 | `holdfast_grpc_server_handled_total` | `method`, `code` | gRPC calls |

@@ -9,6 +9,7 @@ package paymentv1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
@@ -21,6 +22,179 @@ const (
 	// Verify that runtime/protoimpl is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
+
+// BreakerState is the provider client's circuit breaker.
+type BreakerState int32
+
+const (
+	BreakerState_BREAKER_STATE_UNSPECIFIED BreakerState = 0
+	// Calls go through.
+	BreakerState_BREAKER_STATE_CLOSED BreakerState = 1
+	// Calls fail at once: the provider is down. Admissions pause.
+	BreakerState_BREAKER_STATE_OPEN BreakerState = 2
+	// One trial call decides between closed and open again.
+	BreakerState_BREAKER_STATE_HALF_OPEN BreakerState = 3
+)
+
+// Enum value maps for BreakerState.
+var (
+	BreakerState_name = map[int32]string{
+		0: "BREAKER_STATE_UNSPECIFIED",
+		1: "BREAKER_STATE_CLOSED",
+		2: "BREAKER_STATE_OPEN",
+		3: "BREAKER_STATE_HALF_OPEN",
+	}
+	BreakerState_value = map[string]int32{
+		"BREAKER_STATE_UNSPECIFIED": 0,
+		"BREAKER_STATE_CLOSED":      1,
+		"BREAKER_STATE_OPEN":        2,
+		"BREAKER_STATE_HALF_OPEN":   3,
+	}
+)
+
+func (x BreakerState) Enum() *BreakerState {
+	p := new(BreakerState)
+	*p = x
+	return p
+}
+
+func (x BreakerState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (BreakerState) Descriptor() protoreflect.EnumDescriptor {
+	return file_holdfast_payment_v1_payment_proto_enumTypes[0].Descriptor()
+}
+
+func (BreakerState) Type() protoreflect.EnumType {
+	return &file_holdfast_payment_v1_payment_proto_enumTypes[0]
+}
+
+func (x BreakerState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use BreakerState.Descriptor instead.
+func (BreakerState) EnumDescriptor() ([]byte, []int) {
+	return file_holdfast_payment_v1_payment_proto_rawDescGZIP(), []int{0}
+}
+
+type GetPressureRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPressureRequest) Reset() {
+	*x = GetPressureRequest{}
+	mi := &file_holdfast_payment_v1_payment_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPressureRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPressureRequest) ProtoMessage() {}
+
+func (x *GetPressureRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holdfast_payment_v1_payment_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPressureRequest.ProtoReflect.Descriptor instead.
+func (*GetPressureRequest) Descriptor() ([]byte, []int) {
+	return file_holdfast_payment_v1_payment_proto_rawDescGZIP(), []int{0}
+}
+
+type GetPressureResponse struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Breaker BreakerState           `protobuf:"varint,1,opt,name=breaker,proto3,enum=holdfast.payment.v1.BreakerState" json:"breaker,omitempty"`
+	// The provider calls completed within the window, and how many of them
+	// failed: unreachable, timed out or 5xx after the retries. A valid refusal
+	// (a 4xx) is an answer, not a failure.
+	Calls    int64 `protobuf:"varint,2,opt,name=calls,proto3" json:"calls,omitempty"`
+	Failures int64 `protobuf:"varint,3,opt,name=failures,proto3" json:"failures,omitempty"`
+	// The 99th percentile of those calls' durations, retries included, as a
+	// histogram bucket's upper bound; zero without calls.
+	P99           *durationpb.Duration `protobuf:"bytes,4,opt,name=p99,proto3" json:"p99,omitempty"`
+	Window        *durationpb.Duration `protobuf:"bytes,5,opt,name=window,proto3" json:"window,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPressureResponse) Reset() {
+	*x = GetPressureResponse{}
+	mi := &file_holdfast_payment_v1_payment_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPressureResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPressureResponse) ProtoMessage() {}
+
+func (x *GetPressureResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holdfast_payment_v1_payment_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPressureResponse.ProtoReflect.Descriptor instead.
+func (*GetPressureResponse) Descriptor() ([]byte, []int) {
+	return file_holdfast_payment_v1_payment_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *GetPressureResponse) GetBreaker() BreakerState {
+	if x != nil {
+		return x.Breaker
+	}
+	return BreakerState_BREAKER_STATE_UNSPECIFIED
+}
+
+func (x *GetPressureResponse) GetCalls() int64 {
+	if x != nil {
+		return x.Calls
+	}
+	return 0
+}
+
+func (x *GetPressureResponse) GetFailures() int64 {
+	if x != nil {
+		return x.Failures
+	}
+	return 0
+}
+
+func (x *GetPressureResponse) GetP99() *durationpb.Duration {
+	if x != nil {
+		return x.P99
+	}
+	return nil
+}
+
+func (x *GetPressureResponse) GetWindow() *durationpb.Duration {
+	if x != nil {
+		return x.Window
+	}
+	return nil
+}
 
 type CreateIntentRequest struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
@@ -36,7 +210,7 @@ type CreateIntentRequest struct {
 
 func (x *CreateIntentRequest) Reset() {
 	*x = CreateIntentRequest{}
-	mi := &file_holdfast_payment_v1_payment_proto_msgTypes[0]
+	mi := &file_holdfast_payment_v1_payment_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -48,7 +222,7 @@ func (x *CreateIntentRequest) String() string {
 func (*CreateIntentRequest) ProtoMessage() {}
 
 func (x *CreateIntentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holdfast_payment_v1_payment_proto_msgTypes[0]
+	mi := &file_holdfast_payment_v1_payment_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -61,7 +235,7 @@ func (x *CreateIntentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateIntentRequest.ProtoReflect.Descriptor instead.
 func (*CreateIntentRequest) Descriptor() ([]byte, []int) {
-	return file_holdfast_payment_v1_payment_proto_rawDescGZIP(), []int{0}
+	return file_holdfast_payment_v1_payment_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *CreateIntentRequest) GetBookingId() string {
@@ -102,7 +276,7 @@ type CreateIntentResponse struct {
 
 func (x *CreateIntentResponse) Reset() {
 	*x = CreateIntentResponse{}
-	mi := &file_holdfast_payment_v1_payment_proto_msgTypes[1]
+	mi := &file_holdfast_payment_v1_payment_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -114,7 +288,7 @@ func (x *CreateIntentResponse) String() string {
 func (*CreateIntentResponse) ProtoMessage() {}
 
 func (x *CreateIntentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holdfast_payment_v1_payment_proto_msgTypes[1]
+	mi := &file_holdfast_payment_v1_payment_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -127,7 +301,7 @@ func (x *CreateIntentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateIntentResponse.ProtoReflect.Descriptor instead.
 func (*CreateIntentResponse) Descriptor() ([]byte, []int) {
-	return file_holdfast_payment_v1_payment_proto_rawDescGZIP(), []int{1}
+	return file_holdfast_payment_v1_payment_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *CreateIntentResponse) GetIntentId() string {
@@ -148,7 +322,14 @@ var File_holdfast_payment_v1_payment_proto protoreflect.FileDescriptor
 
 const file_holdfast_payment_v1_payment_proto_rawDesc = "" +
 	"\n" +
-	"!holdfast/payment/v1/payment.proto\x12\x13holdfast.payment.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xad\x01\n" +
+	"!holdfast/payment/v1/payment.proto\x12\x13holdfast.payment.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x14\n" +
+	"\x12GetPressureRequest\"\xe4\x01\n" +
+	"\x13GetPressureResponse\x12;\n" +
+	"\abreaker\x18\x01 \x01(\x0e2!.holdfast.payment.v1.BreakerStateR\abreaker\x12\x14\n" +
+	"\x05calls\x18\x02 \x01(\x03R\x05calls\x12\x1a\n" +
+	"\bfailures\x18\x03 \x01(\x03R\bfailures\x12+\n" +
+	"\x03p99\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\x03p99\x121\n" +
+	"\x06window\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\x06window\"\xad\x01\n" +
 	"\x13CreateIntentRequest\x12\x1d\n" +
 	"\n" +
 	"booking_id\x18\x01 \x01(\tR\tbookingId\x12\x19\n" +
@@ -158,9 +339,15 @@ const file_holdfast_payment_v1_payment_proto_rawDesc = "" +
 	"expires_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"V\n" +
 	"\x14CreateIntentResponse\x12\x1b\n" +
 	"\tintent_id\x18\x01 \x01(\tR\bintentId\x12!\n" +
-	"\fcheckout_url\x18\x02 \x01(\tR\vcheckoutUrl2u\n" +
+	"\fcheckout_url\x18\x02 \x01(\tR\vcheckoutUrl*|\n" +
+	"\fBreakerState\x12\x1d\n" +
+	"\x19BREAKER_STATE_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14BREAKER_STATE_CLOSED\x10\x01\x12\x16\n" +
+	"\x12BREAKER_STATE_OPEN\x10\x02\x12\x1b\n" +
+	"\x17BREAKER_STATE_HALF_OPEN\x10\x032\xd7\x01\n" +
 	"\x0ePaymentService\x12c\n" +
-	"\fCreateIntent\x12(.holdfast.payment.v1.CreateIntentRequest\x1a).holdfast.payment.v1.CreateIntentResponseB\xe1\x01\n" +
+	"\fCreateIntent\x12(.holdfast.payment.v1.CreateIntentRequest\x1a).holdfast.payment.v1.CreateIntentResponse\x12`\n" +
+	"\vGetPressure\x12'.holdfast.payment.v1.GetPressureRequest\x1a(.holdfast.payment.v1.GetPressureResponseB\xe1\x01\n" +
 	"\x17com.holdfast.payment.v1B\fPaymentProtoP\x01ZJgithub.com/Sanjay-Mx21/holdfast/internal/gen/holdfast/payment/v1;paymentv1\xa2\x02\x03HPX\xaa\x02\x13Holdfast.Payment.V1\xca\x02\x13Holdfast\\Payment\\V1\xe2\x02\x1fHoldfast\\Payment\\V1\\GPBMetadata\xea\x02\x15Holdfast::Payment::V1b\x06proto3"
 
 var (
@@ -175,21 +362,31 @@ func file_holdfast_payment_v1_payment_proto_rawDescGZIP() []byte {
 	return file_holdfast_payment_v1_payment_proto_rawDescData
 }
 
-var file_holdfast_payment_v1_payment_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_holdfast_payment_v1_payment_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_holdfast_payment_v1_payment_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_holdfast_payment_v1_payment_proto_goTypes = []any{
-	(*CreateIntentRequest)(nil),   // 0: holdfast.payment.v1.CreateIntentRequest
-	(*CreateIntentResponse)(nil),  // 1: holdfast.payment.v1.CreateIntentResponse
-	(*timestamppb.Timestamp)(nil), // 2: google.protobuf.Timestamp
+	(BreakerState)(0),             // 0: holdfast.payment.v1.BreakerState
+	(*GetPressureRequest)(nil),    // 1: holdfast.payment.v1.GetPressureRequest
+	(*GetPressureResponse)(nil),   // 2: holdfast.payment.v1.GetPressureResponse
+	(*CreateIntentRequest)(nil),   // 3: holdfast.payment.v1.CreateIntentRequest
+	(*CreateIntentResponse)(nil),  // 4: holdfast.payment.v1.CreateIntentResponse
+	(*durationpb.Duration)(nil),   // 5: google.protobuf.Duration
+	(*timestamppb.Timestamp)(nil), // 6: google.protobuf.Timestamp
 }
 var file_holdfast_payment_v1_payment_proto_depIdxs = []int32{
-	2, // 0: holdfast.payment.v1.CreateIntentRequest.expires_at:type_name -> google.protobuf.Timestamp
-	0, // 1: holdfast.payment.v1.PaymentService.CreateIntent:input_type -> holdfast.payment.v1.CreateIntentRequest
-	1, // 2: holdfast.payment.v1.PaymentService.CreateIntent:output_type -> holdfast.payment.v1.CreateIntentResponse
-	2, // [2:3] is the sub-list for method output_type
-	1, // [1:2] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	0, // 0: holdfast.payment.v1.GetPressureResponse.breaker:type_name -> holdfast.payment.v1.BreakerState
+	5, // 1: holdfast.payment.v1.GetPressureResponse.p99:type_name -> google.protobuf.Duration
+	5, // 2: holdfast.payment.v1.GetPressureResponse.window:type_name -> google.protobuf.Duration
+	6, // 3: holdfast.payment.v1.CreateIntentRequest.expires_at:type_name -> google.protobuf.Timestamp
+	3, // 4: holdfast.payment.v1.PaymentService.CreateIntent:input_type -> holdfast.payment.v1.CreateIntentRequest
+	1, // 5: holdfast.payment.v1.PaymentService.GetPressure:input_type -> holdfast.payment.v1.GetPressureRequest
+	4, // 6: holdfast.payment.v1.PaymentService.CreateIntent:output_type -> holdfast.payment.v1.CreateIntentResponse
+	2, // 7: holdfast.payment.v1.PaymentService.GetPressure:output_type -> holdfast.payment.v1.GetPressureResponse
+	6, // [6:8] is the sub-list for method output_type
+	4, // [4:6] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_holdfast_payment_v1_payment_proto_init() }
@@ -202,13 +399,14 @@ func file_holdfast_payment_v1_payment_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_holdfast_payment_v1_payment_proto_rawDesc), len(file_holdfast_payment_v1_payment_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   2,
+			NumEnums:      1,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_holdfast_payment_v1_payment_proto_goTypes,
 		DependencyIndexes: file_holdfast_payment_v1_payment_proto_depIdxs,
+		EnumInfos:         file_holdfast_payment_v1_payment_proto_enumTypes,
 		MessageInfos:      file_holdfast_payment_v1_payment_proto_msgTypes,
 	}.Build()
 	File_holdfast_payment_v1_payment_proto = out.File

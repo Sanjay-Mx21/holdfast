@@ -388,8 +388,41 @@ how a stale one is stopped: ADR 0007.
 - PostgreSQL is used only for elections. Readiness does not depend on it: if it
   is down, admissions pause and joining and positions keep working.
 
-The oversubscription factor is fixed for now; tuning it from the observed
-conversion rate, and adaptive admission (AIMD), are Phase 5.
+The oversubscription factor is fixed; tuning it from the observed conversion
+rate is for later.
+
+### Adaptive admission (task 5.4)
+
+With `PAYMENT_GRPC_ADDR` set, the leader's rate is not fixed: like TCP
+congestion control, it climbs a little at a time while the purchase path
+copes and halves when it does not (AIMD), with the event's configured rate
+as the ceiling (`internal/queue/aimd.go`).
+
+- **The signal** is the payment provider's pressure. One watcher per
+  replica asks payment-svc (`GetPressure` over gRPC) every
+  `PRESSURE_INTERVAL` (1 s) for the provider's circuit breaker state and its
+  calls of the last 10 seconds: how many, how many failed, and their p99.
+  The provider is the slowest and least controllable step of a purchase.
+- **Each tick** the leader judges the latest reading:
+
+| Reading | Rate |
+|---|---|
+| breaker open | 0: admissions pause (backpressure); the status document stays fresh |
+| breaker half-open | the floor (`AIMD_FLOOR`, 5% of the event's rate) |
+| more than `AIMD_MAX_ERROR_RATIO` (1%) of the calls failed, or p99 above `AIMD_LATENCY_SLO` (2 s), judged from `AIMD_MIN_CALLS` (20) calls | halved, at most once per `AIMD_COOLDOWN` (5 s), never below the floor |
+| no reading for 5 × `PRESSURE_INTERVAL` | halved, as above ("unknown"): slowing down beats guessing, and pausing would be worse |
+| otherwise | plus `AIMD_STEP` (5% of the event's rate) per second, up to the event's rate |
+
+- **After a pause** the rate starts again at the floor and climbs, like
+  TCP's slow start after a timeout.
+- **Recovery needs a trial call.** An open breaker closes only after a call
+  succeeds, and with admissions paused no checkout calls the provider;
+  payment-svc's prober makes a cheap call while the breaker is not closed
+  (`PSP_PROBE_INTERVAL`, `docs/services/payment.md`).
+- **A new leader** starts at the event's rate and adapts from the next tick.
+- **Not wired yet:** the design also names hold and booking p99 as signals;
+  inventory-svc and booking-svc expose no pressure yet, so only the
+  provider's counts.
 
 ## Decisions: how admission tokens are trusted (task 2.8)
 
@@ -543,8 +576,16 @@ required (admission leader election). Service settings:
 | `LEADER_RETRY_INTERVAL` | `2s` | How often a standby tries to become leader (100ms to 1m) |
 | `ADMISSION_RESCAN_INTERVAL` | `2s` | How often new events get a controller (100ms to 1m) |
 | `INVENTORY_GRPC_ADDR` | none | inventory-svc's gRPC API (`inventory:7070` in Compose). Set: leaders cap sessions by the units left and mark sold-out queues `SOLD_OUT`. Empty: neither (logged at start) |
-| `SERVICE_PRIVATE_KEY_FILE` | none | Ed25519 private key (PEM) signing queue-svc's service tokens for inventory; required with `INVENTORY_GRPC_ADDR`. Compose mounts `queue.key` from `make keys`; inventory trusts `queue.pub` |
+| `SERVICE_PRIVATE_KEY_FILE` | none | Ed25519 private key (PEM) signing queue-svc's service tokens for inventory and payment; required with `INVENTORY_GRPC_ADDR` or `PAYMENT_GRPC_ADDR`. Compose mounts `queue.key` from `make keys`; inventory trusts `queue.pub` |
 | `OVERSUBSCRIPTION_FACTOR` | `1.3` | Sessions per unit left (1 to 10) |
+| `PAYMENT_GRPC_ADDR` | none | payment-svc's gRPC API (`payment:7070` in Compose). Set: adaptive admission (above); payment-svc must trust `queue.pub`. Empty: leaders admit at the event's rate (logged at start). Needs `SERVICE_PRIVATE_KEY_FILE` |
+| `PRESSURE_INTERVAL` | `1s` | How often each replica reads the provider's pressure (100ms to 30s) |
+| `AIMD_LATENCY_SLO` | `2s` | Provider p99 above which admissions back off |
+| `AIMD_MAX_ERROR_RATIO` | `0.01` | Share of failed provider calls above which admissions back off |
+| `AIMD_MIN_CALLS` | `20` | Calls in the window before latency and errors count |
+| `AIMD_COOLDOWN` | `5s` | Least time between two halvings (at least `PRESSURE_INTERVAL`) |
+| `AIMD_STEP` | `0.05` | Increase per second while healthy, as a fraction of the event's rate (at least 1 a second) |
+| `AIMD_FLOOR` | `0.05` | Lowest rate while backing off, as a fraction of the event's rate (at least 1 a second) |
 | `POW_DIFFICULTY` | `18` | Proof-of-work bits at normal load; `0` turns proof of work off (refused in production) |
 | `POW_MAX_DIFFICULTY` | `22` | Most bits during a surge (up to 30) |
 | `POW_SURGE_RATE` | `200` | Challenges per second, per replica, above which the difficulty rises |
@@ -575,6 +616,9 @@ the E2 load test's override) turns the development header on.
 | `holdfast_queue_max_sessions` | `event` | The session budget (Little's Law L); set when a term starts |
 | `holdfast_queue_state` | `event`, `state` | 1 for the queue's state as the status document shows it, 0 for the four others; set by the leader on every tick, so it follows switches made by `holdfastctl` too |
 | `holdfast_queue_inventory_reads_total` | `result` | Leaders' availability reads: ok, not_provisioned (no sale in inventory: no cap), error (no cap this tick) |
+| `holdfast_queue_admission_rate` | `event` | Admissions per second the leader applies now: the event's rate, less while backing off, 0 while paused (task 5.4); exported by the leader only |
+| `holdfast_queue_admission_backoffs_total` | `reason` | Halvings and pauses: latency, errors, unknown (no recent reading), breaker_open (a pause) |
+| `holdfast_queue_pressure_reads_total` | `result` | Pressure reads from payment-svc: ok, error |
 | `holdfast_queue_status_age_seconds` | `event` | Age of the status document by Valkey's clock (the clock that stamped it), measured by the opener in every replica; absent until a leader has written one |
 | `holdfast_queue_opened_total` | `by` | T0 transitions: `join` (a join got there first) or `opener` |
 | `holdfast_queue_opener_runs_total` | `result` | Opener passes: ok, error |

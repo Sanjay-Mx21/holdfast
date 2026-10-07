@@ -32,13 +32,13 @@ All times are IST (UTC+05:30).
 | **Project** | A flash-sale booking engine that sells exactly the available units under extreme demand, never more |
 | **Plan version** | 2.0 (1 October 2026) |
 | **Milestones complete** | M0 Foundation, M1 Correctness core, M1.5 Bring-up and baseline, M2 Fair waiting room, M3 MVP backend, and M4 Resume-ready product (the demo video deferred by the owner) |
-| **Current milestone** | M5 Hardened (Phase 5): tasks 5.1 to 5.3 built, 5.4 next (section 11) |
+| **Current milestone** | M5 Hardened (Phase 5): tasks 5.1 to 5.4 built, 5.5 next (section 11) |
 | **Progress to v1.0** | About 49% (25 of about 51 focused-work days, excluding Phase 7 stretch goals), counting Phase 2's and Phase 4's planned 7 days each |
 | **Repository** | [github.com/Sanjay-Mx21/holdfast](https://github.com/Sanjay-Mx21/holdfast), branch `main` |
 | **First commit** | `2173e50` "first commit", 2026-10-01 20:20, 82 files, 12,973 lines |
 | **Latest release** | [v0.4.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.4.0), 2026-10-06 19:13, on `eefee44` (before it: [v0.3.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.3.0), 2026-10-03 15:48, on `5ffa271`; [v0.2.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.2.0), 2026-10-02 21:51, on `cd0592a`; [v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0), 2026-10-01 23:47, on `9dcd2f8`) |
 | **CI** | Green since 2026-10-01 22:00; `main` is protected and every change needs a pull request with all 13 required checks passing (`images (booking)`, `images (payment)`, `images (mockpsp)` and `images (auth)` added on 2026-10-03, `web` on 2026-10-04, `images (auditor)` on 2026-10-06) |
-| **Issues so far** | 134 recorded: 129 resolved, 5 open (section 6) |
+| **Issues so far** | 137 recorded: 132 resolved, 5 open (section 6) |
 
 <Callout type="tip" title="Phase 4 built: identity, sale policies, the web app and mission control (2026-10-04)">
 
@@ -418,7 +418,25 @@ The rest of the list was already covered by tests written with tasks 3.4 to 3.12
 - **RB-2 practised live** on the three dev events the new gauge flagged (P51): dry run, rebuild and unfreeze each; the pools went 1→0, 3→0 and 3→0, drift and every invariant at 0. Each rebuild took 2 to 6 ms; each command 11 to 14 s, almost all of it `docker compose run` starting a container.
 - **Tests:** unit (the plan, the script's reply), 3 integration tests of the script (drift and loss repaired, a dry run, idempotence, the recreated hold confirmed normally, a hold confirmed meanwhile, a rebuild from nothing), the scale measurement (opt-in), an end-to-end holdfastctl test, the auditor's drift test.
 - **Gates:** gofmt, `make test`, `make lint`, `make itest` (29 packages) and `make e1` (RESULT: PASS).
-- **Docs:** RB-INV-4 rewritten as the full rebuild (RB-2), with the races and the cost; the Valkey, sale, queue and saga runbooks, the inventory and auditor docs, the architecture doc, the README, the design doc (5.3 ✅). P50 fixed on the way | Branch `feat/p5-rebuild`; issue #43 |
+- **Docs:** RB-INV-4 rewritten as the full rebuild (RB-2), with the races and the cost; the Valkey, sale, queue and saga runbooks, the inventory and auditor docs, the architecture doc, the README, the design doc (5.3 ✅). P50 fixed on the way | PR #106 (pushed at 13:37 once GitHub answered again, E27; merged by the assistant at 13:45 after all 13 checks passed), `15149e1`; issue #43 closed |
+| 2026-10-07 14:01 | **Task 5.4 (adaptive admission) built:**
+- **payment-svc:**
+  - the provider client keeps a 10-second window of its calls (count, failures, a latency histogram for p99);
+  - the new gRPC method `GetPressure` returns it with the breaker's state, allowed for queue-svc only;
+  - a **prober** tries the provider every 5 s while the breaker is not closed (P53);
+  - every `holdfast_psp_requests_total` series is pre-registered (P52).
+- **queue-svc:** one `PressureWatch` per replica reads the pressure every second, and each leader runs AIMD on its admission rate, with the event's rate as the ceiling:
+  - breaker open: pause (0);
+  - half-open: the floor (5%);
+  - p99 above 2 s or more than 1% failures (from 20 calls): halve, at most every 5 s;
+  - no reading for 5 s: halve ("unknown");
+  - otherwise: +5% of the rate a second;
+  - after a pause it climbs again from the floor.
+- **Metrics:** `holdfast_queue_admission_rate{event}`, `holdfast_queue_admission_backoffs_total{reason}`, `holdfast_queue_pressure_reads_total{result}`; the dashboard's admission tile shows the allowed rate beside the admitted one.
+- **Tests:** the window (percentile, expiry, slot reuse, overflow); pressure and the breaker; the prober closing the breaker after the provider recovers; `classify` and the controller's sequence; the watcher keeping its last reading and growing stale; a fake-clock leader that admits nothing while the breaker is open and climbs back from the floor; the gRPC contract (queue-svc reads pressure, booking-svc is refused).
+- **Gates:** gofmt, `buf lint` and `buf breaking`, `make test`, `make lint`, `make itest` (29 packages) and `make e1` (RESULT: PASS).
+- **Live:** queue-svc reads the pressure (14 reads, 0 errors in 15 s), every leader reports its rate (36 events at their configured rates), the breaker is closed. A provider outage under purchases is experiment E3 (task 5.5).
+- **Docs:** the queue doc (adaptive admission, configuration, metrics), RB-Q-5's step 6, the payment doc (`GetPressure`, the prober, `PSP_PROBE_INTERVAL`), the architecture doc, the design doc (5.4 ✅; the metric's name). Not wired yet: hold and booking p99 as signals | Branch `feat/p5-aimd`; issue #44 |
 
 ## 3. What is complete, and what each piece contributes
 
@@ -495,10 +513,10 @@ Every problem met while bringing Drop 1 up and running the soak on 2026-10-01, i
 
 | Group | Recorded | Resolved | Open |
 |---|---|---|---|
-| P: defects in the repository | 51 | 48 | 3 |
-| E: machine and network | 26 | 24 | 2 |
+| P: defects in the repository | 53 | 50 | 3 |
+| E: machine and network | 27 | 25 | 2 |
 | D: diagnosis and process | 57 | 57 | 0 |
-| **Total** | **134** | **129** | **5** |
+| **Total** | **137** | **132** | **5** |
 
 CI took **three runs** to go green:
 
@@ -563,6 +581,8 @@ CI took **three runs** to go green:
 | P49 | A plain `SENTINEL FAILOVER` lost 10 acknowledged writes (about one second at 10 writes/s) in the drill: the replica is promoted while the old primary still takes writes, and those are discarded when it becomes a replica | Any planned switch done that way loses a second of holds, joins and admissions | Sentinel's manual failover is not coordinated unless asked | Valkey 9's `SENTINEL FAILOVER holdfast COORDINATED` pauses writes until the replica catches up: 0 lost, 74 ms pause. Runbook RB-VK-2 and the drill's failback always use it; `forced` mode remains to show the difference | ✅ Task 5.2 |
 | P50 | `TestCallsWithoutAValidTokenOrPermissionAreRefused` (grpcx) failed once in task 5.3's `make test`: its health check hit "context deadline exceeded" | One failed run; 8 of 8 reruns passed | One 1-second deadline covered two RPCs and a call between them, and the machine was busy (a full `-race` run beside a script running many `docker exec`) | The deadline, only a guard against hangs, is 5 seconds | ✅ Task 5.3 |
 | P51 | Three dev-stack events offered more units in Valkey than PostgreSQL had free: "Saga check" 1 more, the two "Runbook check" events 3 more each, with Valkey's capacity (3, 4, 4) different from the catalog's (2, 1, 1). Nothing noticed: the auditor's I1 reads only PostgreSQL | On the dev stack only; in a sale, inventory would hand out holds the final guard refuses, and those buyers would pay and be refunded | Left by manual checks in Phases 3 and 4 (the exact steps are not recorded); the deeper gap was that no check compared Valkey with PostgreSQL | Found by the first dry run of `inventory rebuild`. The auditor now publishes `holdfast_inventory_drift_units` with alert `InventoryDrift`, which flagged exactly these three; RB-2 rebuilt them (drift 0) | ✅ Task 5.3 |
+| P52 | `holdfast_psp_requests_total` was created at each series' first call, the P42 problem again: `increase()` cannot see a series' first event | Since Phase 3; found while adding the probe operation | P42's fix covered booking-svc's counters, not the provider client's | Every operation and result is pre-registered at zero | ✅ Task 5.4 |
+| P53 | A design gap found while building backpressure: the circuit breaker moves from open to half-open only when a call arrives. Once admissions pause for an open breaker, checkouts stop calling the provider, and only the poller's and reconciler's occasional calls could ever close it again: admissions could stay paused long after the provider recovered | Would have stalled sales after any provider outage (RB-5 assumes the breaker half-opens by itself) | The breaker was built for callers that keep calling; backpressure removes them | payment-svc's prober makes a cheap call every 5 s while the breaker is not closed; tested: the breaker closes once the provider answers | ✅ Task 5.4 |
 
 ### 6.3 Machine and network
 
@@ -594,6 +614,7 @@ CI took **three runs** to go green:
 | E24 | WSL stopped and would not start (`Wsl/Service/CreateInstance/E_UNEXPECTED`) while Chromium downloaded for the browser test. Windows had 183 MB free and 37.7 of 39.7 GB committed; the WSL VM held 8 GB, and Docker Desktop's backend hung | About 40 minutes; nothing lost (PostgreSQL and Valkey volumes intact) | Memory exhaustion on a 16 GB laptop running the full stack, two Docker builds, Node and other desktop apps; there is no `.wslconfig` limit | With the owner's approval: `wsl --shutdown`, Docker Desktop restarted; at the owner's request every non-HoldFast container removed. Containers that bind-mount single files (the edge, Prometheus, the collector) then failed on stale mount paths and were recreated (`docker compose up -d --force-recreate`). Suggestion for the owner: a `.wslconfig` memory limit | ✅ |
 | E25 | After the owner's `wsl --shutdown` (the `.wslconfig` limit), Docker Desktop's host port forwarding was stale: some admin ports hung, 9091 answered with queue-svc's checks, and inventory-svc's readiness waited on queue-svc's keys | About 10 minutes | Docker Desktop kept forwarding to the old containers' endpoints across the VM restart | `docker compose up -d --force-recreate --wait`; every service ready. Recorded as the first step after any WSL or Docker restart | ✅ |
 | E26 | The WSL2 VM's wall clock is stepped back about 60 ms every 30 s (time sync correcting drift). Sentinel enters TILT mode, and acts on nothing for 30 s, whenever its clock goes backwards, so on this laptop the Sentinels are in TILT about half the time | A crash failover took 25.7 s instead of 7.1 s in one drill; the timing of any failover on this machine depends on the clock's phase | The host's time sync; Sentinel's TILT check uses the wall clock | Not fixable from inside the containers. The drill waits until no Sentinel is in TILT before acting (`AVOID_TILT=1`, default) and reports how many were; runbook RB-VK-3 explains it. Production hosts slew with NTP | 🟡 Worked around in the drill; the laptop's clock still steps |
+| E27 | GitHub was unreachable from the machine from about 12:45 to 13:37: `gh pr create` and `git ls-remote` timed out (`dial tcp 20.207.73.85:443: i/o timeout`) after task 5.3's commit | PR #106 opened about 50 minutes late; work continued locally meanwhile | Network | A script retried the push and the PR every 30 s; the first retry after the network came back worked | ✅ |
 
 ### 6.4 Diagnosis and process
 
@@ -763,9 +784,9 @@ Goal: HoldFast stays correct and recovers within minutes when its parts fail. Pl
 |---|---|---|
 | 5.1 Reconciler and auditor | [#41](https://github.com/Sanjay-Mx21/holdfast/issues/41) | ✅ 2026-10-06 (PR #104): the settlement-report reconciler in payment-svc, `cmd/auditor` with I1 to I5, five alert rules and runbook RB-AUD |
 | 5.2 Valkey high availability | [#42](https://github.com/Sanjay-Mx21/holdfast/issues/42) | ✅ 2026-10-07 (PR #105): a replica and three Sentinels at fixed addresses, `holdfastctl valkey probe`, `make drill-valkey`; a killed primary replaced in 7.1 s with nothing lost |
-| 5.3 Full RB-2 rebuild | [#43](https://github.com/Sanjay-Mx21/holdfast/issues/43) | ✅ 2026-10-07: `holdfastctl inventory rebuild` (one atomic script, dry run), the auditor's drift gauge and `InventoryDrift`; 50,000 buyers in 1.25 s; practised on three drifted dev events |
-| 5.4 Adaptive admission | [#44](https://github.com/Sanjay-Mx21/holdfast/issues/44) | ⏳ Next |
-| 5.5 Chaos | [#45](https://github.com/Sanjay-Mx21/holdfast/issues/45) | ⏳ |
+| 5.3 Full RB-2 rebuild | [#43](https://github.com/Sanjay-Mx21/holdfast/issues/43) | ✅ 2026-10-07 (PR #106): `holdfastctl inventory rebuild` (one atomic script, dry run), the auditor's drift gauge and `InventoryDrift`; 50,000 buyers in 1.25 s; practised on three drifted dev events |
+| 5.4 Adaptive admission | [#44](https://github.com/Sanjay-Mx21/holdfast/issues/44) | ✅ 2026-10-07: AIMD on each leader's rate from the provider's pressure (payment-svc's `GetPressure`), a pause while the breaker is open, and a prober so it closes again |
+| 5.5 Chaos | [#45](https://github.com/Sanjay-Mx21/holdfast/issues/45) | ⏳ Next |
 | 5.6 Alerting | [#46](https://github.com/Sanjay-Mx21/holdfast/issues/46) | ⏳ |
 | 5.7 Runbooks | [#47](https://github.com/Sanjay-Mx21/holdfast/issues/47) | ⏳ |
 | 5.8 Docs | [#48](https://github.com/Sanjay-Mx21/holdfast/issues/48) | ⏳ |
