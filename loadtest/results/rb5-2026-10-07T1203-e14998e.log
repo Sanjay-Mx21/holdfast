@@ -1,0 +1,67 @@
+== 12:03:02 switching to the chaos overlay
+== 12:03:52 RB-5 drill: 4000 buyers, event 01a1163f-8f75-7458-99d2-8132c5a6cefc admitting up to 20 a second; the provider down for 60 s
+   15s  57 of 4000 buyers done
+   30s  168 of 4000 buyers done
+   45s  329 of 4000 buyers done
+== 12:04:53 admission rate before: 20/s; breaker: 0
+== 12:04:53 the provider goes down
+breaker_open	1.5
+admissions_paused	1.9
+   60s  507 of 4000 buyers done
+   75s  609 of 4000 buyers done
+   90s  644 of 4000 buyers done
+  105s  695 of 4000 buyers done
+== 12:05:53 the provider is back
+provider_back	60.3
+  120s  695 of 4000 buyers done
+breaker_closed	66.1
+admissions_resumed	67.4
+  135s  744 of 4000 buyers done
+admissions_at_full_rate	86.2
+== 12:06:19 waiting for the buyers
+  150s  852 of 4000 buyers done
+  165s  972 of 4000 buyers done
+  180s  1172 of 4000 buyers done
+  195s  1323 of 4000 buyers done
+  210s  1477 of 4000 buyers done
+  225s  1625 of 4000 buyers done
+  240s  1739 of 4000 buyers done
+  255s  1852 of 4000 buyers done
+  270s  2002 of 4000 buyers done
+  285s  2129 of 4000 buyers done
+  300s  2227 of 4000 buyers done
+  315s  2404 of 4000 buyers done
+  330s  2618 of 4000 buyers done
+  345s  2685 of 4000 buyers done
+  360s  2854 of 4000 buyers done
+  375s  3103 of 4000 buyers done
+  390s  3363 of 4000 buyers done
+  405s  3655 of 4000 buyers done
+  420s  3961 of 4000 buyers done
+
+4000 buyers for event 01a1163f-8f75-7458-99d2-8132c5a6cefc in 422 s (200 at a time)
+outcomes:
+  book_failed                      51
+  confirmed                      3949
+requests repeated after a failure, by stage:
+  book                           1479
+  pay                              13
+payment to confirmed booking: p50 14122 ms, p95 28931 ms, p99 34866 ms, max 39281 ms
+
+== 12:11:02 results
+bookings:  CONFIRMED 3949 PENDING_PAYMENT 51
+intents:   CAPTURED 3949 CREATED 51
+provider:  3949 captured; HoldFast knows 3949, 0 unresolved
+payment-svc captures by source: holdfast_payment_captures_total{via="poll"} 0 holdfast_payment_captures_total{via="reconciler"} 0 holdfast_payment_captures_total{via="webhook"} 3949 
+reconciler findings: holdfast_recon_mismatch_total{type="capture_unknown_to_psp"} 49663 
+invariants: I1=0 I2=0 I3=0 I4=0 I5=0 
+timeline (seconds after the provider went down):
+  step                     seconds_after_the_outage_began
+  breaker_open             1.5
+  admissions_paused        1.9
+  provider_back            60.3
+  breaker_closed           66.1
+  admissions_resumed       67.4
+  admissions_at_full_rate  86.2
+RESULT: PASS - admissions paused and resumed by themselves; every capture resolved; every invariant 0
+== 12:11:12 restoring the normal stack

@@ -1,0 +1,38 @@
+== 12:46:50 switching to the chaos overlay
+== 12:47:32 1. buyer A buys one of the two units
+requests repeated after a failure, by stage:
+  none
+payment to confirmed booking: p50 12071 ms, p95 12071 ms, p99 12071 ms, max 12071 ms
+== 12:47:49 2. Valkey loses that sale: two units are offered again
+== 12:47:50 3. buyer B pays for two; the provider goes down as soon as it has the money
+provider_down_after_the_capture	0
+buyer B's booking: 01a11667-f579-7bba-a460-6a482d792bb6
+== 12:48:24 4. waiting for the guard's refusal, then for the refund to be given up
+booking_refund_required	30.8
+refund_dead_lettered	623.3
+booking 01a11667-f579-7bba-a460-6a482d792bb6: REFUND_REQUIRED; intent: REFUND_PENDING
+== 12:58:20 5. the provider is back; RB-4
+refund requested again for booking 01a11667-f579-7bba-a460-6a482d792bb6 (500000 paise, intent 01a11667-f587-7b38-8e1a-0035848c127a); payment-svc refunds it and the booking moves to REFUNDED when the provider confirms
+rb4_refund_to_refunded	30.2
+money_back_after_the_capture	656.6
+== 12:58:51 6. RB-2: inventory back to PostgreSQL's records
+inventory: holds frozen: no new holds
+queue: FROZEN: admissions paused
+inventory: holds frozen for the rebuild (already so)
+available   2 -> 1
+holds       pending bookings: 0 recreated, 0 kept, 0 confirmed meanwhile; 0 without a booking released
+holds stay frozen: check 'holdfastctl inventory status --event 01a11667-8840-7372-973b-b85fe5b64a64' and the auditor, then 'holdfastctl unfreeze --event 01a11667-8840-7372-973b-b85fe5b64a64'
+inventory: holds resumed
+queue: OPEN: admissions resumed
+
+== 12:59:11 results
+booking 01a11667-f579-7bba-a460-6a482d792bb6: REFUNDED; intent: REFUNDED
+invariants: I1=0 I2=0 I3=0 I4=0 I5=0 
+  step                             seconds
+  provider_down_after_the_capture  0
+  booking_refund_required          30.8
+  refund_dead_lettered             623.3
+  rb4_refund_to_refunded           30.2
+  money_back_after_the_capture     656.6
+RESULT: PASS - the refund the provider's outage defeated was made by RB-4; every invariant 0
+== 12:59:18 restoring the normal stack

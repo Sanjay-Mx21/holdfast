@@ -43,9 +43,15 @@ back, and a payment captured late is refunded (I3).
   webhook the outage lost; `ReconciliationNeedsAHuman` reports what it
   cannot.
 
-**Practising it locally:** with the stack up and a sale running (`make
-chaos-e3` with `BUYERS=500`, or the web app), switch mockpsp's outage on and
-off:
+**Practised** with `make drill-rb5` (task 5.7): the provider down for 60 s
+with 4,000 buyers at 20 admissions a second. The breaker opened 1.5 s into
+the outage and admissions paused at 1.9 s; the provider was back at 60.3 s,
+the breaker closed at 66.1 s, admissions resumed at 67.4 s and were back at
+the full rate at 86.2 s. Every capture was resolved and every invariant
+stayed 0 (`loadtest/results/README.md`).
+
+**By hand:** with the stack up and a sale running, switch mockpsp's outage
+on and off:
 
 ```bash
 curl -X PUT localhost:9095/internal/v1/faults -H "Authorization: Bearer $ADMIN_TOKEN" -d '{"outage":true}'

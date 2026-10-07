@@ -1,0 +1,6 @@
+step	seconds
+provider_down_after_the_capture	0
+booking_refund_required	30.8
+refund_dead_lettered	623.3
+rb4_refund_to_refunded	30.2
+money_back_after_the_capture	656.6

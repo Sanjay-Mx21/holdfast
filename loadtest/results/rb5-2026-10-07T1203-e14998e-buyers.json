@@ -1,0 +1,21 @@
+{
+  "event": "01a1163f-8f75-7458-99d2-8132c5a6cefc",
+  "buyers": 4000,
+  "concurrency": 200,
+  "started": "2026-10-07T12:03:57.301684057Z",
+  "seconds": 421.665661662,
+  "outcomes": {
+    "book_failed": 51,
+    "confirmed": 3949
+  },
+  "retries": {
+    "book": 1479,
+    "pay": 13
+  },
+  "payToConfirmMs": {
+    "max": 39281,
+    "p50": 14122,
+    "p95": 28931,
+    "p99": 34866
+  }
+}
