@@ -109,7 +109,11 @@ fairness-e6: ## Experiment E6: fairness of the queue order (lottery before T0, F
 load-e2: ## Experiment E2: k6 stampede on the waiting room through the edge (needs make up and k6)
 	bash loadtest/e2/run.sh
 
+MODE ?= crash
+drill-valkey: ## Valkey failover drill on the running stack: make drill-valkey MODE=crash|planned|forced
+	bash scripts/valkey-failover-drill.sh $(MODE)
+
 docker: ## Build container images for the deployable binaries
 	@for s in $(IMAGES); do docker build --build-arg SERVICE=$$s --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) -t holdfast/$$s:$(VERSION) . || exit 1; done
 
-.PHONY: help deps deps-upgrade tools fmt vet lint test itest cover build keys infra up down clean migrate event token run-inventory e1 fairness-e6 load-e2 topics gen docker
+.PHONY: help deps deps-upgrade tools fmt vet lint test itest cover build keys infra up down clean migrate event token run-inventory e1 fairness-e6 load-e2 drill-valkey topics gen docker

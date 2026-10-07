@@ -55,7 +55,8 @@ inventory-svc and payment-svc on `:7070`), internal network only, through
 allowlist, required deadlines, tracing and metrics on the server; tokens, an
 800 ms default deadline and bounded retries of `UNAVAILABLE` on the client.
 
-Locally, `compose.yaml` runs PostgreSQL 18, Valkey 9.1, a one-shot migration
+Locally, `compose.yaml` runs PostgreSQL 18, Valkey 9.1 (a primary, a replica
+and three Sentinels, task 5.2), a one-shot migration
 job, Kafka 4.3 (KRaft, with a one-shot topic job and Redpanda Console),
 inventory-svc, queue-svc, booking-svc, payment-svc, mockpsp, the NGINX edge, Prometheus, Grafana, the
 OpenTelemetry Collector and Jaeger.
@@ -149,6 +150,12 @@ door, the role a CDN plays in production:
 can be rebuilt from PostgreSQL; a queue's settings can be put back
 (`holdfastctl queue provision`, RB-Q-8), but who had joined lives only in
 Valkey.
+
+Valkey keeps an AOF fsynced every second and replicates asynchronously to
+one replica; three Sentinels promote the replica when the primary dies, and
+the services follow them (`VALKEY_SENTINEL_MASTER`; `docs/runbooks/valkey.md`).
+A crash can therefore lose up to about a second of writes, the replica's
+lag. Planned switches are coordinated and lose nothing.
 
 **PostgreSQL** (truth), schema `booking`:
 
@@ -376,6 +383,7 @@ stores every 15 seconds and publishes the number of violations of each
 | Failure | Behaviour | Runbook |
 |---|---|---|
 | Valkey unreachable | 503 `UNAVAILABLE` with `Retry-After`; readiness fails | RB-INV-1 |
+| Valkey's primary dies | Sentinel promotes the replica in about 7 s (drill: 6.4 s without writes, 0 acknowledged writes lost at 10 writes/s); clients follow by themselves. Writes not yet replicated are lost | RB-VK-1, then RB-INV-4 |
 | Valkey data lost | Rebuild the pool from PostgreSQL (capacity minus sold) | RB-INV-4 |
 | Something looks wrong during a sale | Freeze: no new holds, no admissions; holds and payments in flight carry on | RB-1 |
 | inventory-svc unreachable from queue-svc | Admission ignores the units left until it is back (fails open; inventory still guards capacity) | RB-Q-5 |
@@ -430,6 +438,11 @@ stores every 15 seconds and publishes the number of violations of each
   hold SOLD or RELEASED, and that PostgreSQL, Valkey and the ledger agree on
   the sold count. It uses its own database, `<name>_e1`, so a running stack
   cannot act on its purchases.
+- The Valkey failover drill (`make drill-valkey MODE=crash|planned|forced`,
+  task 5.2) fails the primary over on the running stack while
+  `holdfastctl valkey probe` writes through the Sentinels, and times the
+  promotion, the write outage, lost writes and each service's readiness
+  (`docs/runbooks/valkey.md`).
 - E6 (`make fairness-e6`): 100,000 joins before T0 and 20,000 after,
   checking with Spearman's rank correlation that join time does not predict
   a lottery position and that positions after T0 are the arrival order.
