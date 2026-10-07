@@ -14,6 +14,13 @@ stack to settle and checks the invariants with the auditor. Results go to
 Both start from a stack brought up with `make up`, and restore it
 afterwards (and E4 fails Valkey back to its first primary).
 
+Two runbook drills use the same pieces (task 5.7; `docs/runbooks/README.md`):
+
+| Command | What breaks | Passes when |
+|---|---|---|
+| `make drill-rb5` | The payment provider is down for 60 s mid-sale | Admissions pause and resume by themselves (the timeline is recorded); the same settlement and invariant checks |
+| `make drill-rb4` | Valkey loses a sale, and the provider goes down as a buyer pays for the phantom units: the refund is given up | The operator's `holdfastctl refund` refunds the buyer (timed), RB-2 repairs the drift, every invariant 0 |
+
 ## The pieces
 
 - **`cmd/buyers`**: simulated buyers. Each joins the waiting room, waits for

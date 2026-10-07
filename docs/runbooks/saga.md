@@ -80,6 +80,12 @@ were not blocked.
      `holdfast_booking_saga_outcomes_total`);
    - `holdfast_kafka_consumed_total{result="dead_lettered"}` stays flat.
 
+**Practised** on a real incident (task 5.5, P56): experiment E4 had
+dead-lettered 29 payments (three paid bookings cancelled, I3 at 3, and 22
+units of inventory drift). The dry run listed them with their reasons;
+the replay took 3.7 s, and within 15 s I3 and the drift were back to 0:
+the three were refunded, and the holds of the others marked sold.
+
 ## RB-4 Manual refund
 
 **Symptom:** a buyer was charged but has no ticket, and their booking has
@@ -121,3 +127,12 @@ or the capture came too late), but the refund did not complete.
    report.
 5. **Check:** the booking is `REFUNDED`, and
    `holdfast_payment_refund_requests_total{result="requested"}` rose by one.
+
+**Practised** with `make drill-rb4` (task 5.7): a buyer charged for a unit
+that did not exist (Valkey had lost a sale), whose refund the provider's
+outage defeated. The guard refused the sale 31 s after the capture; the
+refund was retried for 10 minutes and dead-lettered (`MessagesDeadLettered`);
+once the provider was back, `holdfastctl refund` brought the booking to
+`REFUNDED` in 30 s, most of it the provider breaker's cooldown. The money
+was back 11 minutes after the capture, inside I3's 15
+(`loadtest/results/rb4-2026-10-07T1246-974dea5.log`).

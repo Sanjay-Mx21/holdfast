@@ -31,6 +31,11 @@ What a freeze does, in this order:
    sale as paused. Joins still take a place (arrival order), ranks are still
    reported, and people already admitted keep their turn.
 
+**Practised** in experiment E4 (task 5.7), mid-sale, after a Valkey
+failover: `freeze` took 0.1 s and `unfreeze` 0.1 to 0.2 s, with 12,000
+buyers in flight; payments already under way carried on (ten bookings
+were confirmed during the freeze).
+
 Running it again is harmless (`(already so)`). Check the state with
 `holdfastctl queue status --event <event id>` (state `FROZEN`) and
 `holdfastctl inventory status --event <event id>` (`frozen: true`); the

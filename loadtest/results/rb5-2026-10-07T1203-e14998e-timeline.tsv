@@ -1,0 +1,7 @@
+step	seconds_after_the_outage_began
+breaker_open	1.5
+admissions_paused	1.9
+provider_back	60.3
+breaker_closed	66.1
+admissions_resumed	67.4
+admissions_at_full_rate	86.2

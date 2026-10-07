@@ -120,7 +120,13 @@ chaos-e3: ## Experiment E3: purchases under payment-provider faults (needs make 
 chaos-e4: ## Experiment E4: purchases while Valkey, booking-svc, Kafka and PostgreSQL fail (needs make up)
 	bash chaos/e4.sh
 
+drill-rb5: ## Drill RB-5: the payment provider down mid-sale; admissions pause and resume (needs make up)
+	bash chaos/drill-rb5.sh
+
+drill-rb4: ## Drill RB-4: a refund the provider's outage defeated, made by hand (about 13 minutes; needs make up)
+	bash chaos/drill-rb4.sh
+
 docker: ## Build container images for the deployable binaries
 	@for s in $(IMAGES); do docker build --build-arg SERVICE=$$s --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) -t holdfast/$$s:$(VERSION) . || exit 1; done
 
-.PHONY: help deps deps-upgrade tools fmt vet lint test itest cover build keys infra up down clean migrate event token run-inventory e1 fairness-e6 load-e2 drill-valkey chaos-e3 chaos-e4 topics gen docker
+.PHONY: help deps deps-upgrade tools fmt vet lint test itest cover build keys infra up down clean migrate event token run-inventory e1 fairness-e6 load-e2 drill-valkey chaos-e3 chaos-e4 drill-rb5 drill-rb4 topics gen docker

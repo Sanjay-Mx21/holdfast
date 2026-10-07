@@ -3,6 +3,38 @@
 Raw evidence for every number HoldFast publishes. A number that is not backed
 by a file in this folder must not appear in the README, a resume or a post.
 
+## Runbook drills RB-5 and RB-4, 2026-10-07 (task 5.7)
+
+**RB-5, the payment provider down for 60 s mid-sale: PASS.** With 4,000
+buyers at up to 20 admissions a second (`make drill-rb5`):
+
+| Seconds after the outage began | |
+|---|---|
+| 1.5 | payment-svc's circuit breaker opened |
+| 1.9 | admissions paused (adaptive admission, task 5.4) |
+| 60.3 | the provider was back |
+| 66.1 | the breaker closed (the prober's trial call) |
+| 67.4 | admissions resumed, at 5% of the rate |
+| 86.2 | admissions back at the full rate |
+
+3,949 confirmed; 51 buyers gave up their booking during the outage (their
+bookings unpaid, to expire; no money taken); every capture resolved; every
+invariant 0. Files: `rb5-2026-10-07T1203-e14998e.*`.
+
+**RB-4, a refund the provider's outage defeated: PASS** (`make drill-rb4`).
+Valkey lost a sale (injected), so buyer B held and paid for units that did
+not exist; the provider went down as it captured B's money.
+
+| Seconds after the capture | |
+|---|---|
+| 30.8 | the guard refused the sale; the booking needs a refund |
+| 623.3 | the refund, retried for 10 minutes, was dead-lettered |
+| 623.3 + 30.2 | the provider back, `holdfastctl refund`: REFUNDED 30.2 s later |
+| 656.6 | the buyer's money back, inside I3's 15 minutes |
+
+Then RB-2 repaired the drift; every invariant 0. Files:
+`rb4-2026-10-07T1246-974dea5.*`.
+
 ## E4 infrastructure chaos, 2026-10-07 (task 5.5)
 
 **Result: PASS. 12,000 buyers bought through the running stack while,
