@@ -20,14 +20,16 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	PaymentService_CreateIntent_FullMethodName = "/holdfast.payment.v1.PaymentService/CreateIntent"
+	PaymentService_GetPressure_FullMethodName  = "/holdfast.payment.v1.PaymentService/GetPressure"
 )
 
 // PaymentServiceClient is the client API for PaymentService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// PaymentService is payment-svc's internal API, for booking-svc. Calls carry a
-// service token and a deadline, like every internal gRPC call.
+// PaymentService is payment-svc's internal API, for booking-svc (intents) and
+// queue-svc (pressure). Calls carry a service token and a deadline, like
+// every internal gRPC call.
 //
 // Errors are gRPC status codes with a google.rpc.ErrorInfo reason:
 // INVALID_REQUEST (INVALID_ARGUMENT), INTENT_CONFLICT (FAILED_PRECONDITION:
@@ -40,6 +42,10 @@ type PaymentServiceClient interface {
 	// later call for the same booking returns the same intent and URL, so
 	// booking-svc can retry it freely.
 	CreateIntent(ctx context.Context, in *CreateIntentRequest, opts ...grpc.CallOption) (*CreateIntentResponse, error)
+	// GetPressure reports how the payment provider is coping, for queue-svc's
+	// admission leaders (task 5.4): the circuit breaker's state and the
+	// provider calls of the last few seconds. It never calls the provider.
+	GetPressure(ctx context.Context, in *GetPressureRequest, opts ...grpc.CallOption) (*GetPressureResponse, error)
 }
 
 type paymentServiceClient struct {
@@ -60,12 +66,23 @@ func (c *paymentServiceClient) CreateIntent(ctx context.Context, in *CreateInten
 	return out, nil
 }
 
+func (c *paymentServiceClient) GetPressure(ctx context.Context, in *GetPressureRequest, opts ...grpc.CallOption) (*GetPressureResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetPressureResponse)
+	err := c.cc.Invoke(ctx, PaymentService_GetPressure_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PaymentServiceServer is the server API for PaymentService service.
 // All implementations must embed UnimplementedPaymentServiceServer
 // for forward compatibility.
 //
-// PaymentService is payment-svc's internal API, for booking-svc. Calls carry a
-// service token and a deadline, like every internal gRPC call.
+// PaymentService is payment-svc's internal API, for booking-svc (intents) and
+// queue-svc (pressure). Calls carry a service token and a deadline, like
+// every internal gRPC call.
 //
 // Errors are gRPC status codes with a google.rpc.ErrorInfo reason:
 // INVALID_REQUEST (INVALID_ARGUMENT), INTENT_CONFLICT (FAILED_PRECONDITION:
@@ -78,6 +95,10 @@ type PaymentServiceServer interface {
 	// later call for the same booking returns the same intent and URL, so
 	// booking-svc can retry it freely.
 	CreateIntent(context.Context, *CreateIntentRequest) (*CreateIntentResponse, error)
+	// GetPressure reports how the payment provider is coping, for queue-svc's
+	// admission leaders (task 5.4): the circuit breaker's state and the
+	// provider calls of the last few seconds. It never calls the provider.
+	GetPressure(context.Context, *GetPressureRequest) (*GetPressureResponse, error)
 	mustEmbedUnimplementedPaymentServiceServer()
 }
 
@@ -90,6 +111,9 @@ type UnimplementedPaymentServiceServer struct{}
 
 func (UnimplementedPaymentServiceServer) CreateIntent(context.Context, *CreateIntentRequest) (*CreateIntentResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateIntent not implemented")
+}
+func (UnimplementedPaymentServiceServer) GetPressure(context.Context, *GetPressureRequest) (*GetPressureResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetPressure not implemented")
 }
 func (UnimplementedPaymentServiceServer) mustEmbedUnimplementedPaymentServiceServer() {}
 func (UnimplementedPaymentServiceServer) testEmbeddedByValue()                        {}
@@ -130,6 +154,24 @@ func _PaymentService_CreateIntent_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PaymentService_GetPressure_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetPressureRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PaymentServiceServer).GetPressure(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PaymentService_GetPressure_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PaymentServiceServer).GetPressure(ctx, req.(*GetPressureRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PaymentService_ServiceDesc is the grpc.ServiceDesc for PaymentService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -140,6 +182,10 @@ var PaymentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CreateIntent",
 			Handler:    _PaymentService_CreateIntent_Handler,
+		},
+		{
+			MethodName: "GetPressure",
+			Handler:    _PaymentService_GetPressure_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -24,6 +24,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/Sanjay-Mx21/holdfast/internal/inventory"
+	"github.com/Sanjay-Mx21/holdfast/internal/payment"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/app"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/authn"
 	"github.com/Sanjay-Mx21/holdfast/internal/platform/buildinfo"
@@ -99,6 +100,24 @@ type config struct {
 	InventoryGRPCAddr     string  `env:"INVENTORY_GRPC_ADDR"`
 	ServicePrivateKeyFile string  `env:"SERVICE_PRIVATE_KEY_FILE"`
 	OversubscriptionRatio float64 `env:"OVERSUBSCRIPTION_FACTOR" envDefault:"1.3"`
+
+	// Adaptive admission (task 5.4): with PAYMENT_GRPC_ADDR set, each
+	// leader's rate follows the payment provider's pressure, read from
+	// payment-svc every PRESSURE_INTERVAL. It halves (at most once per
+	// AIMD_COOLDOWN, never below AIMD_FLOOR of the event's rate) when the
+	// provider's p99 exceeds AIMD_LATENCY_SLO or more than AIMD_MAX_ERROR_RATIO
+	// of its calls fail (judged from AIMD_MIN_CALLS calls), pauses while the
+	// provider's circuit breaker is open, and otherwise climbs by AIMD_STEP of
+	// the event's rate per second, never above it. Empty: leaders admit at
+	// the event's rate. Needs SERVICE_PRIVATE_KEY_FILE.
+	PaymentGRPCAddr   string        `env:"PAYMENT_GRPC_ADDR"`
+	PressureInterval  time.Duration `env:"PRESSURE_INTERVAL" envDefault:"1s"`
+	AIMDLatencySLO    time.Duration `env:"AIMD_LATENCY_SLO" envDefault:"2s"`
+	AIMDMaxErrorRatio float64       `env:"AIMD_MAX_ERROR_RATIO" envDefault:"0.01"`
+	AIMDMinCalls      int64         `env:"AIMD_MIN_CALLS" envDefault:"20"`
+	AIMDCooldown      time.Duration `env:"AIMD_COOLDOWN" envDefault:"5s"`
+	AIMDStep          float64       `env:"AIMD_STEP" envDefault:"0.05"`
+	AIMDFloor         float64       `env:"AIMD_FLOOR" envDefault:"0.05"`
 
 	// Proof of work at join (internal/pow): challenges of POW_DIFFICULTY
 	// bits, one bit more per doubling of the challenge rate above
@@ -185,6 +204,16 @@ func (c *config) Validate() error {
 	}
 	if c.OversubscriptionRatio < 1 || c.OversubscriptionRatio > 10 {
 		errs = append(errs, errors.New("OVERSUBSCRIPTION_FACTOR must be between 1 and 10"))
+	}
+	if c.PaymentGRPCAddr != "" && c.ServicePrivateKeyFile == "" {
+		errs = append(errs, errors.New("PAYMENT_GRPC_ADDR needs SERVICE_PRIVATE_KEY_FILE: payment-svc accepts only signed callers"))
+	}
+	if c.PressureInterval < 100*time.Millisecond || c.PressureInterval > 30*time.Second || c.AIMDCooldown < c.PressureInterval {
+		errs = append(errs, errors.New("PRESSURE_INTERVAL must be between 100ms and 30s, and AIMD_COOLDOWN at least as long"))
+	}
+	if c.AIMDLatencySLO <= 0 || c.AIMDMaxErrorRatio <= 0 || c.AIMDMaxErrorRatio >= 1 || c.AIMDMinCalls < 1 ||
+		c.AIMDStep <= 0 || c.AIMDStep > 1 || c.AIMDFloor <= 0 || c.AIMDFloor > 1 {
+		errs = append(errs, errors.New("AIMD_LATENCY_SLO and AIMD_MIN_CALLS must be positive, and AIMD_MAX_ERROR_RATIO, AIMD_STEP and AIMD_FLOOR fractions above 0"))
 	}
 	switch {
 	case c.PoWDifficulty == 0 && c.Service.Environment == "production":
@@ -332,15 +361,18 @@ func run(ctx context.Context) error {
 		Tick: cfg.AdmissionTick, RetryLeadership: cfg.LeaderRetryInterval, Rescan: cfg.AdmissionRescanInterval,
 		Oversubscription: cfg.OversubscriptionRatio,
 	}
-	if cfg.InventoryGRPCAddr != "" {
+	var serviceKey ed25519.PrivateKey
+	if cfg.ServicePrivateKeyFile != "" {
 		raw, err := os.ReadFile(filepath.Clean(cfg.ServicePrivateKeyFile))
 		if err != nil {
 			return fmt.Errorf("read service key: %w", err)
 		}
-		key, err := authn.ParsePrivateKeyPEM(raw)
-		if err != nil {
+		if serviceKey, err = authn.ParsePrivateKeyPEM(raw); err != nil {
 			return err
 		}
+	}
+	if cfg.InventoryGRPCAddr != "" {
+		key := serviceKey
 		conn, err := grpcx.Dial(grpcx.ClientConfig{
 			Target: cfg.InventoryGRPCAddr, Tokens: authn.NewServiceTokenSource(key, serviceName, "inventory"),
 			Timeout: cfg.AdmissionTick,
@@ -354,6 +386,26 @@ func run(ctx context.Context) error {
 			"oversubscription_factor", cfg.OversubscriptionRatio, "kid", authn.KeyID(key.Public().(ed25519.PublicKey)))
 	} else {
 		log.Warn("INVENTORY_GRPC_ADDR is not set: admissions ignore the units left, and no queue is marked SOLD_OUT")
+	}
+	if cfg.PaymentGRPCAddr != "" {
+		conn, err := grpcx.Dial(grpcx.ClientConfig{
+			Target: cfg.PaymentGRPCAddr, Tokens: authn.NewServiceTokenSource(serviceKey, serviceName, "payment"),
+			Timeout: cfg.PressureInterval,
+		})
+		if err != nil {
+			return err
+		}
+		defer func() { _ = conn.Close() }()
+		admission.Pressure = queue.NewPressureWatch(payment.NewClient(conn), cfg.PressureInterval, qm, log)
+		admission.AIMD = queue.AIMDConfig{
+			LatencySLO: cfg.AIMDLatencySLO, MaxErrorRatio: cfg.AIMDMaxErrorRatio, MinCalls: cfg.AIMDMinCalls,
+			Cooldown: cfg.AIMDCooldown, Step: cfg.AIMDStep, Floor: cfg.AIMDFloor, StaleAfter: 5 * cfg.PressureInterval,
+		}
+		background = append(background, admission.Pressure)
+		log.Info("admission adapts to the payment provider's pressure (AIMD)", "addr", cfg.PaymentGRPCAddr,
+			"latency_slo", cfg.AIMDLatencySLO, "max_error_ratio", cfg.AIMDMaxErrorRatio, "cooldown", cfg.AIMDCooldown)
+	} else {
+		log.Warn("PAYMENT_GRPC_ADDR is not set: admissions ignore the payment provider's pressure")
 	}
 
 	return app.Run(ctx, log, hc, cfg.HTTP.DrainDelay, append([]app.Component{

@@ -331,7 +331,7 @@
       "id": 6,
       "type": "stat",
       "title": "Admission rate",
-      "description": "People admitted per second (one-minute rate).",
+      "description": "People admitted per second (one-minute rate), and the rate the leaders allow now: the event's rate, less while adaptive admission backs off, 0 while the payment provider's breaker is open (task 5.4).",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -352,7 +352,7 @@
         },
         "colorMode": "value",
         "graphMode": "area",
-        "textMode": "value",
+        "textMode": "value_and_name",
         "justifyMode": "center"
       },
       "fieldConfig": {
@@ -381,7 +381,16 @@
             "uid": "prometheus"
           },
           "expr": "sum(rate(holdfast_queue_admitted_total{event=~\"$event\"}[1m]))",
-          "legendFormat": ""
+          "legendFormat": "admitted"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(max by (event) (holdfast_queue_admission_rate{event=~\"$event\"}))",
+          "legendFormat": "allowed"
         }
       ]
     },

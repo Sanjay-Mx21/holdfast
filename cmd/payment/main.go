@@ -52,6 +52,10 @@ type config struct {
 	PSPWebhookSecret string        `env:"PSP_WEBHOOK_SECRET,required,unset"`
 	PSPTimeout       time.Duration `env:"PSP_TIMEOUT" envDefault:"2s"`
 	WebhookTolerance time.Duration `env:"WEBHOOK_TOLERANCE" envDefault:"5m"`
+	// While the provider's breaker is not closed, a cheap call every
+	// PSP_PROBE_INTERVAL tries it (task 5.4): with admissions paused for an
+	// open breaker, no checkout would.
+	PSPProbeInterval time.Duration `env:"PSP_PROBE_INTERVAL" envDefault:"5s"`
 
 	// Status polling for intents still CREATED POLL_AFTER after creation.
 	PollInterval time.Duration `env:"POLL_INTERVAL" envDefault:"30s"`
@@ -82,6 +86,9 @@ func (c *config) Validate() error {
 	}
 	if c.WebhookTolerance < 30*time.Second || c.WebhookTolerance > time.Hour {
 		errs = append(errs, errors.New("WEBHOOK_TOLERANCE must be between 30s and 1h"))
+	}
+	if c.PSPProbeInterval < time.Second || c.PSPProbeInterval > time.Minute {
+		errs = append(errs, errors.New("PSP_PROBE_INTERVAL must be between 1s and 1m"))
 	}
 	if c.PollInterval < time.Second || c.PollAfter < 10*time.Second || c.PollBatch < 1 || c.PollBatch > 1000 {
 		errs = append(errs, errors.New("POLL_INTERVAL must be at least 1s, POLL_AFTER at least 10s, POLL_BATCH 1 to 1000"))
@@ -172,7 +179,7 @@ func run(ctx context.Context) error {
 		Verifier: authn.NewServiceVerifier(serviceName, callers, cfg.TokenLeeway),
 		Allow:    payment.GRPCAllow(),
 	}, reg, log)
-	paymentv1.RegisterPaymentServiceServer(grpcSrv, payment.NewGRPCServer(svc))
+	paymentv1.RegisterPaymentServiceServer(grpcSrv, payment.NewGRPCServer(svc, provider))
 
 	hc := health.New(2*time.Second, postgres.Check(pool))
 	httpMetrics := httpx.NewHTTPMetrics(reg)
@@ -193,6 +200,7 @@ func run(ctx context.Context) error {
 		httpx.NewServer("public", cfg.HTTP.Addr, public, cfg.HTTP, log),
 		httpx.NewServer("admin", cfg.HTTP.AdminAddr, admin, cfg.HTTP, log, httpx.WithWriteTimeout(90*time.Second)),
 		payment.NewPoller(svc, cfg.PollInterval, cfg.PollAfter, cfg.PollBatch, log),
+		psp.NewProber(provider, cfg.PSPProbeInterval),
 		payment.NewReconciler(svc, provider, payment.ReconcilerConfig{
 			Interval: cfg.ReconInterval, Window: cfg.ReconWindow, Margin: cfg.ReconMargin, RefundStuckAfter: cfg.ReconRefundStuck,
 		}, log),

@@ -34,6 +34,12 @@ type AdmissionConfig struct {
 	// Oversubscription is the factor (design: 1.3 to start): how many
 	// sessions to open per unit left, since not everyone admitted buys.
 	Oversubscription float64
+	// Pressure, if set, makes admission adaptive (task 5.4): each leader's
+	// rate follows the payment provider's pressure under AIMD, with the
+	// event's configured rate as the ceiling. Without it, leaders admit at
+	// the configured rate.
+	Pressure *PressureWatch
+	AIMD     AIMDConfig
 }
 
 // Inventory is what the admission leader needs from inventory-svc
@@ -203,6 +209,11 @@ type leaderOps interface {
 // one off, or the event no longer exists.
 func (c *Controller) lead(ctx context.Context, epoch int64, rate int, ping func(context.Context) error, ops leaderOps) error {
 	bucket := newAllowance(float64(rate), time.Now())
+	var ctl *aimd
+	if c.cfg.Pressure != nil {
+		ctl = newAIMD(float64(rate), c.cfg.AIMD, time.Now())
+	}
+	c.m.rate.WithLabelValues(c.eventID).Set(float64(rate))
 	t := time.NewTicker(c.cfg.Tick)
 	defer t.Stop()
 	for {
@@ -212,6 +223,9 @@ func (c *Controller) lead(ctx context.Context, epoch int64, rate int, ping func(
 		case now := <-t.C:
 			if err := ping(ctx); err != nil {
 				return fmt.Errorf("lost the lock: %w", err) // step down; a standby takes over
+			}
+			if ctl != nil {
+				c.adapt(ctl, bucket, now)
 			}
 			unitsCap, soldOut := c.unitsLeft(ctx)
 			if soldOut {
@@ -250,6 +264,28 @@ func (c *Controller) lead(ctx context.Context, epoch int64, rate int, ping func(
 				c.m.tick(tickIdle)
 			}
 		}
+	}
+}
+
+// adapt sets this tick's admission rate from the provider's pressure (AIMD).
+// While paused the leader still ticks: the status document stays fresh, and
+// buyers already admitted keep their sessions.
+func (c *Controller) adapt(ctl *aimd, bucket *allowance, now time.Time) {
+	h, reason := classify(c.cfg.Pressure.current(), now, c.cfg.AIMD)
+	before := ctl.rate
+	r, backedOff := ctl.next(now, h)
+	bucket.setRate(r, now)
+	c.m.rate.WithLabelValues(c.eventID).Set(r)
+	if backedOff {
+		c.m.backoff(reason)
+	}
+	switch {
+	case before > 0 && r == 0:
+		c.log.Warn("admission: paused: the payment provider's circuit breaker is open")
+	case before == 0 && r > 0:
+		c.log.Info("admission: resumed", "rate_per_second", r)
+	case backedOff:
+		c.log.Info("admission: backing off", "reason", reason, "rate_per_second", r)
 	}
 }
 
@@ -325,6 +361,15 @@ func (a *allowance) available(now time.Time) int {
 // take spends n tokens: only the people actually admitted, so a tick capped
 // by the session budget keeps its unused allowance (up to one second's worth).
 func (a *allowance) take(n int64) { a.tokens = math.Max(0, a.tokens-float64(n)) }
+
+// setRate changes the refill rate from now on. What was earned at the old
+// rate is kept, up to one second's worth at the new one: a cut takes effect
+// at once.
+func (a *allowance) setRate(rate float64, now time.Time) {
+	a.available(now)
+	a.rate = rate
+	a.tokens = math.Min(a.tokens, rate)
+}
 
 // termConfig reads the event's admission rate and session budget from
 // q:{E}:config; they are fixed once provisioned. ErrEventNotFound means the

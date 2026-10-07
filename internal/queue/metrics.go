@@ -22,6 +22,8 @@ type Metrics struct {
 	invReads   *prometheus.CounterVec
 	powIssued  prometheus.Counter
 	powLevel   prometheus.Gauge
+	backoffs   *prometheus.CounterVec
+	pressure   *prometheus.CounterVec
 
 	// Per-event gauges, set by the event's admission leader every tick and
 	// removed when its term ends, so only the current leader reports them.
@@ -31,6 +33,7 @@ type Metrics struct {
 	maxSessions  *prometheus.GaugeVec
 	epoch        *prometheus.GaugeVec
 	state        *prometheus.GaugeVec
+	rate         *prometheus.GaugeVec
 
 	// statusAge is set by the opener in every replica: what clients see.
 	statusAge *prometheus.GaugeVec
@@ -98,6 +101,12 @@ const (
 	inventoryReadError          = "error"
 )
 
+// Pressure reads from payment-svc (task 5.4), the values of the result label.
+const (
+	pressureReadOK    = "ok"
+	pressureReadError = "error"
+)
+
 // allStates are the values of the state label.
 var allStates = []State{StatePre, StateOpen, StateFrozen, StateSoldOut, StateClosed}
 
@@ -147,6 +156,15 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 	m.maxSessions = perEvent("holdfast_queue_max_sessions", "The session budget (Little's Law L).")
 	m.epoch = perEvent("holdfast_queue_leader_epoch", "Fencing epoch of the current admission leader.")
 	m.statusAge = perEvent("holdfast_queue_status_age_seconds", "Age of the status document clients are served; grows while no leader writes it.")
+	m.rate = perEvent("holdfast_queue_admission_rate", "Admissions per second the leader applies now: the configured rate, or less while adaptive admission (task 5.4) backs off; 0 while the payment provider's breaker is open.")
+	m.backoffs = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "holdfast_queue_admission_backoffs_total",
+		Help: "Times a leader halved its admission rate, or paused it, by reason: latency, errors, unknown (no recent pressure reading), breaker_open (paused).",
+	}, []string{"reason"})
+	m.pressure = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "holdfast_queue_pressure_reads_total",
+		Help: "Reads of the payment provider's pressure from payment-svc, by result.",
+	}, []string{"result"})
 	m.terms = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "holdfast_queue_leader_terms_total",
 		Help: "Admission leadership terms won by this process.",
@@ -193,10 +211,18 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 	for _, r := range []string{inventoryReadOK, inventoryReadNotProvisioned, inventoryReadError} {
 		m.invReads.WithLabelValues(r)
 	}
+	for _, r := range []string{backoffLatency, backoffErrors, backoffUnknown, backoffBreaker} {
+		m.backoffs.WithLabelValues(r)
+	}
+	for _, r := range []string{pressureReadOK, pressureReadError} {
+		m.pressure.WithLabelValues(r)
+	}
 	return m
 }
 
 func (m *Metrics) inventoryRead(result string) { m.invReads.WithLabelValues(result).Inc() }
+func (m *Metrics) pressureRead(result string)  { m.pressure.WithLabelValues(result).Inc() }
+func (m *Metrics) backoff(reason string)       { m.backoffs.WithLabelValues(reason).Inc() }
 
 func (m *Metrics) powChallenge(difficulty int) {
 	m.powIssued.Inc()
@@ -245,7 +271,7 @@ func (m *Metrics) leaderTerm(eventID string, epoch int64, maxSessions int, leadi
 		m.maxSessions.WithLabelValues(eventID).Set(float64(maxSessions))
 		return
 	}
-	for _, g := range []*prometheus.GaugeVec{m.size, m.admittedUpTo, m.sessions, m.maxSessions, m.epoch} {
+	for _, g := range []*prometheus.GaugeVec{m.size, m.admittedUpTo, m.sessions, m.maxSessions, m.epoch, m.rate} {
 		g.DeleteLabelValues(eventID)
 	}
 	m.state.DeletePartialMatch(prometheus.Labels{"event": eventID})

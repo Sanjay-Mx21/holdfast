@@ -254,7 +254,7 @@ services:
       ENVIRONMENT: development
       LOG_FORMAT: text
       POSTGRES_DSN: postgres://holdfast:holdfast@postgres:5432/holdfast?sslmode=disable
-      GRPC_TRUSTED_CALLERS: booking=/keys/booking.pub
+      GRPC_TRUSTED_CALLERS: booking=/keys/booking.pub,queue=/keys/queue.pub # queue-svc reads the provider's pressure
       PSP_BASE_URL: http://mockpsp:8080
       PSP_API_KEY: ${PSP_API_KEY:-dev-only-psp-api-key}
       PSP_WEBHOOK_SECRET: ${PSP_WEBHOOK_SECRET:-dev-only-webhook-secret-change-me-in-any-real-deployment}
@@ -355,6 +355,9 @@ services:
       # sessions stay within units left x 1.3, and a sold-out queue says so.
       INVENTORY_GRPC_ADDR: inventory:7070
       SERVICE_PRIVATE_KEY_FILE: /keys/queue.key
+      # Adaptive admission (task 5.4): each leader's rate follows the payment
+      # provider's pressure, and pauses while its circuit breaker is open.
+      PAYMENT_GRPC_ADDR: payment:7070
       # Joins need a solved proof-of-work challenge (GET .../challenge);
       # POW_DIFFICULTY=0 make up turns it off.
       POW_DIFFICULTY: ${POW_DIFFICULTY:-18}
