@@ -61,6 +61,7 @@ func commands() []command {
 		{"kafka topics", "create every Kafka topic HoldFast uses (idempotent; auto-creation is off)", cmdKafkaTopics},
 		{"dlq replay", "publish a dead-letter topic's messages back to their topic (runbook RB-3)", cmdDLQReplay},
 		{"refund", "ask payment-svc again to refund a booking stuck in REFUND_REQUIRED (runbook RB-4)", cmdRefund},
+		{"valkey probe", "write to Valkey steadily and report outages and lost writes (failover drill)", cmdValkeyProbe},
 	}
 }
 
@@ -109,7 +110,7 @@ func valkeyFlag(fs *flag.FlagSet) *string {
 	if def == "" {
 		def = "localhost:6379"
 	}
-	return fs.String("valkey", def, "comma-separated Valkey addresses (env VALKEY_ADDRS)")
+	return fs.String("valkey", def, "comma-separated Valkey addresses, or Sentinels' with VALKEY_SENTINEL_MASTER (env VALKEY_ADDRS)")
 }
 
 func openPool(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
@@ -122,21 +123,33 @@ func openPool(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 	}, "holdfastctl")
 }
 
-// openValkey connects to addrs, with VALKEY_PASSWORD and VALKEY_DB from the
-// environment like the services.
+// openValkey connects to addrs, configured from the environment like the
+// services (valkeyConfig).
 func openValkey(ctx context.Context, addrs string) (redis.UniversalClient, error) {
+	cfg, err := valkeyConfig(addrs, os.Getenv)
+	if err != nil {
+		return nil, err
+	}
+	return valkey.New(ctx, cfg, "holdfastctl")
+}
+
+// valkeyConfig is the client configuration for addrs, with VALKEY_PASSWORD,
+// VALKEY_DB and VALKEY_SENTINEL_MASTER from getenv as the services read
+// them: with a master name, addrs are Sentinels (task 5.2).
+func valkeyConfig(addrs string, getenv func(string) string) (config.Valkey, error) {
 	db := 0
-	if v := os.Getenv("VALKEY_DB"); v != "" {
+	if v := getenv("VALKEY_DB"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 0 {
-			return nil, fmt.Errorf("VALKEY_DB must be a database number, got %q", v)
+			return config.Valkey{}, fmt.Errorf("VALKEY_DB must be a database number, got %q", v)
 		}
 		db = n
 	}
-	return valkey.New(ctx, config.Valkey{
-		Addrs: strings.Split(addrs, ","), Password: os.Getenv("VALKEY_PASSWORD"), DB: db, PoolSize: 4,
+	return config.Valkey{
+		Addrs: strings.Split(addrs, ","), MasterName: getenv("VALKEY_SENTINEL_MASTER"),
+		Password: getenv("VALKEY_PASSWORD"), DB: db, PoolSize: 4,
 		DialTimeout: 2 * time.Second, ReadTimeout: 2 * time.Second, WriteTimeout: 2 * time.Second,
-	}, "holdfastctl")
+	}, nil
 }
 
 func inventoryService(rdb redis.UniversalClient) (*inventory.Service, error) {

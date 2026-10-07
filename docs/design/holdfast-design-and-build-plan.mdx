@@ -1656,7 +1656,7 @@ holdfast/
 │   └── testenv/                      ✅ wiring for integration tests
 ├── db/migrations/                    ✅ embed.go, booking/    ⏳ payment/ (3), auth/ (4)
 ├── proto/                            ⏳ buf.yaml; events/v1, inventory/v1, payment/v1 (3)
-├── deploy/                           ✅ prometheus/, grafana/, nginx/ (2.9) ⏳ otel-collector/ (3), alerting/ (5), k8s/ (6)
+├── deploy/                           ✅ prometheus/, grafana/, nginx/ (2.9), alerting/ (5.1), valkey/ (5.2) ⏳ otel-collector/ (3), k8s/ (6)
 ├── loadtest/                         ⏳ results/ (M1.5); k6 scripts (2)
 ├── chaos/                            ⏳ Toxiproxy scenarios, kill scripts (5)
 ├── web/                              ✅ Next.js app, static export (4.5); proof-of-work solver (4.4)
@@ -2146,7 +2146,7 @@ The dates are illustrative. The gates are not.
 **Tasks, in order:**
 
 - [x] 5.1 **Reconciler and auditor.** Settlement-report diffing in payment-svc; `cmd/auditor` publishing invariant gauges for I1 to I5 (`holdfast_invariant_violations`), plus alert rules (12.2). *Built as payment-svc's reconciler (one replica at a time under an advisory lock, every 5 minutes over the last 2 hours): it applies lost captures and refunds through the webhook's own paths, asks again for refunds stuck 15 minutes, and counts seven kinds of finding in `holdfast_recon_mismatch_total{type}`, four of which need a human. The auditor reads every schema over read-only connections and inventory's expiry indexes; I3 allows 15 minutes and I5 5 minutes of grace. Five alert rules in `deploy/alerting/` with runbook `docs/runbooks/auditor.md`; routing them is task 5.6.*
-- [ ] 5.2 **Valkey high availability.** A primary, a replica and three Sentinels in Compose (the client already supports Sentinel through `VALKEY_SENTINEL_MASTER`); a failover drill.
+- [x] 5.2 **Valkey high availability.** A primary, a replica and three Sentinels in Compose (the client already supports Sentinel through `VALKEY_SENTINEL_MASTER`); a failover drill. *Built in `deploy/valkey/`: each member keeps its configuration in its volume, so roles survive restarts, and announces a fixed address on its own network (hostnames stalled Sentinel into TILT mode when a node died, P47). holdfastctl now honours `VALKEY_SENTINEL_MASTER` (P48) and gained `valkey probe`; `make drill-valkey` runs the drill. Measured: a killed primary replaced in 7.1 s with writes stopped 6.4 s and none lost; a coordinated planned switch pauses writes 74 ms; an uncoordinated one lost a second of acknowledged writes, so runbook RB-VK-2 always uses `COORDINATED` (P49). On the laptop WSL2 steps the clock back every 30 s, which keeps Sentinel in TILT half the time (E26).*
 - [ ] 5.3 **Full RB-2 rebuild.** `holdfastctl inventory rebuild` computes `avail = capacity − sold − units in PENDING_PAYMENT bookings` and rebuilds the per-user counters, extending today's `inventory provision`.
 - [ ] 5.4 **Adaptive admission.** AIMD on the admission rate, and backpressure when the PSP circuit breaker opens.
 - [ ] 5.5 **Chaos.** Toxiproxy scenarios and kill scripts in `chaos/`; run E3 and E4.

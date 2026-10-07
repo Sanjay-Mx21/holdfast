@@ -1787,7 +1787,7 @@
       "id": 33,
       "type": "timeseries",
       "title": "Valkey CPU",
-      "description": "From redis_exporter (works with Valkey). Valkey runs commands on one thread: near 1 core is saturation.",
+      "description": "The primary's, from redis_exporter (works with Valkey); a failover moves it to the other node. Valkey runs commands on one thread: near 1 core is saturation.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -1842,7 +1842,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(redis_cpu_sys_seconds_total[1m]) + rate(redis_cpu_user_seconds_total[1m])",
+          "expr": "(rate(redis_cpu_sys_seconds_total[1m]) + rate(redis_cpu_user_seconds_total[1m])) * on(instance) group_left() redis_instance_info{role=\"master\"}",
           "legendFormat": "cores"
         },
         {
@@ -1851,7 +1851,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(redis_commands_processed_total[1m])",
+          "expr": "rate(redis_commands_processed_total[1m]) * on(instance) group_left() redis_instance_info{role=\"master\"}",
           "legendFormat": "commands/s"
         }
       ]

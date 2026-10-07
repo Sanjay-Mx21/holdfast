@@ -12,7 +12,9 @@ Each entry lists symptoms, impact, how to diagnose, how to mitigate, and follow-
 - **Diagnose:** `valkey-cli -h <host> ping`, `valkey-cli info replication`,
   Sentinel or cluster status, network policy.
 - **Mitigate:** restore or fail over Valkey. Clients reconnect automatically;
-  no restart is needed. If data was lost, continue with RB-INV-4.
+  no restart is needed. If data was lost, continue with RB-INV-4. With
+  Sentinel (task 5.2) a dead primary is replaced in about 7 s by itself:
+  see `docs/runbooks/valkey.md` (RB-VK-1), and RB-VK-3 if it is not.
 
 ## RB-INV-2 Expired holds are not released
 

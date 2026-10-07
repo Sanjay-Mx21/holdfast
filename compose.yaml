@@ -2,7 +2,7 @@
 # Host ports: the edge (NGINX, the buyers' front door) 8088 (EDGE_PORT), inventory API 8081,
 # inventory admin 9091, queue API 8082, queue admin 9092, booking API 8083,
 # booking admin 9093, inventory gRPC 7071, Prometheus 9090,
-# Grafana 3000, PostgreSQL 5432, Valkey 6379, Kafka 29092, Redpanda Console 8089,
+# Grafana 3000, PostgreSQL 5432, Valkey 6379 (the replica 6380), Kafka 29092, Redpanda Console 8089,
 # Jaeger 16686, OTLP 4317 (gRPC) and 4318 (HTTP).
 # The 808x API ports bypass the edge and are for debugging only.
 name: holdfast
@@ -24,20 +24,97 @@ services:
       retries: 20
     restart: unless-stopped
 
+  # Valkey with high availability (task 5.2): a primary, a replica and three
+  # Sentinels (deploy/valkey/). The services find the primary through the
+  # Sentinels (VALKEY_SENTINEL_MASTER=holdfast), so a failover needs no
+  # restart. After a failover the replica stays the primary until someone
+  # fails back (docs/runbooks/valkey.md). Tools on the host (make itest,
+  # make e1) talk to localhost:6379, this node, directly.
+  # AOF with fsync every second: a crash loses at most about a second of
+  # writes, and a failover what the replica had not received; inventory is
+  # rebuilt from PostgreSQL (runbook RB-2).
+  #
+  # Members know each other, and tell clients, by fixed address on the
+  # `valkey` network, never by hostname: Sentinel resolves names in its main
+  # loop, and a dead node's name stalls every lookup until the Sentinels
+  # enter TILT mode and refuse to fail over (P47). Clients of Valkey join
+  # that network.
   valkey:
     image: valkey/valkey:9.1.2
-    # AOF with fsync every second: at most ~1s of holds can be lost on a crash,
-    # and they are rebuilt from PostgreSQL (see docs/runbooks/inventory.md).
-    command: ["valkey-server", "--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory-policy", "noeviction"]
+    init: true # PID 1 reaps the healthcheck's processes, not Valkey
+    entrypoint: ["sh", "/etc/holdfast/entrypoint.sh"]
+    command: ["node", "10.251.0.10"]
     ports: ["6379:6379"]
+    networks:
+      default:
+      valkey: { ipv4_address: 10.251.0.10 }
     volumes:
       - valkey-data:/data
-    healthcheck:
+      - ./deploy/valkey:/etc/holdfast:ro
+    healthcheck: &valkey-health
       test: ["CMD", "valkey-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 20
     restart: unless-stopped
+
+  valkey-replica:
+    image: valkey/valkey:9.1.2
+    init: true
+    entrypoint: ["sh", "/etc/holdfast/entrypoint.sh"]
+    command: ["node", "10.251.0.11", "10.251.0.10"] # starts as a replica of valkey
+    ports: ["6380:6379"] # for inspection (valkey-cli -p 6380); never written from the host
+    networks:
+      default:
+      valkey: { ipv4_address: 10.251.0.11 }
+    volumes:
+      - valkey-replica-data:/data
+      - ./deploy/valkey:/etc/holdfast:ro
+    healthcheck: *valkey-health
+    depends_on:
+      valkey: { condition: service_healthy }
+    restart: unless-stopped
+
+  # Three Sentinels: two must agree the primary is down, and a majority
+  # elects the one that promotes the replica. Each keeps what it learns in
+  # its own volume.
+  sentinel-1: &sentinel
+    image: valkey/valkey:9.1.2
+    init: true
+    entrypoint: ["sh", "/etc/holdfast/entrypoint.sh"]
+    command: ["sentinel", "10.251.0.21"]
+    networks:
+      valkey: { ipv4_address: 10.251.0.21 }
+    volumes:
+      - sentinel-1-data:/data
+      - ./deploy/valkey:/etc/holdfast:ro
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli -p 26379 sentinel get-master-addr-by-name holdfast | grep -q ."]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    depends_on:
+      valkey: { condition: service_healthy }
+      valkey-replica: { condition: service_healthy }
+    restart: unless-stopped
+
+  sentinel-2:
+    <<: *sentinel
+    command: ["sentinel", "10.251.0.22"]
+    networks:
+      valkey: { ipv4_address: 10.251.0.22 }
+    volumes:
+      - sentinel-2-data:/data
+      - ./deploy/valkey:/etc/holdfast:ro
+
+  sentinel-3:
+    <<: *sentinel
+    command: ["sentinel", "10.251.0.23"]
+    networks:
+      valkey: { ipv4_address: 10.251.0.23 }
+    volumes:
+      - sentinel-3-data:/data
+      - ./deploy/valkey:/etc/holdfast:ro
 
   # One-shot job: applies migrations, then exits. Services wait for it.
   # Also usable for ad-hoc operations: docker compose run --rm holdfastctl <command>
@@ -46,12 +123,16 @@ services:
       context: .
       args: { SERVICE: holdfastctl }
     command: ["migrate"]
+    networks: [default, valkey]
     environment:
       POSTGRES_DSN: postgres://holdfast:holdfast@postgres:5432/holdfast?sslmode=disable
-      VALKEY_ADDRS: valkey:6379
+      VALKEY_ADDRS: 10.251.0.21:26379,10.251.0.22:26379,10.251.0.23:26379 # the Sentinels
+      VALKEY_SENTINEL_MASTER: holdfast
     depends_on:
       postgres: { condition: service_healthy }
-      valkey: { condition: service_healthy }
+      sentinel-1: { condition: service_healthy }
+      sentinel-2: { condition: service_healthy }
+      sentinel-3: { condition: service_healthy }
     restart: "no"
 
   # Kafka 4.3 in KRaft mode (no ZooKeeper): one node, broker and controller.
@@ -233,14 +314,15 @@ services:
     environment:
       ENVIRONMENT: development
       LOG_FORMAT: text
-      VALKEY_ADDRS: valkey:6379
+      VALKEY_ADDRS: 10.251.0.21:26379,10.251.0.22:26379,10.251.0.23:26379 # the Sentinels
+      VALKEY_SENTINEL_MASTER: holdfast
       # Trust whatever queue-svc publishes: key rotation needs no restart here.
       ADMISSION_JWKS_URL: http://queue:8080/.well-known/jwks.json
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       # Internal gRPC API: booking-svc's and queue-svc's service tokens are trusted (dev keys from make keys).
       GRPC_TRUSTED_CALLERS: booking=/keys/booking.pub,queue=/keys/queue.pub
       ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-only-admin-token-change-me-0123456789}
-    networks: [default, edge]
+    networks: [default, edge, valkey]
     ports:
       - "8081:8080" # public API
       - "9091:9090" # admin: metrics, health, pprof, operator API (never expose in production)
@@ -248,7 +330,9 @@ services:
     volumes:
       - ./.local/keys:/keys:ro
     depends_on:
-      valkey: { condition: service_healthy }
+      sentinel-1: { condition: service_healthy }
+      sentinel-2: { condition: service_healthy }
+      sentinel-3: { condition: service_healthy }
       holdfastctl: { condition: service_completed_successfully }
       queue: { condition: service_started }
     restart: unless-stopped
@@ -260,7 +344,8 @@ services:
     environment:
       ENVIRONMENT: development
       LOG_FORMAT: text
-      VALKEY_ADDRS: valkey:6379
+      VALKEY_ADDRS: 10.251.0.21:26379,10.251.0.22:26379,10.251.0.23:26379 # the Sentinels
+      VALKEY_SENTINEL_MASTER: holdfast
       ACCESS_JWKS_URL: http://auth:8080/.well-known/jwks.json # buyers sign in with auth-svc
       DEV_IDENTITY: ${DEV_IDENTITY:-false} # true: X-Dev-User-Id also works (development, load tests)
       POSTGRES_DSN: postgres://holdfast:holdfast@postgres:5432/holdfast?sslmode=disable # admission leader election
@@ -276,14 +361,16 @@ services:
       POW_SECRET: ${POW_SECRET:-dev-only-pow-secret-change-me-0123456789}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-only-admin-token-change-me-0123456789}
-    networks: [default, edge]
+    networks: [default, edge, valkey]
     ports:
       - "8082:8080" # public API
       - "9092:9090" # admin: metrics, health, pprof, operator API (never expose in production)
     volumes:
       - ./.local/keys:/keys:ro
     depends_on:
-      valkey: { condition: service_healthy }
+      sentinel-1: { condition: service_healthy }
+      sentinel-2: { condition: service_healthy }
+      sentinel-3: { condition: service_healthy }
       postgres: { condition: service_healthy }
       auth: { condition: service_started }
     restart: unless-stopped
@@ -330,23 +417,29 @@ services:
       ENVIRONMENT: development
       LOG_FORMAT: text
       POSTGRES_DSN: postgres://holdfast:holdfast@postgres:5432/holdfast?sslmode=disable
-      VALKEY_ADDRS: valkey:6379
+      VALKEY_ADDRS: 10.251.0.21:26379,10.251.0.22:26379,10.251.0.23:26379 # the Sentinels
+      VALKEY_SENTINEL_MASTER: holdfast
+    networks: [default, valkey]
     ports:
       - "9097:9090" # admin: metrics, health, pprof (never expose in production)
     depends_on:
       postgres: { condition: service_healthy }
-      valkey: { condition: service_healthy }
+      sentinel-1: { condition: service_healthy }
+      sentinel-2: { condition: service_healthy }
+      sentinel-3: { condition: service_healthy }
       holdfastctl: { condition: service_completed_successfully }
     restart: unless-stopped
 
   # Exporters for the mission-control dashboard's health row (task 4.6):
   # Valkey's CPU and command rate, PostgreSQL's transactions and connections.
+  # Prometheus scrapes both Valkey nodes through it (/scrape?target=...).
   valkey-exporter:
     image: oliver006/redis_exporter:v1.93.0 # speaks Valkey's protocol
     environment:
       REDIS_ADDR: redis://valkey:6379
     depends_on:
       valkey: { condition: service_healthy }
+      valkey-replica: { condition: service_healthy }
     restart: unless-stopped
 
   postgres-exporter:
@@ -385,8 +478,17 @@ networks:
     ipam:
       config:
         - subnet: 10.250.0.0/24
+  # Valkey's nodes and Sentinels at fixed addresses (task 5.2), and their clients.
+  valkey:
+    ipam:
+      config:
+        - subnet: 10.251.0.0/24
 
 volumes:
   postgres-data:
   valkey-data:
+  valkey-replica-data:
+  sentinel-1-data:
+  sentinel-2-data:
+  sentinel-3-data:
   kafka-data:

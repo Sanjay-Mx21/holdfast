@@ -168,9 +168,11 @@ add(series("Latency p50 by service", [(lat.format(q=0.5), "{{job}}")], 0, 6, uni
            desc="Per-route detail: the service dashboards. Join SLO: p99 150 ms."),
     errors,
     height=8)
-valkey = series("Valkey CPU", [('rate(redis_cpu_sys_seconds_total[1m]) + rate(redis_cpu_user_seconds_total[1m])', "cores"),
-                               ('rate(redis_commands_processed_total[1m])', "commands/s")], 0, 12,
-                desc="From redis_exporter (works with Valkey). Valkey runs commands on one thread: near 1 core is saturation.")
+# The primary's, whichever node it is now (task 5.2: a failover moves it).
+primary = ' * on(instance) group_left() redis_instance_info{role="master"}'
+valkey = series("Valkey CPU", [('(rate(redis_cpu_sys_seconds_total[1m]) + rate(redis_cpu_user_seconds_total[1m]))' + primary, "cores"),
+                               ('rate(redis_commands_processed_total[1m])' + primary, "commands/s")], 0, 12,
+                desc="The primary's, from redis_exporter (works with Valkey); a failover moves it to the other node. Valkey runs commands on one thread: near 1 core is saturation.")
 # Cores (0 to 1) and commands (thousands a second) need separate axes.
 valkey["fieldConfig"]["overrides"] = [{
     "matcher": {"id": "byName", "options": "commands/s"},
