@@ -303,7 +303,7 @@ services:
 
   # Jaeger UI: http://localhost:16686
   jaeger:
-    image: jaegertracing/jaeger:2.21.0
+    image: jaegertracing/jaeger:2.22.0
     ports: ["16686:16686"]
     restart: unless-stopped
 
