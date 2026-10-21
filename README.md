@@ -12,7 +12,7 @@ hand in a real browser: the queue fills, admissions flow, and the purchase
 shows up as a hold, a confirmed booking and a payment. Method and numbers:
 [`loadtest/results/README.md`](loadtest/results/README.md).*
 
-> **Status:** [v0.4.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.4.0) is the resume-ready product: phone sign-in, the sale rules, proof of work, the web app and this dashboard, on top of the MVP backend of [v0.3.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.3.0). Phase 5, reliability, is built and awaits review: the reconciler and invariant auditor, Valkey failover, inventory rebuilt from PostgreSQL, adaptive admission, alerting, and chaos experiments E3 and E4 passed with every invariant at 0 (how fast it recovers: below). The full design and build plan: [`docs/design/holdfast-design-and-build-plan.mdx`](docs/design/holdfast-design-and-build-plan.mdx).
+> **Status:** [v0.5.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.5.0) is the hardened product: on top of [v0.4.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.4.0)'s sign-in, sale rules, web app and dashboard, it checks its own invariants live, fails over when Valkey dies, rebuilds inventory from PostgreSQL, pauses admissions while the payment provider is down, and passed the chaos experiments E3 and E4 with every invariant at 0 (how fast it recovers: below). Next: Phase 6, scale and polish. The full design and build plan: [`docs/design/holdfast-design-and-build-plan.mdx`](docs/design/holdfast-design-and-build-plan.mdx).
 
 ## The problem
 
@@ -240,7 +240,7 @@ and `/readyz`.
 
 ## What's next
 
-- **Phase 5, reliability (built, awaiting review):** the reconciler and the invariant
+- **Phase 5, reliability (released as v0.5.0):** the reconciler and the invariant
   auditor are built (they fill the dashboard's correctness tiles, with
   alerts), and Valkey fails over by itself (a replica and three Sentinels:
   a killed primary is replaced in about 7 s, nothing lost in the drill),

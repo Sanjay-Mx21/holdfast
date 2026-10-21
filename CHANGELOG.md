@@ -6,6 +6,8 @@ the milestone tags in the design plan (`docs/design/`, section 17.1).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-21
+
 Hardened (milestone M5, build plan Phase 5): HoldFast survives its
 failures, notices when something is wrong, and says how fast it recovers.
 The reconciler, the invariant auditor, Valkey failover, inventory rebuilt
@@ -66,6 +68,12 @@ ADR 0013.
   `VALKEY_SENTINEL_MASTER`), P49 (planned switches now coordinated), P52
   and P54 (counters pre-registered), P53 (the breaker could not close
   under backpressure), P59 (reconciler log floods).
+
+### Security
+
+- P60: `golang.org/x/net` updated to v0.61.0 for five vulnerabilities
+  published after Phase 5 (GO-2026-6603, 6610, 6611, 6612 and 6617),
+  reachable through gRPC's HTTP/2 server and the HTTP clients.
 
 ### Known issues
 
@@ -566,7 +574,8 @@ M1), brought up and proven on real infrastructure (milestone M1.5).
 - Compose-built images report `version: dev` and `commit: unknown` on `/buildz`.
 - `holdfast-explained-simply.mdx` still uses the old invariant numbering.
 
-[Unreleased]: https://github.com/Sanjay-Mx21/holdfast/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/Sanjay-Mx21/holdfast/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Sanjay-Mx21/holdfast/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Sanjay-Mx21/holdfast/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Sanjay-Mx21/holdfast/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Sanjay-Mx21/holdfast/compare/v0.1.0...v0.2.0
