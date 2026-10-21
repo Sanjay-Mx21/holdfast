@@ -69,6 +69,12 @@ ADR 0013.
   and P54 (counters pre-registered), P53 (the breaker could not close
   under backpressure), P59 (reconciler log floods).
 
+### Security
+
+- P60: `golang.org/x/net` updated to v0.61.0 for five vulnerabilities
+  published after Phase 5 (GO-2026-6603, 6610, 6611, 6612 and 6617),
+  reachable through gRPC's HTTP/2 server and the HTTP clients.
+
 ### Known issues
 
 - On WSL2 the clock steps back every 30 s; Sentinel then sits in TILT mode

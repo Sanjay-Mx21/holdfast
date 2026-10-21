@@ -38,7 +38,7 @@ All times are IST (UTC+05:30).
 | **First commit** | `2173e50` "first commit", 2026-10-01 20:20, 82 files, 12,973 lines |
 | **Latest release** | [v0.5.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.5.0), 2026-10-21, on this release's squash commit (before it: [v0.4.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.4.0), 2026-10-06 19:13, on `eefee44`; [v0.3.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.3.0), 2026-10-03 15:48, on `5ffa271`; [v0.2.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.2.0), 2026-10-02 21:51, on `cd0592a`; [v0.1.0](https://github.com/Sanjay-Mx21/holdfast/releases/tag/v0.1.0), 2026-10-01 23:47, on `9dcd2f8`) |
 | **CI** | Green since 2026-10-01 22:00; `main` is protected and every change needs a pull request with all 13 required checks passing (`images (booking)`, `images (payment)`, `images (mockpsp)` and `images (auth)` added on 2026-10-03, `web` on 2026-10-04, `images (auditor)` on 2026-10-06) |
-| **Issues so far** | 146 recorded: 141 resolved, 5 open (section 6) |
+| **Issues so far** | 149 recorded: 144 resolved, 5 open (section 6) |
 
 <Callout type="tip" title="Phase 5 built: HoldFast survives its failures, and says so (2026-10-07)">
 
@@ -513,6 +513,7 @@ The rest of the list was already covered by tests written with tasks 3.4 to 3.12
 - the README's status;
 - this log.
 - Six Dependabot PRs (#112 to #115, #117, #118) are open; they are the owner's to merge | Branch `release/v0.5.0` |
+| 2026-10-21 15:25 | **The release PR's `security` check failed (P60):** govulncheck found five new vulnerabilities in `golang.org/x/net` v0.59.0. Fixed first on `main` with v0.61.0 (PR #120, merged by the assistant at 15:11 after all 13 checks passed, `ea326ff`); `main` merged into the release branch, and the CHANGELOG has a Security entry. At the owner's request Docker Desktop was started: `make lint` passes locally (golangci-lint, migrations, alert tests). The local integration run failed with `READONLY` because the drills had left `valkey-replica` as the primary (D62); the fail-back waits for the Sentinels to leave TILT (E26). Two slips: D61, D62 | PR #120, `ea326ff`; branch `release/v0.5.0` |
 
 
 
@@ -593,10 +594,10 @@ Every problem met while bringing Drop 1 up and running the soak on 2026-10-01, i
 
 | Group | Recorded | Resolved | Open |
 |---|---|---|---|
-| P: defects in the repository | 59 | 56 | 3 |
+| P: defects in the repository | 60 | 57 | 3 |
 | E: machine and network | 27 | 25 | 2 |
-| D: diagnosis and process | 60 | 60 | 0 |
-| **Total** | **146** | **141** | **5** |
+| D: diagnosis and process | 62 | 62 | 0 |
+| **Total** | **149** | **144** | **5** |
 
 CI took **three runs** to go green:
 
@@ -669,6 +670,7 @@ CI took **three runs** to go green:
 | P57 | inventory-svc's gRPC API answered INTERNAL for Valkey errors (unreachable, timed out, a connection dropped at a failover, READONLY), where its HTTP API said 503: callers and grpcx's retry policy saw a bug, not an outage | Seen in E4's dead-letter reasons | `toStatus` had no case for them, and the HTTP check missed the failover errors | One `isUnavailable` (now with EOF, READONLY, LOADING, MASTERDOWN, TRYAGAIN) maps to UNAVAILABLE on both APIs; unit test | ✅ Task 5.5 |
 | P58 | Every reconciliation pass failed after experiments E3 and E4: "decode GET /v1/settlements: unexpected end of JSON input". The provider client reads at most 1 MiB of a response, and the settlement report for the last 2 hours (about 34,000 items) was larger, so it was cut off | The reconciler, the safety net for lost webhooks, did nothing; at the design's scale (50,000 units a sale) it would never have worked. Found by the new `ReconcilerStale` alert on its first evaluation | The report came in one response, whatever its size | The report is paged: mockpsp's `limit` and `after` (a keyset cursor of time and identity, so a page boundary never skips or repeats an item), and the client follows `next`. Tests: pages with ties at their boundaries; 2,500 captures across three pages through the client. The next pass succeeded | ✅ Task 5.6 |
 | P59 | After mockpsp was rebuilt (its store is in memory), the reconciler logged one ERROR line per finding: 31,887 `capture_unknown_to_psp` lines in one pass, every 5 minutes for 2 hours | A flood that would bury any other error; the alert paged meanwhile | Logging scaled with the findings | A pass logs 20 findings of a kind by name, then one summary line (the metric still counts all). mockpsp's doc explains the restart's effect; the alert was silenced in Alertmanager for the window | ✅ Task 5.6 |
+| P60 | CI's `security` job (govulncheck) failed on the v0.5.0 release PR (#119): five vulnerabilities published after Phase 5 in `golang.org/x/net` v0.59.0 (GO-2026-6603, 6610, 6611, 6612 and 6617), reachable through gRPC's HTTP/2 server and the HTTP clients | The release was blocked; `main` carried the same dependency | Advisories published since the last run; nothing between task runs checks for them | `golang.org/x/net` v0.61.0 (with `x/sync`, `x/sys`, `x/text`) in PR #120; govulncheck reports nothing from the module, and all 13 checks passed | ✅ Release v0.5.0 |
 
 ### 6.3 Machine and network
 
@@ -766,6 +768,8 @@ CI took **three runs** to go green:
 | D58 | E3's event was given a session budget of 1,000 with no calculation behind it. Every admitted buyer keeps a slot for the 10-minute session TTL, so the run stalled at 1,000, 2,000 and 3,000 buyers and took 44 minutes | The run took about four times longer; its checks were unaffected | Ignored the design's sizing rule (Little's Law: the rate × the TTL) | Both scripts size it as the rate × 600 s | ✅ |
 | D59 | Three flaws in the E4 script, each found by one of its own runs: Kafka's recovery was timed by Docker's health status, which lags minutes behind under load (191 s recorded where Kafka served after about 50); a failed run left its 200 buyers running against the restored stack; and with 6,000 buyers the PostgreSQL cut struck after the sale had ended | One misleading number and one wasted run; caught before anything was published | Wrote the script without a trial at full length | Kafka is timed by a client request; the cleanup stops the buyers; the sale is 12,000 buyers long and the log says at each fault whether buyers were still running | ✅ |
 | D60 | The RB-4 drill's first run hung for 30 minutes. Its event had one unit, so once buyer A bought it the waiting room was SOLD_OUT and buyer B could not join; the script then waited for B's payment with no time limit | Half an hour of a stuck drill; the injected drift it left was repaired with RB-2 | Did not think through the queue's own reaction to the scenario, and a wait without a timeout | Two units (B buys both, so the guard refuses B); every wait in the drill is bounded and fails the run with a message | ✅ |
+| D61 | After starting Docker Desktop, my wait loop for the engine returned after 5 s: it took any output of `docker info` as the version, and the output was WSL's "docker could not be found" message | A false "Docker is up" and one wasted step | Tested the output, not the exit status | Waited on `docker info`'s exit status; the engine was up 5 s later | ✅ |
+| D62 | I ran the integration tests locally without checking Valkey's roles. The Phase 5 drills had left `valkey-replica` as the primary, so every test writing to localhost:6379 failed with `READONLY` (6 packages) | A failed local run; the code was not at fault (CI's integration job passed on the same commit) | Skipped RB-VK-2's note: tools on the host need `valkey` to be the primary | Check the roles before a local run; failing back waits for the Sentinels to leave TILT (E26) | ✅ |
 
 ### 6.5 Owner setup actions
 
