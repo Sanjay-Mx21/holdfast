@@ -295,7 +295,7 @@ services:
 
   # Traces: services send OTLP to the collector, which forwards to Jaeger.
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.161.0
+    image: otel/opentelemetry-collector-contrib:0.162.0
     volumes: ["./deploy/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro"]
     ports: ["4317:4317", "4318:4318"] # OTLP gRPC and HTTP, for services run on the host
     depends_on: [jaeger]
